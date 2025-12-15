@@ -2,6 +2,8 @@
 <manifest
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET"/>
+
 
     <!-- İzinler -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -20,6 +22,7 @@
         android:required="false" />
 
     <application
+        android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -28,13 +31,11 @@
         android:theme="@style/Theme.OrientAR"
         tools:targetApi="31">
 
-        <!-- ARCore zorunlu: SceneView manifestindeki varsayılan değeri override ediyoruz -->
         <meta-data
             android:name="com.google.ar.core"
             android:value="required"
             tools:replace="android:value" />
 
-        <!-- Launcher -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -45,18 +46,25 @@
             </intent-filter>
         </activity>
 
-        <!-- Scoreboard -->
         <activity
             android:name=".ScoreboardActivity"
             android:exported="false"
             android:label="Scoreboard"
             android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
-        <!-- AR Kamera (oyun) -->
         <activity
             android:name=".TreasureHuntGameActivity"
             android:exported="false"
             android:label="Treasure Hunt Game"
             android:theme="@style/Theme.OrientAR" />
+
+        <!-- 👇 BUNU EKLİYORSUN -->
+        <activity
+            android:name=".ChatbotActivity"
+            android:exported="false"
+            android:label="OrientAI Chatbot"
+            android:theme="@style/Theme.OrientAR" />
+
     </application>
+
 </manifest>

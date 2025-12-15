@@ -139,8 +139,13 @@ fun OrientationScreen() {
                     MenuCard(
                         title = "FAQ",
                         icon = "💬",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            val intent = Intent(context, ChatbotActivity::class.java)
+                            context.startActivity(intent)
+                        }
                     )
+
                     MenuCard(
                         title = "Treasure Hunt",
                         icon = "🎁",
