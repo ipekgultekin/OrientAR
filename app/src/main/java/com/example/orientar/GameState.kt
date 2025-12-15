@@ -19,24 +19,24 @@ object GameState {
         Question(
             id = 1,
             title = "Question 1",
-            text = "Find the Batur image and keep it in view!",
+            text = "Show that smoking is prohibited!",
             answerImageName = "batur2",
             answerImageAssetPath = "augmented_images/batur2.jpg",
             modelFilePath = "3d_models/3d_camera_01.glb",
             modelScale = 0.5f,
-            modelRotationX = -90f, // Model yere bakıyorsa bunu -90 veya 90 yap
+            modelRotationX = 90f, // Model yere bakıyorsa bunu -90 veya 90 yap
             modelRotationY = 180f,
             targetKeywords = listOf("SMOKE", "FREE", "ZONE")
         ),
         Question(
             id = 2,
             title = "Question 2",
-            text = "Find İpek and unlock the glasses!",
+            text = "Show us the favourite hangout spot of all computer engineering students!",
             answerImageName = "ipek",
             answerImageAssetPath = "augmented_images/ipek.jpg",
             modelFilePath = "3d_models/glasses3d.glb",
             modelScale = 0.5f,
-            modelRotationX = -90f, // Model yere bakıyorsa bunu -90 veya 90 yap
+            modelRotationX = 90f, // Model yere bakıyorsa bunu -90 veya 90 yap
             modelRotationY = 90f,
             targetKeywords = listOf("BILISIM", "TEKNOLOJILERI", "INFORMATION", "ODTU")
         )

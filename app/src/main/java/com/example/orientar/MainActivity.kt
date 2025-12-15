@@ -21,6 +21,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,8 +76,10 @@ fun OrientationScreen() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .background(Color.White)
+                .verticalScroll(rememberScrollState()) // 🔴 scroll ÖNCE
+                .padding(paddingValues)                // 🔴 sonra scaffold padding
+                .padding(bottom = 80.dp)               // 🔴 bottom bar kadar boşluk
         ) {
             // Üst görsel
             Box(
@@ -211,7 +216,11 @@ fun MenuCard(
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
-                color = Color.Black
+                color = Color.Black,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                lineHeight = 14.sp,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

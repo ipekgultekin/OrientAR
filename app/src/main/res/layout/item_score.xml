@@ -5,7 +5,7 @@
     android:layout_marginVertical="8dp"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     app:cardCornerRadius="12dp"
-    app:cardElevation="4dp"
+    app:cardElevation="2dp"
     app:strokeColor="@color/metu_red"
     app:strokeWidth="2dp">
 
@@ -42,17 +42,17 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Question Title"
-                android:textSize="16sp"
+                android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/black"/>
+                android:textColor="@color/text_dark"/>
 
             <TextView
                 android:id="@+id/tvTime"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="--:--"
-                android:textSize="14sp"
-                android:textColor="#555"
+                android:textSize="13sp"
+                android:textColor="#666666"
                 android:layout_marginTop="4dp"/>
         </LinearLayout>
 
