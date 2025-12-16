@@ -38,7 +38,7 @@ object GameState {
             modelScale = 0.5f,
             modelRotationX = 90f, // Model yere bakıyorsa bunu -90 veya 90 yap
             modelRotationY = 90f,
-            targetKeywords = listOf("BILISIM", "TEKNOLOJILERI", "INFORMATION", "ODTU")
+            targetKeywords = listOf("BILISIM", "TEKNOLOJILERI", "INFORMATION")
         )
     )
 

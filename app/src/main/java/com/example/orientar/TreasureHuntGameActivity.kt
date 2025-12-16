@@ -30,6 +30,7 @@ import io.github.sceneview.node.ModelNode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class TreasureHuntGameActivity : AppCompatActivity() {
 
@@ -38,7 +39,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     private lateinit var tvQuestionTitle: TextView
     private lateinit var tvQuestionText: TextView
     private lateinit var btnClose: ImageButton
-    private lateinit var btnNext: Button // XML'de bu butonun ID'sinin btnNext olduğundan emin ol
+    private lateinit var btnNext: Button
 
     private lateinit var modelLoader: ModelLoader
     private val CAMERA_REQ = 44
@@ -55,7 +56,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     private var questionStartMs: Long = 0L
     private var currentAnchorNode: AnchorNode? = null
 
-    // İSTEK: Popup süresi 3 saniye
+    // Popup delay: 3 seconds
     private val popupDelayMs = 3000L
     private val mainHandler = Handler(Looper.getMainLooper())
     private var pendingPopupRunnable: Runnable? = null
@@ -78,8 +79,6 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         )
 
         btnClose.setOnClickListener { finish() }
-
-        // NEXT butonu mantığı (Cevap bulunamazsa atla)
         btnNext.setOnClickListener { handleNextOrFinish() }
 
         ensureCameraPermission()
@@ -96,7 +95,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                 instantPlacementMode = Config.InstantPlacementMode.LOCAL_Y_UP
             }
             session.configure(cfg)
-            Toast.makeText(this, "AR Ready! Scan the text...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "AR is ready! Scan the sign text...", Toast.LENGTH_SHORT).show()
         }
 
         arSceneView.onSessionUpdated = update@{ session, frame ->
@@ -115,9 +114,11 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
                 recognizer.process(inputImage)
                     .addOnSuccessListener { visionText ->
-                        val detectedFullText = visionText.text.uppercase()
+                        val detectedText = visionText.text
+
+                        // ✅ FUZZY MATCH (Levenshtein)
                         val matched = currentQuestion.targetKeywords.any { kw ->
-                            detectedFullText.contains(kw.uppercase())
+                            fuzzyContainsKeyword(detectedText, kw)
                         }
 
                         if (matched) {
@@ -130,7 +131,8 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                         image.close()
                         ocrRunning = false
                     }
-            } catch (e: Exception) {
+
+            } catch (_: Exception) {
                 ocrRunning = false
             }
         }
@@ -141,13 +143,9 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         tvQuestionTitle.text = q.title
         tvQuestionText.text  = q.text
 
-        // Buton Yazısını Ayarla (Son soruysa FINISH, değilse NEXT)
+        // Button label: FINISH on last question, else NEXT
         val currentIndex = GameState.questions.indexOfFirst { it.id == q.id }
-        if (currentIndex == GameState.questions.size - 1) {
-            btnNext.text = "FINISH"
-        } else {
-            btnNext.text = "NEXT"
-        }
+        btnNext.text = if (currentIndex == GameState.questions.size - 1) "FINISH" else "NEXT"
 
         questionStartMs = SystemClock.elapsedRealtime()
         chronoTimer.base = questionStartMs
@@ -165,17 +163,13 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         modelPlaced = false
     }
 
-    // Kullanıcı cevabı bulamayıp NEXT/FINISH'e basarsa
     private fun handleNextOrFinish() {
         pendingPopupRunnable?.let { mainHandler.removeCallbacks(it) }
 
         if (btnNext.text == "FINISH") {
-            // Son sorudaysa Scoreboard'a git
-            val intent = Intent(this, ScoreboardActivity::class.java)
-            startActivity(intent)
+            startActivity(Intent(this, ScoreboardActivity::class.java))
             finish()
         } else {
-            // Sonraki soruya geç (Sıradaki soru, çözülmüş olsa bile)
             val nextQ = GameState.getNextQuestionInList(currentQuestion.id)
             if (nextQ != null) {
                 loadQuestion(nextQ)
@@ -185,7 +179,11 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         }
     }
 
-    private fun placeModelInFrontOfCamera(session: com.google.ar.core.Session, frame: com.google.ar.core.Frame, q: Question) {
+    private fun placeModelInFrontOfCamera(
+        session: com.google.ar.core.Session,
+        frame: com.google.ar.core.Frame,
+        q: Question
+    ) {
         try {
             val cameraPose = frame.camera.pose
             val distanceMeters = 1.0f
@@ -205,7 +203,6 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                             modelInstance = modelInstance,
                             scaleToUnits = q.modelScale
                         ).apply {
-                            // İSTEK: X Rotation eklendi (Dik durması için)
                             rotation = Rotation(q.modelRotationX, q.modelRotationY, 0f)
                         }
                         anchorNode.addChildNode(modelNode)
@@ -214,16 +211,15 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                     e.printStackTrace()
                 }
             }
-        } catch (e: Exception) { }
+        } catch (_: Exception) { }
     }
 
     private fun scheduleCorrectPopup(questionId: Int) {
         if (popupShown) return
         pendingPopupRunnable?.let { mainHandler.removeCallbacks(it) }
+
         val runnable = Runnable {
-            if (!isFinishing) {
-                showCorrectDialog(questionId)
-            }
+            if (!isFinishing) showCorrectDialog(questionId)
         }
         pendingPopupRunnable = runnable
         mainHandler.postDelayed(runnable, popupDelayMs)
@@ -240,29 +236,25 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         val allSolved = GameState.totalSolved == GameState.totalQuestions()
 
         val msg = if (allSolved) {
-            "Congratulations! You found all objects."
+            "Congratulations! You solved all questions."
         } else {
-            "Correct Answer!"
+            "Correct! Get ready for the next one."
         }
 
         AlertDialog.Builder(this)
-            .setTitle("Great Job!")
+            .setTitle("Great job!")
             .setMessage(msg)
             .setCancelable(false)
             .setPositiveButton(if (allSolved) "Scoreboard" else "Next Question") { d, _ ->
                 d.dismiss()
                 if (allSolved) {
-                    val intent = Intent(this, ScoreboardActivity::class.java)
-                    startActivity(intent)
+                    startActivity(Intent(this, ScoreboardActivity::class.java))
                     finish()
                 } else {
-                    // Doğru bildiği için bir sonraki çözülmemiş soruya git
                     val nextQ = GameState.nextUnsolved()
-                    if (nextQ != null) {
-                        loadQuestion(nextQ)
-                    } else {
-                        val intent = Intent(this, ScoreboardActivity::class.java)
-                        startActivity(intent)
+                    if (nextQ != null) loadQuestion(nextQ)
+                    else {
+                        startActivity(Intent(this, ScoreboardActivity::class.java))
                         finish()
                     }
                 }
@@ -274,5 +266,82 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_REQ)
         }
+    }
+
+    // -----------------------------
+    // ✅ LEVENSHTEIN FUZZY MATCH
+    // -----------------------------
+
+    private fun normalizeTextForMatch(s: String): String {
+        return s.uppercase(Locale.getDefault())
+            .replace(Regex("[^A-Z0-9 ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun levenshtein(a: String, b: String): Int {
+        if (a == b) return 0
+        if (a.isEmpty()) return b.length
+        if (b.isEmpty()) return a.length
+
+        val dp = Array(a.length + 1) { IntArray(b.length + 1) }
+        for (i in 0..a.length) dp[i][0] = i
+        for (j in 0..b.length) dp[0][j] = j
+
+        for (i in 1..a.length) {
+            for (j in 1..b.length) {
+                val cost = if (a[i - 1] == b[j - 1]) 0 else 1
+                dp[i][j] = minOf(
+                    dp[i - 1][j] + 1,
+                    dp[i][j - 1] + 1,
+                    dp[i - 1][j - 1] + cost
+                )
+            }
+        }
+        return dp[a.length][b.length]
+    }
+
+    private fun isSimilarByLevenshtein(aRaw: String, bRaw: String): Boolean {
+        val a = normalizeTextForMatch(aRaw)
+        val b = normalizeTextForMatch(bRaw)
+        if (a.isBlank() || b.isBlank()) return false
+
+        val dist = levenshtein(a, b)
+        val maxLen = maxOf(a.length, b.length).coerceAtLeast(1)
+        val ratio = dist.toDouble() / maxLen.toDouble()
+
+        return when {
+            maxLen <= 4 -> dist <= 1
+            maxLen <= 8 -> dist <= 2
+            else -> ratio <= 0.20
+        }
+    }
+
+    private fun fuzzyContainsKeyword(ocrTextRaw: String, keywordRaw: String): Boolean {
+        val ocrText = normalizeTextForMatch(ocrTextRaw)
+        val keyword = normalizeTextForMatch(keywordRaw)
+
+        if (keyword.isBlank() || ocrText.isBlank()) return false
+
+        // Fast path
+        if (ocrText.contains(keyword)) return true
+
+        // Sliding window on words
+        val words = ocrText.split(" ").filter { it.isNotBlank() }
+        val keyWords = keyword.split(" ").filter { it.isNotBlank() }
+        if (keyWords.isEmpty()) return false
+
+        val windowSize = keyWords.size
+
+        if (words.size < windowSize) {
+            return isSimilarByLevenshtein(ocrText, keyword)
+        }
+
+        for (i in 0..(words.size - windowSize)) {
+            val window = words.subList(i, i + windowSize).joinToString(" ")
+            if (isSimilarByLevenshtein(window, keyword)) return true
+        }
+
+        return false
     }
 }
