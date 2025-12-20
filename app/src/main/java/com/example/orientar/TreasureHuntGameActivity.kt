@@ -116,7 +116,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                     .addOnSuccessListener { visionText ->
                         val detectedText = visionText.text
 
-                        // ✅ FUZZY MATCH (Levenshtein)
+                        // FUZZY MATCH (Levenshtein)
                         val matched = currentQuestion.targetKeywords.any { kw ->
                             fuzzyContainsKeyword(detectedText, kw)
                         }
@@ -269,7 +269,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     }
 
     // -----------------------------
-    // ✅ LEVENSHTEIN FUZZY MATCH
+    // LEVENSHTEIN FUZZY MATCH
     // -----------------------------
 
     private fun normalizeTextForMatch(s: String): String {
