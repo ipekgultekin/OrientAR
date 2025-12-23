@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.ar.core.Config
 import com.google.ar.core.Pose
+import com.google.ar.core.exceptions.NotYetAvailableException
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -30,6 +31,7 @@ import io.github.sceneview.node.ModelNode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 class TreasureHuntGameActivity : AppCompatActivity() {
@@ -47,7 +49,9 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private var ocrRunning = false
     private var lastOcrTime = 0L
-    private val ocrIntervalMs = 500L
+
+    // ✅ Make OCR less frequent (reduces camera drop / ANR on mid devices)
+    private val ocrIntervalMs = 1500L
 
     private lateinit var currentQuestion: Question
 
@@ -65,12 +69,12 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_treasure_hunt_game)
 
-        arSceneView     = findViewById(R.id.sceneView)
-        chronoTimer     = findViewById(R.id.chronoTimer)
+        arSceneView = findViewById(R.id.sceneView)
+        chronoTimer = findViewById(R.id.chronoTimer)
         tvQuestionTitle = findViewById(R.id.tvQuestionTitle)
-        tvQuestionText  = findViewById(R.id.tvQuestionText)
-        btnClose        = findViewById(R.id.btnClose)
-        btnNext         = findViewById(R.id.btnNext)
+        tvQuestionText = findViewById(R.id.tvQuestionText)
+        btnClose = findViewById(R.id.btnClose)
+        btnNext = findViewById(R.id.btnNext)
 
         modelLoader = ModelLoader(
             engine = arSceneView.engine,
@@ -81,10 +85,24 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         btnClose.setOnClickListener { finish() }
         btnNext.setOnClickListener { handleNextOrFinish() }
 
-        ensureCameraPermission()
+        // ✅ If permission not granted, request and stop here
+        if (!hasCameraPermission()) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_REQ)
+            return
+        }
 
-        val firstQ = GameState.nextUnsolved() ?: GameState.questions.first()
-        loadQuestion(firstQ)
+        // ✅ Load questions FIRST from Firestore, then start the game
+        GameState.loadQuestionsFromFirestore {
+            runOnUiThread {
+                val firstQ = GameState.nextUnsolved() ?: GameState.questions.firstOrNull()
+                if (firstQ == null) {
+                    Toast.makeText(this, "No questions loaded from Firestore!", Toast.LENGTH_LONG).show()
+                    finish()
+                    return@runOnUiThread
+                }
+                loadQuestion(firstQ)
+            }
+        }
 
         arSceneView.onSessionCreated = { session ->
             arSceneView.planeRenderer.isVisible = true
@@ -107,21 +125,19 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
             try {
                 val image = frame.acquireCameraImage()
-                if (image == null) return@update
-
                 ocrRunning = true
+
                 val inputImage = InputImage.fromMediaImage(image, 0)
 
                 recognizer.process(inputImage)
                     .addOnSuccessListener { visionText ->
                         val detectedText = visionText.text
 
-                        // FUZZY MATCH (Levenshtein)
                         val matched = currentQuestion.targetKeywords.any { kw ->
                             fuzzyContainsKeyword(detectedText, kw)
                         }
 
-                        if (matched) {
+                        if (matched && !modelPlaced) {
                             placeModelInFrontOfCamera(session, frame, currentQuestion)
                             modelPlaced = true
                             scheduleCorrectPopup(currentQuestion.id)
@@ -132,8 +148,33 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                         ocrRunning = false
                     }
 
+            } catch (_: NotYetAvailableException) {
+                // normal - camera image not ready for this frame
             } catch (_: Exception) {
                 ocrRunning = false
+            }
+        }
+    }
+
+    // ✅ Permission helpers
+    private fun hasCameraPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if (requestCode == CAMERA_REQ) {
+            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            if (granted) {
+                recreate() // restart activity with permission granted
+            } else {
+                Toast.makeText(this, "Camera permission is required.", Toast.LENGTH_LONG).show()
+                finish()
             }
         }
     }
@@ -141,9 +182,8 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     private fun loadQuestion(q: Question) {
         currentQuestion = q
         tvQuestionTitle.text = q.title
-        tvQuestionText.text  = q.text
+        tvQuestionText.text = q.text
 
-        // Button label: FINISH on last question, else NEXT
         val currentIndex = GameState.questions.indexOfFirst { it.id == q.id }
         btnNext.text = if (currentIndex == GameState.questions.size - 1) "FINISH" else "NEXT"
 
@@ -195,7 +235,8 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             arSceneView.addChildNode(anchorNode)
             currentAnchorNode = anchorNode
 
-            lifecycleScope.launch {
+            // ✅ Load model on IO thread (prevents ANR)
+            lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     val modelInstance = modelLoader.loadModelInstance(q.modelFilePath)
                     if (modelInstance != null) {
@@ -205,12 +246,16 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                         ).apply {
                             rotation = Rotation(q.modelRotationX, q.modelRotationY, 0f)
                         }
-                        anchorNode.addChildNode(modelNode)
+
+                        withContext(Dispatchers.Main) {
+                            anchorNode.addChildNode(modelNode)
+                        }
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
+
         } catch (_: Exception) { }
     }
 
@@ -260,12 +305,6 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                 }
             }
             .show()
-    }
-
-    private fun ensureCameraPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_REQ)
-        }
     }
 
     // -----------------------------
@@ -323,10 +362,8 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
         if (keyword.isBlank() || ocrText.isBlank()) return false
 
-        // Fast path
         if (ocrText.contains(keyword)) return true
 
-        // Sliding window on words
         val words = ocrText.split(" ").filter { it.isNotBlank() }
         val keyWords = keyword.split(" ").filter { it.isNotBlank() }
         if (keyWords.isEmpty()) return false
