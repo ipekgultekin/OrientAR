@@ -2,6 +2,7 @@ package com.example.orientar
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -53,10 +54,10 @@ fun OrientationScreen() {
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(start = 8.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(metuRed, shape = RoundedCornerShape(16.dp))
+                        Image(
+                            painter = painterResource(id = R.drawable.metu_logo),
+                            contentDescription = "METU Logo",
+                            modifier = Modifier.size(36.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
@@ -73,16 +74,16 @@ fun OrientationScreen() {
             )
         },
         bottomBar = {
-            BottomNavigationBar()
+            MainBottomBar()
         }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.White)
-                .verticalScroll(rememberScrollState()) // 🔴 scroll ÖNCE
-                .padding(paddingValues)                // 🔴 sonra scaffold padding
-                .padding(bottom = 80.dp)               // 🔴 bottom bar kadar boşluk
+                .verticalScroll(rememberScrollState())
+                .padding(paddingValues)
+                .padding(bottom = 80.dp)
         ) {
             // Üst görsel
             Box(
@@ -142,7 +143,10 @@ fun OrientationScreen() {
                     MenuCard(
                         title = "Campus Tour",
                         icon = "🔍",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            Toast.makeText(context, "Coming Soon...", Toast.LENGTH_SHORT).show()
+                        }
                     )
                     MenuCard(
                         title = "FAQ",
@@ -159,7 +163,6 @@ fun OrientationScreen() {
                         icon = "🎁",
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            // 🔴 BURASI: önce ScoreboardActivity açılıyor
                             val intent = Intent(context, ScoreboardActivity::class.java)
                             context.startActivity(intent)
                         }
@@ -173,12 +176,18 @@ fun OrientationScreen() {
                     MenuCard(
                         title = "Student Societies",
                         icon = "👥",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            Toast.makeText(context, "Coming Soon...", Toast.LENGTH_SHORT).show()
+                        }
                     )
                     MenuCard(
                         title = "Announcements",
                         icon = "🔔",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            Toast.makeText(context, "Coming Soon...", Toast.LENGTH_SHORT).show()
+                        }
                     )
                     Spacer(modifier = Modifier.weight(1f))
                 }
@@ -197,7 +206,7 @@ fun MenuCard(
 ) {
     Card(
         modifier = modifier
-            .aspectRatio(1f)
+            .height(130.dp)
             .border(2.dp, Color(0xFF8B0000), RoundedCornerShape(12.dp)),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
@@ -208,21 +217,20 @@ fun MenuCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(text = icon, fontSize = 36.sp)
-            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = icon, fontSize = 40.sp)
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = title,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 color = Color.Black,
                 maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                lineHeight = 14.sp,
+                lineHeight = 16.sp,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -230,14 +238,22 @@ fun MenuCard(
 }
 
 @Composable
-fun BottomNavigationBar() {
+fun MainBottomBar() {
+    val context = LocalContext.current
+
     NavigationBar(
         containerColor = Color.White,
         tonalElevation = 8.dp
     ) {
         NavigationBarItem(
             icon = { Text("🏠", fontSize = 24.sp) },
-            label = { Text("Home", fontSize = 12.sp) },
+            label = {
+                Text(
+                    "Home",
+                    fontSize = 11.sp,
+                    maxLines = 1
+                )
+            },
             selected = true,
             onClick = { },
             colors = NavigationBarItemDefaults.colors(
@@ -248,9 +264,19 @@ fun BottomNavigationBar() {
         )
         NavigationBarItem(
             icon = { Text("📋", fontSize = 24.sp) },
-            label = { Text("My Orientation Unit", fontSize = 12.sp) },
+            label = {
+                Text(
+                    "My Orientation\nUnit",
+                    fontSize = 10.sp,
+                    maxLines = 2,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 11.sp
+                )
+            },
             selected = false,
-            onClick = { },
+            onClick = {
+                Toast.makeText(context, "Coming Soon...", Toast.LENGTH_SHORT).show()
+            },
             colors = NavigationBarItemDefaults.colors(
                 unselectedIconColor = Color.Gray,
                 unselectedTextColor = Color.Gray
@@ -258,9 +284,17 @@ fun BottomNavigationBar() {
         )
         NavigationBarItem(
             icon = { Text("👤", fontSize = 24.sp) },
-            label = { Text("Profile", fontSize = 12.sp) },
+            label = {
+                Text(
+                    "Profile",
+                    fontSize = 11.sp,
+                    maxLines = 1
+                )
+            },
             selected = false,
-            onClick = { },
+            onClick = {
+                Toast.makeText(context, "Coming Soon...", Toast.LENGTH_SHORT).show()
+            },
             colors = NavigationBarItemDefaults.colors(
                 unselectedIconColor = Color.Gray,
                 unselectedTextColor = Color.Gray

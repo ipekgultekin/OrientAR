@@ -2,21 +2,17 @@
 <manifest
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+
     <uses-permission android:name="android.permission.INTERNET"/>
-
-
-    <!-- İzinler -->
     <uses-permission android:name="android.permission.CAMERA" />
 
-    <!-- Donanım özellikleri -->
-    <!-- ARCore ve OpenGL ES 3.0 şart -->
+    <!-- ARCore ve OpenGL ES 3.0 gereklidir -->
     <uses-feature
         android:name="android.hardware.camera.ar"
         android:required="true" />
     <uses-feature
         android:glEsVersion="0x00030000"
         android:required="true" />
-    <!-- Arka/ön kamera koşul değil (ARCore zaten AR camera özelliğiyle çalışacak) -->
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />
@@ -25,7 +21,7 @@
         android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
+        android:label="OrientAR"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.OrientAR"
@@ -39,7 +35,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name">
+            android:label="METU NCC Orientation">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -49,21 +45,17 @@
         <activity
             android:name=".ScoreboardActivity"
             android:exported="false"
-            android:label="Scoreboard"
-            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
+            android:label="Scoreboard" />
 
         <activity
             android:name=".TreasureHuntGameActivity"
             android:exported="false"
-            android:label="Treasure Hunt Game"
-            android:theme="@style/Theme.OrientAR" />
+            android:label="Treasure Hunt Game" />
 
-        <!-- 👇 BUNU EKLİYORSUN -->
         <activity
             android:name=".ChatbotActivity"
             android:exported="false"
-            android:label="OrientAI Chatbot"
-            android:theme="@style/Theme.OrientAR" />
+            android:label="Chatbot" />
 
     </application>
 

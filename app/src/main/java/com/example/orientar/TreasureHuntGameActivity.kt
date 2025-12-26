@@ -270,6 +270,8 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         mainHandler.postDelayed(runnable, popupDelayMs)
     }
 
+// TreasureHuntGameActivity.kt içindeki showCorrectDialog fonksiyonunu şununla değiştir:
+
     private fun showCorrectDialog(questionId: Int) {
         if (popupShown) return
         popupShown = true
@@ -280,31 +282,47 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
         val allSolved = GameState.totalSolved == GameState.totalQuestions()
 
-        val msg = if (allSolved) {
-            "Congratulations! You solved all questions."
+        // ✅ Custom dialog view
+        val dialogView = layoutInflater.inflate(R.layout.dialog_correct, null)
+        val tvDialogTitle = dialogView.findViewById<TextView>(R.id.tvDialogTitle)
+        val tvDialogMessage = dialogView.findViewById<TextView>(R.id.tvDialogMessage)
+        val tvDialogTime = dialogView.findViewById<TextView>(R.id.tvDialogTime)
+        val btnDialogContinue = dialogView.findViewById<Button>(R.id.btnDialogContinue)
+
+        if (allSolved) {
+            tvDialogTitle.text = "🎉 Congratulations! 🎉"
+            tvDialogMessage.text = "You solved all questions!\nYou're a true treasure hunter!"
+            btnDialogContinue.text = "VIEW SCOREBOARD"
         } else {
-            "Correct! Get ready for the next one."
+            tvDialogTitle.text = "✅ Correct!"
+            tvDialogMessage.text = "Great job! Get ready for the next challenge."
+            btnDialogContinue.text = "NEXT QUESTION"
         }
 
-        AlertDialog.Builder(this)
-            .setTitle("Great job!")
-            .setMessage(msg)
+        val seconds = elapsedMs / 1000.0
+        tvDialogTime.text = String.format(Locale.US, "Completed in %.1f seconds", seconds)
+
+        val dialog = AlertDialog.Builder(this, R.style.CustomDialogTheme)
+            .setView(dialogView)
             .setCancelable(false)
-            .setPositiveButton(if (allSolved) "Scoreboard" else "Next Question") { d, _ ->
-                d.dismiss()
-                if (allSolved) {
+            .create()
+
+        btnDialogContinue.setOnClickListener {
+            dialog.dismiss()
+            if (allSolved) {
+                startActivity(Intent(this, ScoreboardActivity::class.java))
+                finish()
+            } else {
+                val nextQ = GameState.nextUnsolved()
+                if (nextQ != null) loadQuestion(nextQ)
+                else {
                     startActivity(Intent(this, ScoreboardActivity::class.java))
                     finish()
-                } else {
-                    val nextQ = GameState.nextUnsolved()
-                    if (nextQ != null) loadQuestion(nextQ)
-                    else {
-                        startActivity(Intent(this, ScoreboardActivity::class.java))
-                        finish()
-                    }
                 }
             }
-            .show()
+        }
+
+        dialog.show()
     }
 
     // -----------------------------

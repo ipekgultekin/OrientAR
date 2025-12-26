@@ -54,7 +54,7 @@ object GameState {
         return if (index != -1 && index < questions.size - 1) questions[index + 1] else null
     }
 
-    fun reset() {
+    fun resetProgress() {
         solvedIds.clear()
         _totalTimeMs = 0L
         bestTimes.clear()

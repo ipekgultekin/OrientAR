@@ -1,11 +1,12 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-
-    <!-- Uygulamanın ana teması -->
+<resources>
+    <!-- Base application theme -->
     <style name="Theme.OrientAR" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- İstersen renkleri sonra özelleştiririz -->
-        <item name="colorPrimary">@color/purple_500</item>
-        <item name="colorPrimaryDark">@color/purple_700</item>
-        <item name="colorAccent">@color/teal_200</item>
+        <item name="colorPrimary">#8B0000</item>
+        <item name="colorPrimaryVariant">#6D0000</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#FFF9C4</item>
+        <item name="colorOnSecondary">#000000</item>
+        <item name="android:statusBarColor">#8B0000</item>
     </style>
 
 </resources>
