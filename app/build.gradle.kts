@@ -68,6 +68,7 @@ dependencies {
 
     //ML Kit Text Recognition (OCR)
     implementation("com.google.mlkit:text-recognition:16.0.0")
+    implementation(libs.play.services.mlkit.text.recognition.common)
 
     // Compose (MainActivity için)
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
