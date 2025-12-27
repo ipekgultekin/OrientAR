@@ -5,15 +5,15 @@ import com.google.firebase.firestore.FirebaseFirestore
 
 data class Question(
     val id: Int,
-    val title: String,
-    val text: String,
-    val answerImageName: String,
-    val answerImageAssetPath: String,
-    val modelFilePath: String,
-    val modelScale: Float,
-    val modelRotationX: Float,
+    val title: String, // Short display title
+    val text: String, // The actual riddle/clue text shown to the user
+    val answerImageName: String, // logical name of the answer image
+    val answerImageAssetPath: String, // asset path for answer image
+    val modelFilePath: String, // 3D model asset path used in AR when the answer is detected
+    val modelScale: Float, // Scale tuning for each model (since GLB files can have different native sizes)
+    val modelRotationX: Float, // Per-question model rotation tuning (helps face the camera correctly)
     val modelRotationY: Float,
-    val targetKeywords: List<String>
+    val targetKeywords: List<String> // List of acceptable keywords/phrases that can trigger the "correct" state
 )
 
 object GameState {
@@ -44,29 +44,29 @@ object GameState {
         }
     }
 
-    fun isSolved(id: Int): Boolean = solvedIds.contains(id)
+    fun isSolved(id: Int): Boolean = solvedIds.contains(id) //Convenience check: has a question been solved?
 
-    fun nextUnsolved(): Question? =
+    fun nextUnsolved(): Question? = //Returns the first question that is not solved yet
         questions.firstOrNull { !solvedIds.contains(it.id) }
 
-    fun getNextQuestionInList(currentId: Int): Question? {
+    fun getNextQuestionInList(currentId: Int): Question? { //Returns the next question in list order after the given question ID
         val index = questions.indexOfFirst { it.id == currentId }
         return if (index != -1 && index < questions.size - 1) questions[index + 1] else null
     }
 
-    fun resetProgress() {
+    fun resetProgress() { //Resets all progress for "Play Again"
         solvedIds.clear()
         _totalTimeMs = 0L
         bestTimes.clear()
     }
 
-    fun loadQuestionsFromFirestore(onComplete: () -> Unit) {
+    fun loadQuestionsFromFirestore(onComplete: () -> Unit) { //Loads questions from Firestore collection: "treasure_questions"
         FirebaseFirestore.getInstance()
             .collection("treasure_questions")
             .get()
             .addOnSuccessListener { snapshot ->
 
-                questions.clear()
+                questions.clear() // Clear any previous items before adding new ones
 
                 Log.d("GameState", "Firestore documents count: ${snapshot.size()}")
 
@@ -85,20 +85,22 @@ object GameState {
                         continue
                     }
 
+                    // we default to empty string so the app won't crash
                     val text = doc.getString("text") ?: ""
                     val answerImageName = doc.getString("answerImageName") ?: ""
                     val answerImageAssetPath = doc.getString("answerImageAssetPath") ?: ""
                     val modelFilePath = doc.getString("modelFilePath") ?: ""
 
+                    //Firestore numeric values are typically Double when read with getDouble()
                     val modelScale = doc.getDouble("modelScale")?.toFloat() ?: 1f
                     val modelRotationX = doc.getDouble("modelRotationX")?.toFloat() ?: 0f
                     val modelRotationY = doc.getDouble("modelRotationY")?.toFloat() ?: 0f
 
-                    val targetKeywords = (doc.get("targetKeywords") as? List<*>)
+                    val targetKeywords = (doc.get("targetKeywords") as? List<*>) //We read target keywords as List<*> then map only String values safely
                         ?.mapNotNull { it as? String }
                         ?: emptyList()
 
-                    questions.add(
+                    questions.add( // Construct Question object and add into list
                         Question(
                             id = id,
                             title = title,
@@ -114,14 +116,15 @@ object GameState {
                     )
                 }
 
-                questions.sortBy { it.id }
+                questions.sortBy { it.id } // Sort by question id to maintain stable game order
 
+                // Logs help debug cases like empty collection or schema mismatch
                 Log.d("GameState", "Loaded questions: ${questions.size}")
                 if (questions.isEmpty()) {
                     Log.w("GameState", "No questions found in Firestore collection: treasure_questions")
                 }
 
-                onComplete()
+                onComplete() // Notify caller
             }
             .addOnFailureListener { e ->
                 Log.e("GameState", "Firestore load FAILED", e)

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
 
+//Scoreboard screen theme colors
 private val MetuRed = Color(0xFF8B0000)
 private val SolvedGreen = Color(0xFF4CAF50)
 private val LockedGray = Color(0xFFBDBDBD)
@@ -35,7 +36,7 @@ private val LockedGray = Color(0xFFBDBDBD)
 class ScoreboardActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
+        setContent { // Jetpack Compose entry point: set the UI content of this activity.
             MaterialTheme {
                 ScoreboardScreen()
             }
@@ -46,16 +47,19 @@ class ScoreboardActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScoreboardScreen() {
+    // Compose-friendly access to Android Context
     val context = LocalContext.current
+
+    //Read scoreboard stats from GameState
     val solved = GameState.totalSolved
     val total = GameState.totalQuestions()
     val totalSeconds = GameState.totalTimeMs / 1000.0
 
-    Scaffold(
+    Scaffold( //gives a standard screen structure
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
+                    Row( // Custom title with METU logo + text
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(start = 8.dp)
                     ) {
@@ -88,7 +92,7 @@ fun ScoreboardScreen() {
                 .background(Color(0xFFF5F5F5))
                 .padding(paddingValues)
         ) {
-            // Stats Card
+            // Stats Card (Progress summary)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -134,7 +138,7 @@ fun ScoreboardScreen() {
 
                     Button(
                         onClick = {
-                            // Play Again - tüm soruları sıfırla
+                            // Play Again
                             GameState.resetProgress()
                             val intent = Intent(context, TreasureHuntGameActivity::class.java)
                             context.startActivity(intent)
