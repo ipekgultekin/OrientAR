@@ -1,7 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.gms.google-services")
+    id("com.google.gms.google-services") //google services plugings for firebase
 }
 
 android {
@@ -36,12 +36,12 @@ android {
         jvmTarget = "17"
     }
 
-    // Compose açık
+    // Compose açık enable composable setcontent
     buildFeatures {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.15"
+        kotlinCompilerExtensionVersion = "1.5.15" //compose kotlin version
     }
 
     // (Opsiyonel ama faydalı) Native lib çakışmalarını önlemek için
@@ -70,13 +70,13 @@ dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.0")
     implementation(libs.play.services.mlkit.text.recognition.common)
 
-    // Compose (MainActivity için)
+    // Compose (MainActivity için) sürüm uyumu vs
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
     implementation("androidx.activity:activity-compose:1.9.0")
-    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material3:material3") //enable scaffold TopAppBar, Card, NavigationBar
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
@@ -86,7 +86,7 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 
     implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
-    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-firestore-ktx") //firestore for kotlin
     implementation("com.google.firebase:firebase-analytics-ktx")
 }
 

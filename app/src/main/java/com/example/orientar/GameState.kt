@@ -1,7 +1,7 @@
 package com.example.orientar
 
 import android.util.Log
-import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestore //firestore lib
 
 data class Question(
     val id: Int,
@@ -61,18 +61,19 @@ object GameState {
     }
 
     fun loadQuestionsFromFirestore(onComplete: () -> Unit) { //Loads questions from Firestore collection: "treasure_questions"
-        FirebaseFirestore.getInstance()
-            .collection("treasure_questions")
-            .get()
+        FirebaseFirestore.getInstance() // gets firestore connection(json+initializeapp)
+            .collection("treasure_questions")//our question data collection in firestore
+            .get()//read collection
+            //if succesfull
             .addOnSuccessListener { snapshot ->
 
                 questions.clear() // Clear any previous items before adding new ones
 
                 Log.d("GameState", "Firestore documents count: ${snapshot.size()}")
 
-                for (doc in snapshot.documents) {
+                for (doc in snapshot.documents) { //read each document individually to convert it into a Question object.
 
-                    val idLong = doc.getLong("id")
+                    val idLong = doc.getLong("id") //reads firestore field
                     if (idLong == null) {
                         Log.w("GameState", "Skipped doc (missing id): ${doc.id}")
                         continue
@@ -126,9 +127,10 @@ object GameState {
 
                 onComplete() // Notify caller
             }
-            .addOnFailureListener { e ->
+            .addOnFailureListener { e -> //failure msg
                 Log.e("GameState", "Firestore load FAILED", e)
                 onComplete()
             }
     }
 }
+
