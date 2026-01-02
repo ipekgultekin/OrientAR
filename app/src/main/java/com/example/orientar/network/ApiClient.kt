@@ -7,7 +7,7 @@ import java.util.concurrent.TimeUnit
 
 object ApiClient {
 
-    private const val BASE_URL = "http://130.211.235.93:8000/"
+    private const val BASE_URL = "http://34.79.20.195:8000"
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
@@ -18,7 +18,7 @@ object ApiClient {
     val api: ChatApi by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
-            .client(okHttpClient)   // 🔥 EN KRİTİK SATIR
+            .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(ChatApi::class.java)
