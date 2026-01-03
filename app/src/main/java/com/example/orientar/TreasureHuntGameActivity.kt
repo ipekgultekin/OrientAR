@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.widget.Button
 import android.widget.Chronometer
 import android.widget.ImageButton
@@ -100,7 +101,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     private var currentAnchorNode: AnchorNode? = null
 
     // Popup delay: wait a bit after placement, so the user can visually see the model appear first
-    private val popupDelayMs = 3000L
+    private val popupDelayMs = 6000L
     private val mainHandler = Handler(Looper.getMainLooper())
     private var pendingPopupRunnable: Runnable? = null
 
@@ -175,12 +176,17 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                 recognizer.process(inputImage) //Run ML Kit OCR asynchronously. On success, we get detectedText and compare against target keywords using fuzzy matching.
                     .addOnSuccessListener { visionText ->
                         val detectedText = visionText.text
+                        Log.d("OCR", "Detected: ${detectedText.take(200)}")
+                        Log.d("OCR", "Keywords: ${currentQuestion.targetKeywords}")
 
                         val matched = currentQuestion.targetKeywords.any { kw -> //We check if ANY target keyword matches. currentQuestion.targetKeywords can contain multiple acceptable phrases/synonyms.
                             fuzzyContainsKeyword(detectedText, kw)
                         }
 
+                        Log.d("OCR", "Matched = $matched")
+
                         if (matched && !modelPlaced) {
+                            Log.d("AR", "MATCHED! placing model...")
                             placeModelInFrontOfCamera(session, frame, currentQuestion)
                             modelPlaced = true
                             scheduleCorrectPopup(currentQuestion.id)
@@ -281,9 +287,10 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             val cameraPose = frame.camera.pose // Current camera pose
 
             // Move forward on camera's -Z axis (ARCore convention)
-            val distanceMeters = 1.0f
-            val forward = floatArrayOf(0f, 0f, -distanceMeters)
-            val targetPose = cameraPose.compose(Pose.makeTranslation(forward))
+            val distanceMeters = 0.7f
+            val upMeters = 0.08f
+            val forwardAndUp = floatArrayOf(0f, upMeters, -distanceMeters)
+            val targetPose = cameraPose.compose(Pose.makeTranslation(forwardAndUp))
 
             // Create AR anchor at the target pose
             val anchor = session.createAnchor(targetPose)
@@ -294,23 +301,29 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             // Load model on IO thread (prevents ANR)
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
-                    val modelInstance = modelLoader.loadModelInstance(q.modelFilePath)
-                    if (modelInstance != null) {
-                        val modelNode = ModelNode(
-                            modelInstance = modelInstance,
-                            scaleToUnits = q.modelScale
-                        ).apply {
-                            // Set rotation (question-specific tuning)
-                            rotation = Rotation(q.modelRotationX, q.modelRotationY, 0f)
-                        }
+                    Log.d("AR", "Loading model from: ${q.modelFilePath}")
 
-                        // Attach model node to anchor node on main thread
-                        withContext(Dispatchers.Main) {
-                            anchorNode.addChildNode(modelNode)
-                        }
+                    val modelInstance = modelLoader.loadModelInstance(q.modelFilePath)
+
+                    if (modelInstance == null) {
+                        Log.e("AR", "ModelInstance is NULL! Path probably wrong or asset missing.")
+                        return@launch
                     }
+
+                    val modelNode = ModelNode(
+                        modelInstance = modelInstance,
+                        scaleToUnits = q.modelScale
+                    ).apply {
+                        rotation = Rotation(q.modelRotationX, q.modelRotationY, q.modelRotationZ)
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        anchorNode.addChildNode(modelNode)
+                        Log.d("AR", "Model added to anchor ✅")
+                    }
+
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e("AR", "Model load FAILED", e)
                 }
             }
 

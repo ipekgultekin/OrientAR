@@ -13,6 +13,7 @@ data class Question(
     val modelScale: Float, // Scale tuning for each model (since GLB files can have different native sizes)
     val modelRotationX: Float, // Per-question model rotation tuning (helps face the camera correctly)
     val modelRotationY: Float,
+    val modelRotationZ: Float,
     val targetKeywords: List<String> // List of acceptable keywords/phrases that can trigger the "correct" state
 )
 
@@ -96,6 +97,8 @@ object GameState {
                     val modelScale = doc.getDouble("modelScale")?.toFloat() ?: 1f
                     val modelRotationX = doc.getDouble("modelRotationX")?.toFloat() ?: 0f
                     val modelRotationY = doc.getDouble("modelRotationY")?.toFloat() ?: 0f
+                    val modelRotationZ = doc.getDouble("modelRotationZ")?.toFloat() ?: 0f
+
 
                     val targetKeywords = (doc.get("targetKeywords") as? List<*>) //We read target keywords as List<*> then map only String values safely
                         ?.mapNotNull { it as? String }
@@ -112,6 +115,7 @@ object GameState {
                             modelScale = modelScale,
                             modelRotationX = modelRotationX,
                             modelRotationY = modelRotationY,
+                            modelRotationZ = modelRotationZ,
                             targetKeywords = targetKeywords
                         )
                     )
