@@ -136,5 +136,16 @@ object GameState {
                 onComplete()
             }
     }
+
+    fun nextUnsolvedAfter(currentId: Int): Question? {
+        val startIndex = questions.indexOfFirst { it.id == currentId }
+        if (startIndex == -1) return nextUnsolved()
+
+        for (i in (startIndex + 1) until questions.size) {
+            val q = questions[i]
+            if (!isSolved(q.id)) return q
+        }
+        return null
+    }
 }
 

@@ -4,79 +4,137 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/white">
+    android:background="#FAFAFA">
 
-    <!-- ÜST BAR (Main ekrandaki top bar gibi istersen burayı daha sonra değiştiririz) -->
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Treasure Hunt Scoreboard"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:textColor="#333"
-        android:gravity="center"
-        android:layout_marginTop="16dp"
-        android:layout_marginBottom="16dp"/>
-
+    <!-- HEADER -->
     <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="20dp"
+        app:cardElevation="4dp"
+        app:cardCornerRadius="0dp"
+        android:layout_marginBottom="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@color/white"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Treasure Hunt"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:textColor="#212121"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Leaderboard"
+                android:textSize="16sp"
+                android:textColor="#757575"/>
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- TOTAL SCORE CARD -->
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"
         android:layout_marginBottom="16dp"
-        app:cardCornerRadius="12dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="8dp"
         app:cardBackgroundColor="@color/metu_red">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp"
+            android:padding="24dp"
             android:gravity="center">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Your Total Score"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:alpha="0.9"
+                android:layout_marginBottom="8dp"/>
 
             <TextView
                 android:id="@+id/tvTotalStats"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Total Score"
+                android:text="0"
                 android:textColor="@color/white"
-                android:textSize="18sp"
-                android:textStyle="bold"/>
+                android:textSize="48sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium"/>
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
+    <!-- LEADERBOARD SECTION HEADER -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Top Players"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="#212121"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="12dp"/>
+
+    <!-- RECYCLERVIEW -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvScores"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:paddingHorizontal="16dp"/>
+        android:paddingHorizontal="16dp"
+        android:clipToPadding="false"/>
 
-    <!-- ORTADA TEK BUTON: PLAY / PLAY AGAIN -->
+    <!-- PLAY BUTTON -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:padding="16dp"
-        android:gravity="center">
+        android:gravity="center"
+        android:background="@color/white">
 
         <Button
             android:id="@+id/btnPlay"
-            android:layout_width="200dp"
-            android:layout_height="wrap_content"
-            android:text="PLAY"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginHorizontal="32dp"
+            android:text="START GAME"
+            android:textSize="16sp"
+            android:textStyle="bold"
             android:backgroundTint="@color/metu_red"
-            android:textColor="@color/white"/>
+            android:textColor="@color/white"
+            android:letterSpacing="0.05"
+            android:elevation="4dp"/>
     </LinearLayout>
 
-    <!-- ALT BAR (Main ekrandaki gibi emoji + yazı) -->
+    <!-- BOTTOM NAVIGATION -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#E0E0E0"/>
+
     <LinearLayout
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"
-        android:layout_height="64dp"
+        android:layout_height="68dp"
         android:orientation="horizontal"
         android:gravity="center"
         android:weightSum="3"
-        android:background="#F5F5F5">
+        android:background="@color/white"
+        android:elevation="8dp">
 
         <!-- HOME -->
         <LinearLayout
@@ -85,21 +143,23 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:gravity="center"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingVertical="8dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="🏠"
-                android:textSize="22sp"
-                android:textColor="#B30000"/>
+                android:textSize="24sp"/>
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Home"
-                android:textSize="12sp"
-                android:textColor="#B30000"/>
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="#B30000"
+                android:layout_marginTop="2dp"/>
         </LinearLayout>
 
         <!-- MY ORIENTATION UNIT -->
@@ -109,22 +169,23 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:gravity="center"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingVertical="8dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="📋"
-                android:textSize="22sp"
-                android:textColor="#888888"/>
+                android:textSize="24sp"/>
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="My Orientation\nUnit"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:gravity="center"
-                android:textColor="#888888"/>
+                android:textColor="#9E9E9E"
+                android:layout_marginTop="2dp"/>
         </LinearLayout>
 
         <!-- PROFILE -->
@@ -134,24 +195,24 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:gravity="center"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingVertical="8dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="👤"
-                android:textSize="22sp"
-                android:textColor="#888888"/>
+                android:textSize="24sp"/>
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Profile"
-                android:textSize="12sp"
-                android:textColor="#888888"/>
+                android:textSize="11sp"
+                android:textColor="#9E9E9E"
+                android:layout_marginTop="2dp"/>
         </LinearLayout>
 
     </LinearLayout>
-
 
 </LinearLayout>

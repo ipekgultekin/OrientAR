@@ -142,7 +142,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Question 1"
+                    android:text="Loading..."
                     android:textSize="13sp"
                     android:textColor="#FFFFFF"
                     android:textStyle="bold" />
@@ -159,7 +159,7 @@
                 android:id="@+id/tvQuestionText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Everyone looks at me while passing by, but no one remembers me.\nMy arrows speak, I only show the way?"
+                android:text="Fetching the next clue..."
                 android:textSize="13sp"
                 android:textColor="#FFFFFF"
                 android:padding="12dp"

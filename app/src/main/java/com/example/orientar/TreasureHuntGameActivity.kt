@@ -261,19 +261,22 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         modelPlaced = false
     }
 
-    private fun handleNextOrFinish() { //Handles NEXT / FINISH button logic
-        pendingPopupRunnable?.let { mainHandler.removeCallbacks(it) } // If user moves forward, do not let a delayed dialog pop later
+    private fun handleNextOrFinish() {
+        pendingPopupRunnable?.let { mainHandler.removeCallbacks(it) }
 
-        if (btnNext.text == "FINISH") {
+        if (!modelPlaced) {
+            Toast.makeText(this, "You skipped a question. Game over!", Toast.LENGTH_SHORT).show()
             startActivity(Intent(this, ScoreboardActivity::class.java))
             finish()
+            return
+        }
+
+        val nextQ = GameState.nextUnsolvedAfter(currentQuestion.id)
+        if (nextQ != null) {
+            loadQuestion(nextQ)
         } else {
-            val nextQ = GameState.getNextQuestionInList(currentQuestion.id)
-            if (nextQ != null) {
-                loadQuestion(nextQ)
-            } else {
-                Toast.makeText(this, "No more questions.", Toast.LENGTH_SHORT).show()
-            }
+            startActivity(Intent(this, ScoreboardActivity::class.java))
+            finish()
         }
     }
 
@@ -362,7 +365,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_correct, null)
         val tvDialogTitle = dialogView.findViewById<TextView>(R.id.tvDialogTitle)
         val tvDialogMessage = dialogView.findViewById<TextView>(R.id.tvDialogMessage)
-        val tvDialogTime = dialogView.findViewById<TextView>(R.id.tvDialogTime)
+        //val tvDialogTime = dialogView.findViewById<TextView>(R.id.tvDialogTime)
         val btnDialogContinue = dialogView.findViewById<Button>(R.id.btnDialogContinue)
 
         // Customize dialog text based on completion state
@@ -376,8 +379,8 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             btnDialogContinue.text = "NEXT QUESTION"
         }
 
-        val seconds = elapsedMs / 1000.0
-        tvDialogTime.text = String.format(Locale.US, "Completed in %.1f seconds", seconds)
+        //val seconds = elapsedMs / 1000.0
+        //tvDialogTime.text = String.format(Locale.US, "Completed in %.1f seconds", seconds)
 
         // Build dialog with custom theme + prevent dismissing by tapping outside/back
         val dialog = AlertDialog.Builder(this, R.style.CustomDialogTheme)
@@ -392,7 +395,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                 finish()
             } else {
                 //Prefer "next unsolved" so the game can recover even if questions were answered out of order
-                val nextQ = GameState.nextUnsolved()
+                val nextQ = GameState.nextUnsolvedAfter(currentQuestion.id)
                 if (nextQ != null) loadQuestion(nextQ)
                 else {
                     startActivity(Intent(this, ScoreboardActivity::class.java))

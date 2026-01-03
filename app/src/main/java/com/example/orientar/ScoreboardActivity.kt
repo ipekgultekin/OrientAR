@@ -138,8 +138,11 @@ fun ScoreboardScreen() {
 
                     Button(
                         onClick = {
-                            // Play Again
-                            GameState.resetProgress()
+                            // If all questions are solved, restart from scratch.
+                            // Otherwise, continue only with the unsolved ones.
+                            if (solved == total) {
+                                GameState.resetProgress()
+                            }
                             val intent = Intent(context, TreasureHuntGameActivity::class.java)
                             context.startActivity(intent)
                         },
@@ -152,7 +155,11 @@ fun ScoreboardScreen() {
                         )
                     ) {
                         Text(
-                            text = if (solved == 0) "▶ START GAME" else "🔄 PLAY AGAIN",
+                            text = when {
+                                solved == 0 -> "▶ START GAME"
+                                solved < total -> "▶ CONTINUE"
+                                else -> "🔄 PLAY AGAIN"
+                            },
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -251,7 +258,7 @@ fun QuestionCard(question: Question) {
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = question.title,
+                    text = if (isSolved) question.title else "🔒 Not solved yet",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (isSolved) Color.Black else Color.Gray
