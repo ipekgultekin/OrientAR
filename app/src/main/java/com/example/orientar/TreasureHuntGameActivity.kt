@@ -234,7 +234,9 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         currentQuestion = q
 
         // Update UI
-        tvQuestionTitle.text = q.title
+        val idx = GameState.questions.indexOfFirst { it.id == q.id } + 1
+        val total = GameState.totalQuestions()
+        tvQuestionTitle.text = "Question $idx / $total"
         tvQuestionText.text = q.text
 
         // Decide whether button should say NEXT or FINISH based on list position
