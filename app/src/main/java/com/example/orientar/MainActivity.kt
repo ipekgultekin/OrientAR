@@ -187,7 +187,8 @@ fun OrientationScreen() { //home screen
                         icon = "👥",
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            Toast.makeText(context, "Coming Soon...", Toast.LENGTH_SHORT).show()
+                            val intent = Intent(context, SocietiesActivity::class.java)
+                            context.startActivity(intent)
                         }
                     )
                     MenuCard(

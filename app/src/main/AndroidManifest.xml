@@ -57,6 +57,18 @@
             android:exported="false"
             android:label="Chatbot" />
 
+        <activity
+            android:name=".SocietiesActivity"
+            android:exported="false"
+            android:label="Student Societies" />
+
+        <activity
+            android:name=".SocietyDetailActivity"
+            android:exported="false"
+            android:label="Society Detail" />
+
+
+
     </application>
 
 </manifest>
