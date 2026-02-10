@@ -423,11 +423,15 @@ class TreasureHuntGameActivity : AppCompatActivity() {
      * 3) If not found, do approximate matching using Levenshtein distance
      *    over word windows of same size as the keyword phrase
      */
-    private fun normalizeTextForMatch(s: String): String { //Normalizes text into a consistent format so distance/contains checks are meaningful
-        return s.uppercase(Locale.getDefault())
-            .replace(Regex("[^A-Z0-9 ]"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
+
+    // Normalizes text into a consistent format so matching operations become reliable.
+    // This step reduces noise caused by OCR errors such as case differences,
+    // punctuation, or inconsistent spacing.
+    private fun normalizeTextForMatch(s: String): String {
+        return s.uppercase(Locale.getDefault())      // Make comparison case-insensitive
+            .replace(Regex("[^A-Z0-9 ]"), " ")       // Remove punctuation and special characters
+            .replace(Regex("\\s+"), " ")              // Normalize multiple spaces into a single space
+            .trim()                                   // Remove leading and trailing spaces
     }
 
 
@@ -443,31 +447,43 @@ class TreasureHuntGameActivity : AppCompatActivity() {
      *
      * Here strings are short (keywords and small windows), so this is acceptable
      */
-    private fun levenshtein(a: String, b: String): Int {
-        if (a == b) return 0
-        if (a.isEmpty()) return b.length
-        if (b.isEmpty()) return a.length
 
+    // Computes the Levenshtein Distance between two strings.
+    // This represents the minimum number of character-level edits
+    // (insertions, deletions, or substitutions) required to transform one string into another.
+    private fun levenshtein(a: String, b: String): Int {
+        if (a == b) return 0              // Identical strings → no edits needed
+        if (a.isEmpty()) return b.length  // All characters must be inserted
+        if (b.isEmpty()) return a.length  // All characters must be deleted
+
+        // Dynamic programming table
         val dp = Array(a.length + 1) { IntArray(b.length + 1) }
+
+        // Base cases: transforming to or from an empty string
         for (i in 0..a.length) dp[i][0] = i
         for (j in 0..b.length) dp[0][j] = j
 
+        // Fill DP table
         for (i in 1..a.length) {
             for (j in 1..b.length) {
                 val cost = if (a[i - 1] == b[j - 1]) 0 else 1
                 dp[i][j] = minOf(
-                    dp[i - 1][j] + 1, // deletion
-                    dp[i][j - 1] + 1, // insertion
-                    dp[i - 1][j - 1] + cost // substitution
+                    dp[i - 1][j] + 1,      // Deletion
+                    dp[i][j - 1] + 1,      // Insertion
+                    dp[i - 1][j - 1] + cost // Substitution
                 )
             }
         }
+
         return dp[a.length][b.length]
     }
 
-    private fun isSimilarByLevenshtein(aRaw: String, bRaw: String): Boolean { //Decides whether two strings are "similar enough" to be considered a match
+    // Determines whether two strings are similar enough to be considered a match.
+    // Uses a length-aware adaptive threshold instead of a fixed value.
+    private fun isSimilarByLevenshtein(aRaw: String, bRaw: String): Boolean {
         val a = normalizeTextForMatch(aRaw)
         val b = normalizeTextForMatch(bRaw)
+
         if (a.isBlank() || b.isBlank()) return false
 
         val dist = levenshtein(a, b)
@@ -475,32 +491,39 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         val ratio = dist.toDouble() / maxLen.toDouble()
 
         return when {
-            maxLen <= 4 -> dist <= 1 // Very short strings: allow only 0-1 edits
-            maxLen <= 8 -> dist <= 2 // Medium strings: allow up to 2 edits
-            else -> ratio <= 0.20 // Longer: allow up to 20% edits
+            maxLen <= 4 -> dist <= 1        // Very short strings: extremely strict matching
+            maxLen <= 8 -> dist <= 2        // Medium strings: allow limited OCR noise
+            else -> ratio <= 0.20           // Longer phrases: allow up to 20% character difference
         }
     }
 
-    private fun fuzzyContainsKeyword(ocrTextRaw: String, keywordRaw: String): Boolean { //checks returns true if OCR text "contains" the keyword approximately
+    // Performs approximate containment matching between OCR output and the target keyword.
+    // First checks for a fast exact match after normalization.
+    // If that fails, it applies sliding-window fuzzy matching using Levenshtein Distance.
+    private fun fuzzyContainsKeyword(ocrTextRaw: String, keywordRaw: String): Boolean {
         val ocrText = normalizeTextForMatch(ocrTextRaw)
         val keyword = normalizeTextForMatch(keywordRaw)
 
         if (keyword.isBlank() || ocrText.isBlank()) return false
 
-        if (ocrText.contains(keyword)) return true // Fast exact-ish match after normalization
+        // Stage 1: Fast containment check (efficient for clean OCR output)
+        if (ocrText.contains(keyword)) return true
 
-        // Split OCR into tokens to support phrase window matching
+        // Stage 2: Sliding window fuzzy matching to handle partial OCR errors
         val words = ocrText.split(" ").filter { it.isNotBlank() }
         val keyWords = keyword.split(" ").filter { it.isNotBlank() }
+
         if (keyWords.isEmpty()) return false
 
-        val windowSize = keyWords.size // Window size equals number of words in the keyword phrase
+        val windowSize = keyWords.size
 
-        if (words.size < windowSize) { // If OCR produced fewer words than keyword, fall back to whole-text similarity
+        // If OCR output is shorter than the keyword, compare whole text directly
+        if (words.size < windowSize) {
             return isSimilarByLevenshtein(ocrText, keyword)
         }
 
-        for (i in 0..(words.size - windowSize)) { // Slide window over OCR text and compare each phrase chunk
+        // Slide a window over OCR tokens and compare phrase chunks
+        for (i in 0..(words.size - windowSize)) {
             val window = words.subList(i, i + windowSize).joinToString(" ")
             if (isSimilarByLevenshtein(window, keyword)) return true
         }
