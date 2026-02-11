@@ -1,533 +1,217 @@
 package com.example.orientar
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.MotionEvent
 import android.widget.Button
 import android.widget.Chronometer
-import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import com.google.ar.core.Anchor
 import com.google.ar.core.Config
-import com.google.ar.core.Pose
-import com.google.ar.core.exceptions.NotYetAvailableException
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.google.ar.core.Plane
+import com.google.ar.core.TrackingState
 import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.loaders.ModelLoader
 import io.github.sceneview.math.Rotation
+import io.github.sceneview.math.Scale
 import io.github.sceneview.node.ModelNode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
 
 class TreasureHuntGameActivity : AppCompatActivity() {
-    // AR renderer + camera feed
-    private lateinit var arSceneView: ARSceneView
 
-    // UI: timer and question text
+    private lateinit var arSceneView: ARSceneView
     private lateinit var chronoTimer: Chronometer
     private lateinit var tvQuestionTitle: TextView
     private lateinit var tvQuestionText: TextView
-    private lateinit var btnClose: ImageButton
     private lateinit var btnNext: Button
-
-    // SceneView model loader (loads GLB)
     private lateinit var modelLoader: ModelLoader
 
-    // Camera permission request code
-    private val CAMERA_REQ = 44
+    private var isResolving = false
+    private var lastCloudCheckTime = 0L
+    private val cloudCheckIntervalMs = 2000L
 
-    /**
-     * ML Kit Text Recognition client.
-     * We keep a single recognizer instance and reuse it (cheaper than creating each time).
-     */
-    private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-
-    /**
-     * OCR concurrency guard:
-     * - Prevents starting another OCR task while one is still running.
-     * - Important because recognizer.process(...) is async and may overlap if we don't guard it.
-     */
-    private var ocrRunning = false
-
-    /**
-     * Timestamp for OCR throttling:
-     * - We'll only run OCR once every ocrIntervalMs.
-     * - This reduces CPU/GPU pressure and keeps AR tracking smoother.
-     */
-    private var lastOcrTime = 0L
-
-    // ✅ Make OCR less frequent (reduces camera drop / ANR on mid devices)
-    private val ocrIntervalMs = 1500L
-
-    // Holds the currently active question/riddle
     private lateinit var currentQuestion: Question
-
-    /**
-     * modelPlaced:
-     * - Once we detect correct text and place the 3D model, we stop scanning frames.
-     * - Prevents repeated placements and repeated dialog triggers.
-     */
     private var modelPlaced = false
-
-    /**
-     * popupShown: Prevents showing "Correct" dialog multiple times due to repeated OCR matches.
-     */
-    private var popupShown = false
-
-    /**
-     * questionStartMs: We use elapsedRealtime() to measure solving time reliably (not affected by system clock changes).
-     */
     private var questionStartMs: Long = 0L
-
-    /**
-     * currentAnchorNode: The anchor node where the model is attached. When switching questions, we remove/destroy old anchor to clean up scene resources.
-     */
-    private var currentAnchorNode: AnchorNode? = null
-
-    // Popup delay: wait a bit after placement, so the user can visually see the model appear first
-    private val popupDelayMs = 6000L
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var pendingPopupRunnable: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Inflate the UI layout for the treasure hunt screen
         setContentView(R.layout.activity_treasure_hunt_game)
 
-        // Bind views
         arSceneView = findViewById(R.id.sceneView)
         chronoTimer = findViewById(R.id.chronoTimer)
         tvQuestionTitle = findViewById(R.id.tvQuestionTitle)
         tvQuestionText = findViewById(R.id.tvQuestionText)
-        btnClose = findViewById(R.id.btnClose)
         btnNext = findViewById(R.id.btnNext)
 
-        modelLoader = ModelLoader( //ModelLoader uses SceneView's engine
-            engine = arSceneView.engine,
-            context = this,
-            coroutineScope = CoroutineScope(Dispatchers.IO)
-        )
+        modelLoader = ModelLoader(arSceneView.engine, this, CoroutineScope(Dispatchers.IO))
 
-        btnClose.setOnClickListener { finish() } // Close button simply exits the activity
-        btnNext.setOnClickListener { handleNextOrFinish() } // Next/Finish button logic (go to next question or scoreboard)
-
-        // If permission not granted, request and stop here
-        if (!hasCameraPermission()) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_REQ)
-            return
-        }
-
-        // Load questions FIRST from Firestore, then start the game
         GameState.loadQuestionsFromFirestore {
             runOnUiThread {
                 val firstQ = GameState.nextUnsolved() ?: GameState.questions.firstOrNull()
-                if (firstQ == null) {
-                    Toast.makeText(this, "No questions loaded from Firestore!", Toast.LENGTH_LONG).show()
-                    finish()
-                    return@runOnUiThread
-                }
-                loadQuestion(firstQ)
+                firstQ?.let { loadQuestion(it) }
             }
         }
 
         arSceneView.onSessionCreated = { session ->
-            arSceneView.planeRenderer.isVisible = true
-            val cfg = Config(session).apply {// Configure AR session
-                focusMode = Config.FocusMode.AUTO
-                lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
-                planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL // Detect both horizontal and vertical planes (walls + floors)
-                instantPlacementMode = Config.InstantPlacementMode.LOCAL_Y_UP // Allows placing objects without fully detected planes (faster start)
-            }
-            session.configure(cfg)
-            Toast.makeText(this, "AR is ready! Scan the sign text...", Toast.LENGTH_SHORT).show()
+            val config = session.config
+            config.cloudAnchorMode = Config.CloudAnchorMode.ENABLED
+            config.focusMode = Config.FocusMode.AUTO
+            session.configure(config)
         }
 
-        arSceneView.onSessionUpdated = update@{ session, frame ->
-            if (modelPlaced) return@update // If we already placed the model for this question, stop scanning to save resources.
+        // Enable plane detection
+        arSceneView.planeRenderer.isEnabled = true
 
-            // Throttle OCR frequency (important for performance)
-            val now = SystemClock.elapsedRealtime()
-            if (ocrRunning || now - lastOcrTime < ocrIntervalMs) return@update
-            lastOcrTime = now
-
-            try {
-                val image = frame.acquireCameraImage() //Acquire the raw camera image from ARCore frame
-                ocrRunning = true
-
-                val inputImage = InputImage.fromMediaImage(image, 0) //Build ML Kit InputImage from the camera media image
-
-                recognizer.process(inputImage) //Run ML Kit OCR asynchronously. On success, we get detectedText and compare against target keywords using fuzzy matching.
-                    .addOnSuccessListener { visionText ->
-                        val detectedText = visionText.text
-                        Log.d("OCR", "Detected: ${detectedText.take(200)}")
-                        Log.d("OCR", "Keywords: ${currentQuestion.targetKeywords}")
-
-                        val matched = currentQuestion.targetKeywords.any { kw -> //We check if ANY target keyword matches. currentQuestion.targetKeywords can contain multiple acceptable phrases/synonyms.
-                            fuzzyContainsKeyword(detectedText, kw)
-                        }
-
-                        Log.d("OCR", "Matched = $matched")
-
-                        if (matched && !modelPlaced) {
-                            Log.d("AR", "MATCHED! placing model...")
-                            placeModelInFrontOfCamera(session, frame, currentQuestion)
-                            modelPlaced = true
-                            scheduleCorrectPopup(currentQuestion.id)
-                        }
-                    }
-                    .addOnCompleteListener { //Always close camera image to avoid memory leaks
-                        image.close()
-                        ocrRunning = false
-                    }
-
-            } catch (_: NotYetAvailableException) {
-                // normal case in ARCore - camera image not ready for this frame
-            } catch (_: Exception) {
-                // Safety: ensure flag resets to avoid "stuck" OCR state
-                ocrRunning = false
-            }
-        }
-    }
-
-    // Permission helpers
-    private fun hasCameraPermission(): Boolean { //Checks if CAMERA permission is granted, AR and OCR both require camera access
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-    }
-
-    override fun onRequestPermissionsResult( //Permission request callback
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        if (requestCode == CAMERA_REQ) {
-            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
-            if (granted) {
-                recreate() // restart activity with permission granted
+        // Handle touch events for hosting anchors
+        @Suppress("ClickableViewAccessibility")
+        arSceneView.setOnTouchListener { _, motionEvent ->
+            if (motionEvent.action == MotionEvent.ACTION_UP) {
+                handleTap(motionEvent)
+                true
             } else {
-                Toast.makeText(this, "Camera permission is required.", Toast.LENGTH_LONG).show()
-                finish()
+                false
+            }
+        }
+
+        arSceneView.onSessionUpdated = { session, _ ->
+            // PLAYER MODE: Resolve cloud anchor
+            if (!modelPlaced && ::currentQuestion.isInitialized && currentQuestion.cloudAnchorId.isNotEmpty()) {
+                val now = SystemClock.elapsedRealtime()
+                if (!isResolving && now - lastCloudCheckTime >= cloudCheckIntervalMs) {
+                    lastCloudCheckTime = now
+                    isResolving = true
+
+                    session.resolveCloudAnchorAsync(currentQuestion.cloudAnchorId) { anchor, state ->
+                        if (state == Anchor.CloudAnchorState.SUCCESS &&
+                            anchor.trackingState == TrackingState.TRACKING
+                        ) {
+                            runOnUiThread {
+                                placeModelOnAnchor(anchor, currentQuestion)
+                                modelPlaced = true
+                            }
+                        }
+                        isResolving = false
+                    }
+                }
             }
         }
     }
 
-    //Question Flow
-    private fun loadQuestion(q: Question) { //Loads a new question into the UI and resets per-question state
-        currentQuestion = q
+    private fun handleTap(event: MotionEvent) {
+        val session = arSceneView.session ?: return
+        val frame = session.update() ?: return
 
-        // Update UI
-        val idx = GameState.questions.indexOfFirst { it.id == q.id } + 1
-        val total = GameState.totalQuestions()
-        tvQuestionTitle.text = "Question $idx / $total"
+        val hits = frame.hitTest(event.x, event.y)
+        val planeHit = hits.firstOrNull { hit ->
+            val trackable = hit.trackable
+            trackable is Plane &&
+                    trackable.isPoseInPolygon(hit.hitPose) &&
+                    trackable.type == Plane.Type.HORIZONTAL_UPWARD_FACING
+        }
+
+        planeHit?.let { hit ->
+            val anchor = hit.createAnchor()
+            Toast.makeText(this, "Hosting to Cloud...", Toast.LENGTH_SHORT).show()
+
+            session.hostCloudAnchorAsync(anchor, 365) { cloudAnchor, state ->
+                if (state == Anchor.CloudAnchorState.SUCCESS) {
+                    // Get cloud anchor ID using string parsing
+                    val cloudId = try {
+                        val anchorStr = cloudAnchor.toString()
+                        Log.d("ADMIN", "Anchor toString: $anchorStr")
+
+                        when {
+                            anchorStr.contains("cloudAnchorId=") -> {
+                                anchorStr.substringAfter("cloudAnchorId=")
+                                    .substringBefore(",")
+                                    .substringBefore("}")
+                                    .trim()
+                            }
+                            else -> {
+                                Log.w("ADMIN", "Could not parse cloudAnchorId")
+                                "PARSE_ERROR"
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("ADMIN", "Error parsing cloud ID", e)
+                        "ERROR"
+                    }
+
+                    Log.d("ADMIN", "Cloud Anchor ID: $cloudId")
+                    runOnUiThread {
+                        Toast.makeText(this, "Hosted! ID: $cloudId", Toast.LENGTH_LONG).show()
+                    }
+                } else {
+                    Log.e("ADMIN", "Hosting failed: $state")
+                    runOnUiThread {
+                        Toast.makeText(this, "Hosting failed: $state", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun loadQuestion(q: Question) {
+        currentQuestion = q
+        tvQuestionTitle.text = "Question ${q.id}"
         tvQuestionText.text = q.text
 
-        // Decide whether button should say NEXT or FINISH based on list position
-        val currentIndex = GameState.questions.indexOfFirst { it.id == q.id }
-        btnNext.text = if (currentIndex == GameState.questions.size - 1) "FINISH" else "NEXT"
-
-        //Start timing for this question, used elapsedRealtime() for stable timing
         questionStartMs = SystemClock.elapsedRealtime()
         chronoTimer.base = questionStartMs
         chronoTimer.start()
 
-        // Cancel any pending dialog from previous question
-        pendingPopupRunnable?.let { mainHandler.removeCallbacks(it) }
-        pendingPopupRunnable = null
-        popupShown = false
-
-        //Remove any old 3D model anchor from previous question
-        currentAnchorNode?.let { old ->
-            arSceneView.removeChildNode(old)
-            old.destroy()
-        }
-        currentAnchorNode = null
-        // Reset match state for new question
         modelPlaced = false
     }
 
-    private fun handleNextOrFinish() {
-        pendingPopupRunnable?.let { mainHandler.removeCallbacks(it) }
+    private fun placeModelOnAnchor(anchor: Anchor, q: Question) {
+        val anchorNode = AnchorNode(arSceneView.engine, anchor)
+        arSceneView.addChildNode(anchorNode)
 
-        if (!modelPlaced) {
-            Toast.makeText(this, "You skipped a question. Game over!", Toast.LENGTH_SHORT).show()
-            startActivity(Intent(this, ScoreboardActivity::class.java))
-            finish()
-            return
-        }
-
-        val nextQ = GameState.nextUnsolvedAfter(currentQuestion.id)
-        if (nextQ != null) {
-            loadQuestion(nextQ)
-        } else {
-            startActivity(Intent(this, ScoreboardActivity::class.java))
-            finish()
-        }
-    }
-
-    // AR Model Placement
-    private fun placeModelInFrontOfCamera(
-        session: com.google.ar.core.Session,
-        frame: com.google.ar.core.Frame,
-        q: Question
-    ) {
-        try {
-            val cameraPose = frame.camera.pose // Current camera pose
-
-            // Move forward on camera's -Z axis (ARCore convention)
-            val distanceMeters = 0.7f
-            val upMeters = 0.08f
-            val forwardAndUp = floatArrayOf(0f, upMeters, -distanceMeters)
-            val targetPose = cameraPose.compose(Pose.makeTranslation(forwardAndUp))
-
-            // Create AR anchor at the target pose
-            val anchor = session.createAnchor(targetPose)
-            val anchorNode = AnchorNode(engine = arSceneView.engine, anchor = anchor)
-            arSceneView.addChildNode(anchorNode)
-            currentAnchorNode = anchorNode
-
-            // Load model on IO thread (prevents ANR)
-            lifecycleScope.launch(Dispatchers.IO) {
-                try {
-                    Log.d("AR", "Loading model from: ${q.modelFilePath}")
-
-                    val modelInstance = modelLoader.loadModelInstance(q.modelFilePath)
-
-                    if (modelInstance == null) {
-                        Log.e("AR", "ModelInstance is NULL! Path probably wrong or asset missing.")
-                        return@launch
+        lifecycleScope.launch(Dispatchers.IO) {
+            val modelInstance = modelLoader.loadModelInstance(q.modelFilePath)
+            withContext(Dispatchers.Main) {
+                modelInstance?.let {
+                    val modelNode = ModelNode(it).apply {
+                        this.scale = Scale(q.modelScale)
+                        this.rotation = Rotation(q.modelRotationX, q.modelRotationY, q.modelRotationZ)
                     }
-
-                    val modelNode = ModelNode(
-                        modelInstance = modelInstance,
-                        scaleToUnits = q.modelScale
-                    ).apply {
-                        rotation = Rotation(q.modelRotationX, q.modelRotationY, q.modelRotationZ)
-                    }
-
-                    withContext(Dispatchers.Main) {
-                        anchorNode.addChildNode(modelNode)
-                        Log.d("AR", "Model added to anchor ✅")
-                    }
-
-                } catch (e: Exception) {
-                    Log.e("AR", "Model load FAILED", e)
+                    anchorNode.addChildNode(modelNode)
+                    showCorrectDialog()
                 }
             }
-
-        } catch (_: Exception) { }
-        // Fail silently to keep gameplay stable
-    }
-
-
-    // "CORRECT" Popup / Score Logic
-    private fun scheduleCorrectPopup(questionId: Int) { //Schedules the "Correct" popup after a short delay
-        if (popupShown) return
-        pendingPopupRunnable?.let { mainHandler.removeCallbacks(it) }
-
-        val runnable = Runnable {
-            if (!isFinishing) showCorrectDialog(questionId)
         }
-        pendingPopupRunnable = runnable
-        mainHandler.postDelayed(runnable, popupDelayMs)
     }
 
-
-    private fun showCorrectDialog(questionId: Int) { //Shows a user "Correct" dialog
-        if (popupShown) return
-        popupShown = true
-
-        chronoTimer.stop() // Stop timing for this question
-
-        // Compute elapsed time and store it
+    private fun showCorrectDialog() {
+        chronoTimer.stop()
         val elapsedMs = SystemClock.elapsedRealtime() - questionStartMs
-        GameState.markSolved(questionId, elapsedMs)
+        GameState.markSolved(currentQuestion.id, elapsedMs)
 
-        // Check if game is complete
-        val allSolved = GameState.totalSolved == GameState.totalQuestions()
-
-        // Custom dialog view
-        val dialogView = layoutInflater.inflate(R.layout.dialog_correct, null)
-        val tvDialogTitle = dialogView.findViewById<TextView>(R.id.tvDialogTitle)
-        val tvDialogMessage = dialogView.findViewById<TextView>(R.id.tvDialogMessage)
-        //val tvDialogTime = dialogView.findViewById<TextView>(R.id.tvDialogTime)
-        val btnDialogContinue = dialogView.findViewById<Button>(R.id.btnDialogContinue)
-
-        // Customize dialog text based on completion state
-        if (allSolved) {
-            tvDialogTitle.text = "🎉 Congratulations! 🎉"
-            tvDialogMessage.text = "You solved all questions!\nYou're a true treasure hunter!"
-            btnDialogContinue.text = "VIEW SCOREBOARD"
-        } else {
-            tvDialogTitle.text = "✅ Correct!"
-            tvDialogMessage.text = "Great job! Get ready for the next challenge."
-            btnDialogContinue.text = "NEXT QUESTION"
-        }
-
-        //val seconds = elapsedMs / 1000.0
-        //tvDialogTime.text = String.format(Locale.US, "Completed in %.1f seconds", seconds)
-
-        // Build dialog with custom theme + prevent dismissing by tapping outside/back
-        val dialog = AlertDialog.Builder(this, R.style.CustomDialogTheme)
-            .setView(dialogView)
+        AlertDialog.Builder(this)
+            .setTitle("Correct!")
+            .setMessage("You found the treasure!")
+            .setPositiveButton("Next") { _, _ ->
+                val next = GameState.nextUnsolvedAfter(currentQuestion.id)
+                if (next != null) loadQuestion(next) else finish()
+            }
             .setCancelable(false)
-            .create()
-
-        btnDialogContinue.setOnClickListener { // Button action: continue flow
-            dialog.dismiss()
-            if (allSolved) {
-                startActivity(Intent(this, ScoreboardActivity::class.java))
-                finish()
-            } else {
-                //Prefer "next unsolved" so the game can recover even if questions were answered out of order
-                val nextQ = GameState.nextUnsolvedAfter(currentQuestion.id)
-                if (nextQ != null) loadQuestion(nextQ)
-                else {
-                    startActivity(Intent(this, ScoreboardActivity::class.java))
-                    finish()
-                }
-            }
-        }
-
-        dialog.show()
+            .show()
     }
 
-    // LEVENSHTEIN FUZZY MATCH
-
-    /**
-     * we need to fuzzy matching because;
-     * OCR is not perfect:
-     * - Lighting, motion blur, camera angle, reflections, and font styles cause wrong characters
-     * - Example: "SMOKE FREE ZONE" might be recognized as "SM0KE F R E E Z0NE" or missing letters
-     *
-     * Strategy:
-     * 1) Normalize text (uppercase, remove punctuation, unify whitespace)
-     * 2) First try direct contains
-     * 3) If not found, do approximate matching using Levenshtein distance
-     *    over word windows of same size as the keyword phrase
-     */
-
-    // Normalizes text into a consistent format so matching operations become reliable.
-    // This step reduces noise caused by OCR errors such as case differences,
-    // punctuation, or inconsistent spacing.
-    private fun normalizeTextForMatch(s: String): String {
-        return s.uppercase(Locale.getDefault())      // Make comparison case-insensitive
-            .replace(Regex("[^A-Z0-9 ]"), " ")       // Remove punctuation and special characters
-            .replace(Regex("\\s+"), " ")              // Normalize multiple spaces into a single space
-            .trim()                                   // Remove leading and trailing spaces
-    }
-
-
-    /**
-     * Classic Levenshtein distance (edit distance):
-     * Minimum number of single-character edits (insert, delete, substitute)
-     * needed to change string a into string b
-     *
-     * We compute DP table of size (aLen+1) x (bLen+1)
-     * Complexity:
-     * - Time: O(aLen * bLen)
-     * - Space: O(aLen * bLen)
-     *
-     * Here strings are short (keywords and small windows), so this is acceptable
-     */
-
-    // Computes the Levenshtein Distance between two strings.
-    // This represents the minimum number of character-level edits
-    // (insertions, deletions, or substitutions) required to transform one string into another.
-    private fun levenshtein(a: String, b: String): Int {
-        if (a == b) return 0              // Identical strings → no edits needed
-        if (a.isEmpty()) return b.length  // All characters must be inserted
-        if (b.isEmpty()) return a.length  // All characters must be deleted
-
-        // Dynamic programming table
-        val dp = Array(a.length + 1) { IntArray(b.length + 1) }
-
-        // Base cases: transforming to or from an empty string
-        for (i in 0..a.length) dp[i][0] = i
-        for (j in 0..b.length) dp[0][j] = j
-
-        // Fill DP table
-        for (i in 1..a.length) {
-            for (j in 1..b.length) {
-                val cost = if (a[i - 1] == b[j - 1]) 0 else 1
-                dp[i][j] = minOf(
-                    dp[i - 1][j] + 1,      // Deletion
-                    dp[i][j - 1] + 1,      // Insertion
-                    dp[i - 1][j - 1] + cost // Substitution
-                )
-            }
-        }
-
-        return dp[a.length][b.length]
-    }
-
-    // Determines whether two strings are similar enough to be considered a match.
-    // Uses a length-aware adaptive threshold instead of a fixed value.
-    private fun isSimilarByLevenshtein(aRaw: String, bRaw: String): Boolean {
-        val a = normalizeTextForMatch(aRaw)
-        val b = normalizeTextForMatch(bRaw)
-
-        if (a.isBlank() || b.isBlank()) return false
-
-        val dist = levenshtein(a, b)
-        val maxLen = maxOf(a.length, b.length).coerceAtLeast(1)
-        val ratio = dist.toDouble() / maxLen.toDouble()
-
-        return when {
-            maxLen <= 4 -> dist <= 1        // Very short strings: extremely strict matching
-            maxLen <= 8 -> dist <= 2        // Medium strings: allow limited OCR noise
-            else -> ratio <= 0.20           // Longer phrases: allow up to 20% character difference
-        }
-    }
-
-    // Performs approximate containment matching between OCR output and the target keyword.
-    // First checks for a fast exact match after normalization.
-    // If that fails, it applies sliding-window fuzzy matching using Levenshtein Distance.
-    private fun fuzzyContainsKeyword(ocrTextRaw: String, keywordRaw: String): Boolean {
-        val ocrText = normalizeTextForMatch(ocrTextRaw)
-        val keyword = normalizeTextForMatch(keywordRaw)
-
-        if (keyword.isBlank() || ocrText.isBlank()) return false
-
-        // Stage 1: Fast containment check (efficient for clean OCR output)
-        if (ocrText.contains(keyword)) return true
-
-        // Stage 2: Sliding window fuzzy matching to handle partial OCR errors
-        val words = ocrText.split(" ").filter { it.isNotBlank() }
-        val keyWords = keyword.split(" ").filter { it.isNotBlank() }
-
-        if (keyWords.isEmpty()) return false
-
-        val windowSize = keyWords.size
-
-        // If OCR output is shorter than the keyword, compare whole text directly
-        if (words.size < windowSize) {
-            return isSimilarByLevenshtein(ocrText, keyword)
-        }
-
-        // Slide a window over OCR tokens and compare phrase chunks
-        for (i in 0..(words.size - windowSize)) {
-            val window = words.subList(i, i + windowSize).joinToString(" ")
-            if (isSimilarByLevenshtein(window, keyword)) return true
-        }
-
-        return false
-    }
+    private fun hasCameraPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
 }
