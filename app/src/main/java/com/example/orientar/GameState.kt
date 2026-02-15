@@ -24,6 +24,16 @@ object GameState {
     val totalSolved: Int get() = solvedIds.size
     val totalTimeMs: Long get() = _totalTimeMs
 
+    // --- YENİ EKLENEN METODLAR ---
+    fun totalQuestions(): Int = questions.size
+
+    fun resetProgress() {
+        solvedIds.clear()
+        bestTimes.clear()
+        _totalTimeMs = 0L
+    }
+    // ----------------------------
+
     fun loadQuestionsFromFirestore(onComplete: () -> Unit) {
         FirebaseFirestore.getInstance().collection("treasure_questions").get()
             .addOnSuccessListener { snapshot ->

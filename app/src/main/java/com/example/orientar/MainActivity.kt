@@ -193,3 +193,32 @@ fun MainBottomBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
         )
     }
 }
+
+@Composable
+fun MenuCard(title: String, icon: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = modifier
+            .height(100.dp)
+            .border(1.dp, Color(0xFFEEEEEE), RoundedCornerShape(12.dp)),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(text = icon, fontSize = 32.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = title,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                lineHeight = 14.sp
+            )
+        }
+    }
+}

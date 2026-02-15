@@ -1,7 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.gms.google-services") //google services plugings for firebase
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -14,7 +14,6 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -32,19 +31,19 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
     kotlinOptions {
         jvmTarget = "17"
     }
 
-    // Compose açık enable composable setcontent
     buildFeatures {
         compose = true
     }
+
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.15" //compose kotlin version
+        kotlinCompilerExtensionVersion = "1.5.15"
     }
 
-    // (Opsiyonel ama faydalı) Native lib çakışmalarını önlemek için
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -62,22 +61,22 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
     // ARCore & SceneView
-    implementation("com.google.ar:core:1.44.0")
+    implementation("com.google.ar:core:1.42.0")
     implementation("io.github.sceneview:arsceneview:2.3.0")
     implementation("io.github.sceneview:sceneview:2.3.0")
 
-    //ML Kit Text Recognition (OCR)
+    // ML Kit Text Recognition (OCR)
     implementation("com.google.mlkit:text-recognition:16.0.0")
     implementation(libs.play.services.mlkit.text.recognition.common)
     implementation(libs.androidx.foundation.android)
 
-    // Compose (MainActivity için) sürüm uyumu vs
+    // Compose
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
     implementation("androidx.activity:activity-compose:1.9.0")
-    implementation("androidx.compose.material3:material3") //enable scaffold TopAppBar, Card, NavigationBar
+    implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
@@ -88,8 +87,7 @@ dependencies {
 
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
-    implementation("com.google.firebase:firebase-firestore-ktx") //firestore for kotlin
+    implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-common-ktx")
 }
-
