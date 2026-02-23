@@ -195,7 +195,7 @@ fun StudentLoginScreen() {
 
                         // Add this student's uid to the group's members array
                         if (verifiedGroupId.isNotEmpty()) {
-                            db.collection("groups").document(verifiedGroupId)
+                            db.collection("orientation_groups").document(verifiedGroupId)
                                 .update("members", FieldValue.arrayUnion(uid))
                         }
 
