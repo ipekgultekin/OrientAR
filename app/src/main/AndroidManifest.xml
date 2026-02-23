@@ -35,15 +35,32 @@
             android:name="com.google.android.ar.API_KEY"
             android:value="AIzaSyAhXjK2Div5AL4AzKObIkjrUx5BCH4Exdc" />
 
+        <!-- ✅ LAUNCHER: İlk açılan ekran -->
         <activity
-            android:name=".MainActivity"
+            android:name=".WelcomeActivity"
             android:exported="true"
-            android:label="METU NCC Orientation">
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".StudentLoginActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".LeaderLoginActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- MainActivity: launcher filter yok, login sonrası açılır -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:label="METU NCC Orientation" />
 
         <activity
             android:name=".ScoreboardActivity"

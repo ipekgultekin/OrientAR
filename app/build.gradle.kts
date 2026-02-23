@@ -69,6 +69,7 @@ dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.0")
     implementation(libs.play.services.mlkit.text.recognition.common)
     implementation(libs.androidx.foundation.android)
+    implementation(libs.androidx.espresso.core)
 
     // Compose
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
@@ -88,6 +89,10 @@ dependencies {
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
     implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-common-ktx")
+
+    // Material Icons Extended (for Visibility icon)
+    implementation("androidx.compose.material:material-icons-extended")
 }
