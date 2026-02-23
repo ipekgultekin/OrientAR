@@ -37,7 +37,7 @@
 
         <!-- ✅ LAUNCHER: İlk açılan ekran -->
         <activity
-            android:name=".WelcomeActivity"
+            android:name=".auth.WelcomeActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -47,43 +47,43 @@
         </activity>
 
         <activity
-            android:name=".StudentLoginActivity"
+            android:name=".auth.StudentLoginActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
-            android:name=".LeaderLoginActivity"
+            android:name=".auth.LeaderLoginActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- MainActivity: launcher filter yok, login sonrası açılır -->
         <activity
-            android:name=".MainActivity"
+            android:name=".home.MainActivity"
             android:exported="false"
             android:label="METU NCC Orientation" />
 
         <activity
-            android:name=".ScoreboardActivity"
+            android:name=".treasure.ScoreboardActivity"
             android:exported="false"
             android:label="Scoreboard" />
 
         <activity
-            android:name=".TreasureHuntGameActivity"
+            android:name=".treasure.TreasureHuntGameActivity"
             android:exported="false"
             android:label="Treasure Hunt Game" />
 
         <activity
-            android:name=".ChatbotActivity"
+            android:name=".chatbot.ChatbotActivity"
             android:exported="false"
             android:label="Chatbot" />
 
         <activity
-            android:name=".SocietiesActivity"
+            android:name=".societies.SocietiesActivity"
             android:exported="false"
             android:label="Student Societies" />
 
         <activity
-            android:name=".SocietyDetailActivity"
+            android:name=".societies.SocietyDetailActivity"
             android:exported="false"
             android:label="Society Detail" />
 

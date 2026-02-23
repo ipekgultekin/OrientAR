@@ -1,4 +1,4 @@
-package com.example.orientar
+package com.example.orientar.treasure
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -14,6 +14,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import com.example.orientar.R
 import com.google.ar.core.Anchor
 import com.google.ar.core.Config
 import com.google.ar.core.HitResult

@@ -1,7 +1,6 @@
-package com.example.orientar
+package com.example.orientar.societies
 
 import android.app.Activity
-import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -21,6 +20,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orientar.R
 
 private val MetuRed = Color(0xFF8B0000)
 

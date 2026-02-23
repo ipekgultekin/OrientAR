@@ -1,6 +1,5 @@
-package com.example.orientar
+package com.example.orientar.treasure
 
-import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 
 data class Question(
@@ -40,7 +39,8 @@ object GameState {
                 questions.clear()
                 for (doc in snapshot.documents) {
                     val id = doc.getLong("id")?.toInt() ?: continue
-                    questions.add(Question(
+                    questions.add(
+                        Question(
                         id = id,
                         title = doc.getString("title") ?: "",
                         text = doc.getString("text") ?: "",
@@ -50,7 +50,8 @@ object GameState {
                         modelRotationX = doc.getDouble("modelRotationX")?.toFloat() ?: 0f,
                         modelRotationY = doc.getDouble("modelRotationY")?.toFloat() ?: 0f,
                         modelRotationZ = doc.getDouble("modelRotationZ")?.toFloat() ?: 0f
-                    ))
+                    )
+                    )
                 }
                 questions.sortBy { it.id }
                 onComplete()

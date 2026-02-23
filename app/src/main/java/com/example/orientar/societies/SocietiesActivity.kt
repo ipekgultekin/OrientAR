@@ -1,4 +1,4 @@
-package com.example.orientar
+package com.example.orientar.societies
 
 import android.app.Activity
 import android.content.Intent
@@ -25,6 +25,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orientar.R
+import com.example.orientar.home.MainActivity
 
 private val MetuRed = Color(0xFF8B0000)
 

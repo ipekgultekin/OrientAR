@@ -1,4 +1,4 @@
-package com.example.orientar
+package com.example.orientar.chatbot
 import android.content.Intent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
@@ -20,8 +20,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orientar.R
+import com.example.orientar.home.MainActivity
+import com.example.orientar.network.ApiClient
+import com.example.orientar.network.ChatRequest
 import kotlinx.coroutines.launch
-import com.example.orientar.network.*
 
 private val MetuRed = Color(0xFF8B0000)
 private val UserBubble = Color(0xFFE6CACA)

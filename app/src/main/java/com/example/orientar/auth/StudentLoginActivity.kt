@@ -1,4 +1,4 @@
-package com.example.orientar
+package com.example.orientar.auth
 
 import android.content.Intent
 import android.os.Bundle
@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orientar.home.MainActivity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -231,8 +232,8 @@ fun StudentLoginScreen() {
                     Text(
                         when (currentScreen) {
                             StudentScreen.INVITATION -> "Student Access"
-                            StudentScreen.LOGIN      -> "Sign In"
-                            StudentScreen.REGISTER   -> "Create Account"
+                            StudentScreen.LOGIN -> "Sign In"
+                            StudentScreen.REGISTER -> "Create Account"
                         },
                         fontWeight = FontWeight.Bold, color = Color.White
                     )

@@ -1,4 +1,4 @@
-package com.example.orientar
+package com.example.orientar.orientation
 
 import android.content.Intent
 import android.net.Uri

@@ -1,4 +1,4 @@
-package com.example.orientar
+package com.example.orientar.profile
 
 import android.widget.Toast
 import androidx.compose.foundation.background

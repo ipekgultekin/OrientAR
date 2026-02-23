@@ -1,5 +1,4 @@
-package com.example.orientar
-import com.example.orientar.ChatbotScreen
+package com.example.orientar.chatbot
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent

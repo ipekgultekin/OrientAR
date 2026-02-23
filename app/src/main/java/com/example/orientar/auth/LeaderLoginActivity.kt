@@ -1,4 +1,4 @@
-package com.example.orientar
+package com.example.orientar.auth
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity

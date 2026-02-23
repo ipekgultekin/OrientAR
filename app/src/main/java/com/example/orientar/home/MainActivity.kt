@@ -1,4 +1,4 @@
-package com.example.orientar
+package com.example.orientar.home
 
 import android.content.Intent
 import android.os.Bundle
@@ -24,6 +24,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import com.example.orientar.chatbot.ChatbotActivity
+import com.example.orientar.orientation.OrientationUnitScreen
+import com.example.orientar.profile.ProfileScreen
+import com.example.orientar.R
+import com.example.orientar.treasure.ScoreboardActivity
+import com.example.orientar.societies.SocietiesActivity
 import com.google.firebase.FirebaseApp
 
 class MainActivity : ComponentActivity() {
