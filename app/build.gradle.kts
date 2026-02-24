@@ -92,6 +92,8 @@ dependencies {
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-common-ktx")
+    implementation("com.google.firebase:firebase-appcheck-debug")
+
 
     // Material Icons Extended (for Visibility icon)
     implementation("androidx.compose.material:material-icons-extended")

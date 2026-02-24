@@ -20,6 +20,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.app.Activity
+import android.content.Intent
+import com.example.orientar.auth.WelcomeActivity
+import com.google.firebase.auth.FirebaseAuth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,7 +112,13 @@ fun ProfileScreen() {
 
         Button(
             onClick = {
-                Toast.makeText(context, "Logging out...", Toast.LENGTH_SHORT).show()
+                FirebaseAuth.getInstance().signOut()
+
+                val intent = Intent(context, WelcomeActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                }
+                context.startActivity(intent)
+                (context as? Activity)?.finish()
             },
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(containerColor = metuRed),
