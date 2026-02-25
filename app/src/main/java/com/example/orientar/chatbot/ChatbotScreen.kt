@@ -1,4 +1,5 @@
 package com.example.orientar.chatbot
+
 import android.content.Intent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
@@ -32,7 +33,7 @@ private val BotBubble = Color(0xFFF1F1F1)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatbotScreen() {
+fun ChatbotScreen(userRole: String = "student") {
     var userInput by remember { mutableStateOf("") }
     val messages = remember {
         mutableStateListOf<Pair<String, Boolean>>(
@@ -42,7 +43,6 @@ fun ChatbotScreen() {
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // Yeni mesaj geldiğinde en alta scroll
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
@@ -51,7 +51,7 @@ fun ChatbotScreen() {
 
     Scaffold(
         bottomBar = {
-            ChatbotBottomBar()
+            ChatbotBottomBar(userRole = userRole)
         }
     ) { paddingValues ->
         Column(
@@ -60,17 +60,13 @@ fun ChatbotScreen() {
                 .background(Color.White)
                 .padding(paddingValues)
         ) {
-
-            /* 🔴 HEADER - Sabit kalacak */
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shadowElevation = 4.dp,
                 color = Color.White
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Image(
@@ -78,9 +74,7 @@ fun ChatbotScreen() {
                         contentDescription = "METU Logo",
                         modifier = Modifier.size(36.dp)
                     )
-
                     Spacer(modifier = Modifier.width(8.dp))
-
                     Text(
                         text = "METU NCC ORIENTATION",
                         color = MetuRed,
@@ -90,21 +84,19 @@ fun ChatbotScreen() {
                 }
             }
 
-            /* 💬 CHAT - Klavye açılınca küçülür */
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 16.dp)
-                    .imePadding(), // 🔴 Sadece chat alanı küçülür
+                    .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 16.dp)
             ) {
                 items(messages) { (text, isUser) ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = if (isUser)
-                            Arrangement.End else Arrangement.Start
+                        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
                     ) {
                         Box(
                             modifier = Modifier
@@ -121,19 +113,15 @@ fun ChatbotScreen() {
                 }
             }
 
-            /* ✍️ INPUT - En altta kalır */
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shadowElevation = 8.dp,
                 color = Color.White
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
                     verticalAlignment = Alignment.Bottom
                 ) {
-
                     TextField(
                         value = userInput,
                         onValueChange = { userInput = it },
@@ -152,47 +140,28 @@ fun ChatbotScreen() {
                         ),
                         maxLines = 5
                     )
-
                     Spacer(modifier = Modifier.width(8.dp))
-
                     IconButton(
                         onClick = {
                             if (userInput.isBlank()) return@IconButton
-
                             val question = userInput
                             messages.add(question to true)
                             messages.add("Thinking…" to false)
                             userInput = ""
-
                             scope.launch {
                                 try {
-                                    val response = ApiClient.api.askQuestion(
-                                        ChatRequest(question)
-                                    )
-
-                                    if (messages.isNotEmpty())
-                                        messages.removeAt(messages.size - 1)
-
+                                    val response = ApiClient.api.askQuestion(ChatRequest(question))
+                                    if (messages.isNotEmpty()) messages.removeAt(messages.size - 1)
                                     messages.add(response.message to false)
-
                                 } catch (e: Exception) {
-
-                                    if (messages.isNotEmpty())
-                                        messages.removeAt(messages.size - 1)
-
+                                    if (messages.isNotEmpty()) messages.removeAt(messages.size - 1)
                                     messages.add("Sorry, I couldn't reach the server." to false)
                                 }
                             }
                         },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(MetuRed, CircleShape)
+                        modifier = Modifier.size(48.dp).background(MetuRed, CircleShape)
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Send,
-                            contentDescription = "Send",
-                            tint = Color.White
-                        )
+                        Icon(Icons.Filled.Send, contentDescription = "Send", tint = Color.White)
                     }
                 }
             }
@@ -201,79 +170,65 @@ fun ChatbotScreen() {
 }
 
 @Composable
-fun ChatbotBottomBar() {
+fun ChatbotBottomBar(userRole: String = "student") {
     val context = LocalContext.current
-    var showComingSoon by remember { mutableStateOf(false) }
+    val isGuest = userRole == "guest"
 
-    NavigationBar(
-        containerColor = Color.White,
-        tonalElevation = 8.dp
-    ) {
+    NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
         NavigationBarItem(
             icon = { Text("🏠", fontSize = 24.sp) },
-            label = {
-                Text(
-                    "Home",
-                    fontSize = 11.sp,
-                    maxLines = 1
-                )
-            },
+            label = { Text("Home", fontSize = 11.sp, maxLines = 1) },
             selected = false,
             onClick = {
-                val intent = Intent(context, MainActivity::class.java)
-                context.startActivity(intent)
-            },
-            colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color.Gray,
-                unselectedTextColor = Color.Gray
-            )
-        )
-        NavigationBarItem(
-            icon = { Text("📋", fontSize = 24.sp) },
-            label = {
-                Text(
-                    "My Orientation\nUnit",
-                    fontSize = 10.sp,
-                    maxLines = 2,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 11.sp
+                context.startActivity(
+                    Intent(context, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra("USER_ROLE", userRole)
+                    }
                 )
             },
-            selected = false,
-            onClick = { showComingSoon = true },
             colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color.Gray,
-                unselectedTextColor = Color.Gray
+                unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray
             )
         )
+        if (!isGuest) {
+            NavigationBarItem(
+                icon = { Text("📋", fontSize = 24.sp) },
+                label = {
+                    Text("My Orientation\nUnit", fontSize = 10.sp, maxLines = 2,
+                        textAlign = TextAlign.Center, lineHeight = 11.sp)
+                },
+                selected = false,
+                onClick = {
+                    context.startActivity(
+                        Intent(context, MainActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            putExtra("USER_ROLE", userRole)
+                            putExtra("OPEN_TAB", 1)
+                        }
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray
+                )
+            )
+        }
         NavigationBarItem(
             icon = { Text("👤", fontSize = 24.sp) },
-            label = {
-                Text(
-                    "Profile",
-                    fontSize = 11.sp,
-                    maxLines = 1
+            label = { Text("Profile", fontSize = 11.sp, maxLines = 1) },
+            selected = false,
+            onClick = {
+                context.startActivity(
+                    Intent(context, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra("USER_ROLE", userRole)
+                        putExtra("OPEN_TAB", if (isGuest) 1 else 2)
+                    }
                 )
             },
-            selected = false,
-            onClick = { showComingSoon = true },
             colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color.Gray,
-                unselectedTextColor = Color.Gray
+                unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray
             )
-        )
-    }
-
-    if (showComingSoon) {
-        AlertDialog(
-            onDismissRequest = { showComingSoon = false },
-            title = { Text("Coming Soon...") },
-            text = { Text("This feature will be available soon!") },
-            confirmButton = {
-                TextButton(onClick = { showComingSoon = false }) {
-                    Text("OK", color = MetuRed)
-                }
-            }
         )
     }
 }

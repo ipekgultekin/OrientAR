@@ -3,7 +3,6 @@ package com.example.orientar.societies
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -23,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orientar.R
@@ -30,18 +30,15 @@ import com.example.orientar.home.MainActivity
 
 private val MetuRed = Color(0xFF8B0000)
 
-data class SocietyUiModel(
-    val id: String,
-    val name: String,
-    val logoEmoji: String
-)
+data class SocietyUiModel(val id: String, val name: String, val logoEmoji: String)
 
 class SocietiesActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val userRole = intent.getStringExtra("USER_ROLE") ?: "student"
         setContent {
             MaterialTheme {
-                SocietiesScreen()
+                SocietiesScreen(userRole = userRole)
             }
         }
     }
@@ -49,20 +46,16 @@ class SocietiesActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SocietiesScreen() {
+fun SocietiesScreen(userRole: String = "student") {
     val context = LocalContext.current
     val activity = context as? Activity
-
     var searchQuery by remember { mutableStateOf("") }
 
-    // ✅ Manual dummy data (later: Firestore)
     val societies = listOf(
         SocietyUiModel("1", "ACM Student Chapter", "💻"),
         SocietyUiModel("2", "Photography Society", "📷"),
         SocietyUiModel("3", "Dance Club", "💃")
     )
-
-    // ✅ Filtered list (case-insensitive)
     val filteredSocieties = societies.filter {
         it.name.contains(searchQuery, ignoreCase = true)
     }
@@ -72,15 +65,10 @@ fun SocietiesScreen() {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = { activity?.finish() }) {
-                        Icon(
-                            imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MetuRed
-                        )
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = MetuRed)
                     }
                 },
                 title = {
-                    // ✅ MainActivity ile aynı: logo + METU NCC ORIENTATION
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Image(
                             painter = painterResource(id = R.drawable.metu_logo),
@@ -88,67 +76,46 @@ fun SocietiesScreen() {
                             modifier = Modifier.size(36.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "METU NCC ORIENTATION",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MetuRed
-                        )
+                        Text("METU NCC ORIENTATION", fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold, color = MetuRed)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
             )
         },
-        // ✅ Aynı görünümde bottom bar ama Home çalışıyor
-        bottomBar = { SocietiesBottomBar() }
+        bottomBar = { SocietiesBottomBar(userRole = userRole) }
     ) { padding ->
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.White)
                 .padding(padding)
                 .padding(16.dp)
-                .padding(bottom = 80.dp) // bottom bar üstüne binmesin
+                .padding(bottom = 80.dp)
         ) {
-
-            Text(
-                text = "Student Societies",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = MetuRed
-            )
-
+            Text("Student Societies", fontSize = 22.sp,
+                fontWeight = FontWeight.Bold, color = MetuRed)
             Spacer(modifier = Modifier.height(12.dp))
-
-            // 🔍 Search Bar
             OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
+                value = searchQuery, onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
                 label = { Text("Search societies") },
                 placeholder = { Text("Type a society name...") }
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(filteredSocieties) { society ->
-                    SocietyCard(
-                        society = society,
-                        onDetailsClick = {
-                            val intent = Intent(context, SocietyDetailActivity::class.java).apply {
-                                putExtra("society_id", society.id)
-                                putExtra("society_name", society.name)
-                                putExtra("society_emoji", society.logoEmoji)
-                            }
-                            context.startActivity(intent)
+                    SocietyCard(society = society, onDetailsClick = {
+                        val intent = Intent(context, SocietyDetailActivity::class.java).apply {
+                            putExtra("society_id", society.id)
+                            putExtra("society_name", society.name)
+                            putExtra("society_emoji", society.logoEmoji)
                         }
-                    )
+                        context.startActivity(intent)
+                    })
                 }
             }
         }
@@ -156,14 +123,9 @@ fun SocietiesScreen() {
 }
 
 @Composable
-fun SocietyCard(
-    society: SocietyUiModel,
-    onDetailsClick: () -> Unit
-) {
+fun SocietyCard(society: SocietyUiModel, onDetailsClick: () -> Unit) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(2.dp, MetuRed, RoundedCornerShape(14.dp)),
+        modifier = Modifier.fillMaxWidth().border(2.dp, MetuRed, RoundedCornerShape(14.dp)),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
@@ -171,19 +133,10 @@ fun SocietyCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(text = society.logoEmoji, fontSize = 42.sp)
                 Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = society.name,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Text(text = society.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
-
             Spacer(modifier = Modifier.height(10.dp))
-
-            TextButton(
-                onClick = onDetailsClick,
-                contentPadding = PaddingValues(0.dp)
-            ) {
+            TextButton(onClick = onDetailsClick, contentPadding = PaddingValues(0.dp)) {
                 Text("Get details", color = MetuRed)
             }
         }
@@ -191,71 +144,66 @@ fun SocietyCard(
 }
 
 @Composable
-fun SocietiesBottomBar() {
+fun SocietiesBottomBar(userRole: String = "student") {
     val context = LocalContext.current
+    val isGuest = userRole == "guest"
 
-    NavigationBar(
-        containerColor = Color.White,
-        tonalElevation = 8.dp
-    ) {
+    NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
         NavigationBarItem(
             icon = { Text("🏠", fontSize = 24.sp) },
             label = { Text("Home", fontSize = 11.sp, maxLines = 1) },
             selected = false,
             onClick = {
-                // ✅ Home'a basınca MainActivity'ye dön
-                val intent = Intent(context, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                }
-                context.startActivity(intent)
+                context.startActivity(
+                    Intent(context, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra("USER_ROLE", userRole)
+                    }
+                )
             },
             colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color.Gray,
-                unselectedTextColor = Color.Gray,
-                selectedIconColor = MetuRed,
-                selectedTextColor = MetuRed,
+                unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray,
                 indicatorColor = Color.Transparent
             )
         )
-
-        NavigationBarItem(
-            icon = { Text("📋", fontSize = 24.sp) },
-            label = {
-                Text(
-                    "My Orientation\nUnit",
-                    fontSize = 10.sp,
-                    maxLines = 2,
-                    lineHeight = 11.sp
+        if (!isGuest) {
+            NavigationBarItem(
+                icon = { Text("📋", fontSize = 24.sp) },
+                label = { Text("My Unit", fontSize = 10.sp, maxLines = 2,
+                    textAlign = TextAlign.Center, lineHeight = 11.sp) },
+                selected = false,
+                onClick = {
+                    context.startActivity(
+                        Intent(context, MainActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            putExtra("USER_ROLE", userRole)
+                            putExtra("OPEN_TAB", 1)
+                        }
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray,
+                    indicatorColor = Color.Transparent
                 )
-            },
-            selected = false,
-            onClick = {
-                Toast.makeText(context, "Coming Soon...", Toast.LENGTH_SHORT).show()
-            },
-            colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color.Gray,
-                unselectedTextColor = Color.Gray
             )
-        )
-
+        }
         NavigationBarItem(
             icon = { Text("👤", fontSize = 24.sp) },
             label = { Text("Profile", fontSize = 11.sp, maxLines = 1) },
             selected = false,
             onClick = {
-                Toast.makeText(context, "Coming Soon...", Toast.LENGTH_SHORT).show()
+                context.startActivity(
+                    Intent(context, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra("USER_ROLE", userRole)
+                        putExtra("OPEN_TAB", if (isGuest) 1 else 2)
+                    }
+                )
             },
             colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color.Gray,
-                unselectedTextColor = Color.Gray
+                unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray,
+                indicatorColor = Color.Transparent
             )
         )
     }
 }
-
-
-
-
-
-
-

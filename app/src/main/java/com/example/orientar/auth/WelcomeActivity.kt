@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orientar.R
+import com.example.orientar.home.MainActivity
 
 class WelcomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -141,6 +142,7 @@ fun WelcomeScreen() {
 
             Spacer(Modifier.height(36.dp))
 
+            // ── Student button ───────────────────────────────────────────
             AnimatedVisibility(
                 visible = visible,
                 enter = fadeIn(tween(600, delayMillis = 700)) + slideInVertically(tween(600, delayMillis = 700)) { 40 }
@@ -161,6 +163,7 @@ fun WelcomeScreen() {
 
             Spacer(Modifier.height(12.dp))
 
+            // ── Leader button ────────────────────────────────────────────
             AnimatedVisibility(
                 visible = visible,
                 enter = fadeIn(tween(600, delayMillis = 800)) + slideInVertically(tween(600, delayMillis = 800)) { 40 }
@@ -176,7 +179,33 @@ fun WelcomeScreen() {
                 }
             }
 
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(12.dp))
+
+            // ── Guest button ─────────────────────────────────────────────
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(tween(600, delayMillis = 900)) + slideInVertically(tween(600, delayMillis = 900)) { 40 }
+            ) {
+                TextButton(
+                    onClick = {
+                        context.startActivity(
+                            Intent(context, MainActivity::class.java).apply {
+                                putExtra("USER_ROLE", "guest")
+                            }
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) {
+                    Text(
+                        "Continue as Guest",
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontWeight = FontWeight.Normal
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(32.dp))
         }
     }
 }
