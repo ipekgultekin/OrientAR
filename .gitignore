@@ -13,3 +13,14 @@
 .externalNativeBuild
 .cxx
 local.properties
+# API Keys & Secrets
+app/src/main/res/values/google_maps_api.xml
+google-services.json
+
+# APK/AAB outputs
+*.apk
+*.aab
+
+# Signing
+*.jks
+*.keystore
