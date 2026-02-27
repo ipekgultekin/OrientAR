@@ -31,6 +31,7 @@ import com.example.orientar.profile.ProfileScreen
 import com.example.orientar.R
 import com.example.orientar.treasure.ScoreboardActivity
 import com.example.orientar.societies.SocietiesActivity
+import com.example.orientar.navigation.CampusTourActivity
 import com.google.firebase.FirebaseApp
 
 class MainActivity : ComponentActivity() {
@@ -264,7 +265,9 @@ fun HomeContent(userRole: String = "student") {
                 // 2x2 symmetric grid for guests (no Treasure Hunt)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     MenuCard("Campus Tour", "🔍", Modifier.weight(1f)) {
-                        Toast.makeText(context, "Soon", Toast.LENGTH_SHORT).show()
+                        context.startActivity(
+                            Intent(context, CampusTourActivity::class.java)
+                        )
                     }
                     MenuCard("FAQ", "💬", Modifier.weight(1f)) {
                         context.startActivity(Intent(context, ChatbotActivity::class.java).apply {
@@ -286,7 +289,9 @@ fun HomeContent(userRole: String = "student") {
                 // Full layout for students and leaders
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     MenuCard("Campus Tour", "🔍", Modifier.weight(1f)) {
-                        Toast.makeText(context, "Soon", Toast.LENGTH_SHORT).show()
+                        context.startActivity(
+                            Intent(context, CampusTourActivity::class.java)
+                        )
                     }
                     MenuCard("FAQ", "💬", Modifier.weight(1f)) {
                         context.startActivity(Intent(context, ChatbotActivity::class.java).apply {

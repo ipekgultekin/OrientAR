@@ -1,8 +1,70 @@
 <resources>
-    <style name="CustomDialogTheme" parent="Theme.AppCompat.Light.Dialog.Alert">
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowIsFloating">true</item>
-        <item name="android:windowContentOverlay">@null</item>
-        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
-    </style>
+
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- APP                                                      -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <string name="app_name">OrientAR</string>
+
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- AR NAVIGATION — Route Selection Screen                   -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <string name="create_route_title">CREATE A ROUTE</string>
+    <string name="starting_point_label">Starting Point:</string>
+    <string name="destination_point_label">Destination Point:</string>
+    <string name="confirm_route_button">CONFIRM ROUTE AND START</string>
+
+    <!-- AR NAVIGATION — Calibration Steps -->
+    <string name="step_1_compass">STEP 1: COMPASS</string>
+    <string name="step_2_gps">STEP 2: GPS</string>
+    <string name="please_wait">Please wait…</string>
+    <string name="skip_button">SKIP</string>
+    <string name="force_start_button">FORCE START</string>
+
+    <!-- AR NAVIGATION — Navigation Messages -->
+    <string name="recalculating_message">⚠️ Location is being updated…</string>
+    <string name="route_selection_waiting">Route Selection Awaiting…</string>
+
+    <!-- AR NAVIGATION — Content Descriptions (Accessibility) -->
+    <string name="compass_arrow">Compass Arrow</string>
+    <string name="calibration_icon">Calibration Icon</string>
+
+    <!-- AR NAVIGATION — Campus Tour Activity -->
+    <string name="metu_orientation_title">METU NCC ORIENTATION</string>
+    <string name="from_label">from :</string>
+    <string name="to_label">to :</string>
+    <string name="map_2d_button">Map (2D)</string>
+    <string name="ar_3d_button">AR (3D)</string>
+    <string name="go_button">GO</string>
+
+    <!-- AR NAVIGATION — Permissions & Errors -->
+    <string name="camera_permission_required">Camera permission is required for AR navigation</string>
+    <string name="location_permission_required">Location permission is required for navigation</string>
+    <string name="permissions_required">Camera and Location permissions are required</string>
+    <string name="no_rotation_sensor">The device does not have a Rotation Vector sensor.\nCompass accuracy may be reduced.</string>
+    <string name="compass_calibration_timeout">⚠️ Compass calibration timeout. Proceeding with reduced accuracy.</string>
+
+    <!-- AR NAVIGATION — Toast Messages -->
+    <string name="compass_ready">✅ Compass Ready!</string>
+    <string name="sensors_ready">Sensors Ready! ✅</string>
+    <string name="route_calculated">✅ Route calculated</string>
+    <string name="anchor_placed">✅ Anchor placed!</string>
+    <string name="checkpoint_reached">✅ Checkpoint reached</string>
+    <string name="world_locked">World Locked! 🔒</string>
+    <string name="point_at_floor">🔍 Point camera at floor to place anchor</string>
+    <string name="route_rendered">⚡ Route rendered</string>
+
+    <!-- AR NAVIGATION — Error Messages -->
+    <string name="no_route_found">❌ No route found!</string>
+    <string name="route_points_not_found">❌ Route points not found in graph!</string>
+    <string name="no_destinations_found">⚠️ No Destinations Found!</string>
+    <string name="destinations_required">At least 2 destinations required.</string>
+    <string name="same_start_destination">Start and Destination cannot be the same.</string>
+    <string name="invalid_selection">❌ Invalid selection</string>
+    <string name="no_gps_data">No GPS data available</string>
+    <string name="ar_config_failed">⚠️ AR configuration failed</string>
+
+    <!-- AR NAVIGATION — Instructions -->
+    <string name="compass_instruction">Wave phone in figure-8 pattern\nWaiting for accuracy…</string>
+    <string name="gps_instruction">Acquiring GPS signal…\nStand in open area.</string>
+
 </resources>

@@ -3,9 +3,21 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- ============================================================ -->
+    <!-- PERMISSIONS                                                   -->
+    <!-- ============================================================ -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- ============================================================ -->
+    <!-- HARDWARE FEATURES                                             -->
+    <!-- ============================================================ -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
     <uses-feature
         android:name="android.hardware.camera.ar"
         android:required="true" />
@@ -13,13 +25,18 @@
         android:glEsVersion="0x00030000"
         android:required="true" />
     <uses-feature
-        android:name="android.hardware.camera"
-        android:required="false" />
+        android:name="android.hardware.location.gps"
+        android:required="true" />
 
+    <!-- ============================================================ -->
+    <!-- APPLICATION                                                   -->
+    <!-- ============================================================ -->
     <application
         android:name=".MyApp"
         android:usesCleartextTraffic="true"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="OrientAR"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -27,23 +44,37 @@
         android:theme="@style/Theme.OrientAR"
         tools:targetApi="31">
 
+        <!-- ======================================================== -->
+        <!-- META-DATA                                                 -->
+        <!-- ======================================================== -->
+
+        <!-- ARCore -->
         <meta-data
             android:name="com.google.ar.core"
             android:value="required"
             tools:replace="android:value" />
 
+        <!-- ARCore Geospatial API Key (existing) -->
         <meta-data
             android:name="com.google.android.ar.API_KEY"
             android:value="AIzaSyAhXjK2Div5AL4AzKObIkjrUx5BCH4Exdc" />
 
+        <!-- Google Maps SDK Key (for AR Navigation map view) -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="@string/google_maps_key" />
+
+        <!-- ======================================================== -->
+        <!-- AUTH ACTIVITIES                                            -->
+        <!-- ======================================================== -->
 
         <activity
             android:name=".auth.WelcomeActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
@@ -57,10 +88,18 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- ======================================================== -->
+        <!-- HOME                                                      -->
+        <!-- ======================================================== -->
+
         <activity
             android:name=".home.MainActivity"
             android:exported="false"
             android:label="METU NCC Orientation" />
+
+        <!-- ======================================================== -->
+        <!-- TREASURE HUNT                                             -->
+        <!-- ======================================================== -->
 
         <activity
             android:name=".treasure.ScoreboardActivity"
@@ -72,10 +111,18 @@
             android:exported="false"
             android:label="Treasure Hunt Game" />
 
+        <!-- ======================================================== -->
+        <!-- CHATBOT                                                   -->
+        <!-- ======================================================== -->
+
         <activity
             android:name=".chatbot.ChatbotActivity"
             android:exported="false"
             android:label="Chatbot" />
+
+        <!-- ======================================================== -->
+        <!-- SOCIETIES                                                 -->
+        <!-- ======================================================== -->
 
         <activity
             android:name=".societies.SocietiesActivity"
@@ -86,6 +133,36 @@
             android:name=".societies.SocietyDetailActivity"
             android:exported="false"
             android:label="Society Detail" />
+
+        <!-- ======================================================== -->
+        <!-- AR NAVIGATION (integrated from Navigation module)         -->
+        <!-- ======================================================== -->
+
+        <activity
+            android:name=".navigation.CampusTourActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:label="Campus Tour" />
+
+        <activity
+            android:name=".navigation.ArNavigationActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <!-- ======================================================== -->
+        <!-- PROVIDERS                                                 -->
+        <!-- ======================================================== -->
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 

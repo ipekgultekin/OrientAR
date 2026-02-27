@@ -11,4 +11,18 @@
     <color name="metu_red_soft">#AA8B0000</color>
     <color name="metu_gray">#F5F5F5</color>
     <color name="text_dark">#333333</color>
+    <!-- AR Navigation Colors  -->
+    <color name="orientar_primary">#E31837</color>
+    <color name="orientar_primary_dark">#B71C1C</color>
+    <color name="orientar_primary_light">#FF5252</color>
+    <color name="glass_dark">#CC1A1A2E</color>
+    <color name="glass_dark_solid">#E6000000</color>
+    <color name="glass_border">#33FFFFFF</color>
+    <color name="text_white">#FFFFFF</color>
+    <color name="text_white_secondary">#B3FFFFFF</color>
+    <color name="text_white_hint">#66FFFFFF</color>
+    <color name="status_success">#4CAF50</color>
+    <color name="status_warning">#FF9800</color>
+    <color name="status_info">#2196F3</color>
+
 </resources>
