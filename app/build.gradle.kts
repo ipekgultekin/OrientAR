@@ -77,6 +77,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation(libs.androidx.foundation.android)
 
+
     // ══════════════════════════════════════════════════════════════
     // ARCORE & SCENEVIEW (single version — used by Treasure Hunt + AR Navigation)
     // ══════════════════════════════════════════════════════════════

@@ -145,7 +145,7 @@ fun LeaderLoginScreen() {
                     )
                     Spacer(Modifier.height(12.dp))
 
-                    // Password field with show/hide toggle
+                    // Password field with show/hide toggle.
                     OutlinedTextField(
                         value = password, onValueChange = { password = it; errorMessage = "" },
                         label = { Text("Password") }, singleLine = true,
