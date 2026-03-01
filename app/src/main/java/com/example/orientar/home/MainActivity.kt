@@ -269,7 +269,7 @@ fun HomeContent(userRole: String = "student") {
                             Intent(context, CampusTourActivity::class.java)
                         )
                     }
-                    MenuCard("FAQ", "💬", Modifier.weight(1f)) {
+                    MenuCard("Chatbot", "💬", Modifier.weight(1f)) {
                         context.startActivity(Intent(context, ChatbotActivity::class.java).apply {
                             putExtra("USER_ROLE", userRole)
                         })
@@ -282,7 +282,11 @@ fun HomeContent(userRole: String = "student") {
                         })
                     }
                     MenuCard("Announcements", "🔔", Modifier.weight(1f)) {
-                        Toast.makeText(context, "Soon", Toast.LENGTH_SHORT).show()
+                        context.startActivity(
+                            Intent(context, com.example.orientar.announcements.AnnouncementsActivity::class.java).apply {
+                                putExtra("USER_ROLE", userRole)
+                            }
+                        )
                     }
                 }
             } else {
@@ -293,7 +297,7 @@ fun HomeContent(userRole: String = "student") {
                             Intent(context, CampusTourActivity::class.java)
                         )
                     }
-                    MenuCard("FAQ", "💬", Modifier.weight(1f)) {
+                    MenuCard("Chatbot", "💬", Modifier.weight(1f)) {
                         context.startActivity(Intent(context, ChatbotActivity::class.java).apply {
                             putExtra("USER_ROLE", userRole)
                         })
@@ -316,7 +320,9 @@ fun HomeContent(userRole: String = "student") {
                         if (isLeader) {
                             Toast.makeText(context, "Announcement panel coming soon", Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "Soon", Toast.LENGTH_SHORT).show()
+                            context.startActivity(
+                                Intent(context, com.example.orientar.announcements.AnnouncementsActivity::class.java)
+                                    .apply { putExtra("USER_ROLE", userRole) })
                         }
                     }
                     Spacer(modifier = Modifier.weight(1f))
