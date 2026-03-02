@@ -11,7 +11,8 @@ data class Question(
     val modelScale: Float,
     val modelRotationX: Float,
     val modelRotationY: Float,
-    val modelRotationZ: Float
+    val modelRotationZ: Float,
+    val targetKeywords: List<String> = emptyList()
 )
 
 object GameState {
@@ -23,7 +24,6 @@ object GameState {
     val totalSolved: Int get() = solvedIds.size
     val totalTimeMs: Long get() = _totalTimeMs
 
-    // --- YENİ EKLENEN METODLAR ---
     fun totalQuestions(): Int = questions.size
 
     fun resetProgress() {
@@ -31,7 +31,6 @@ object GameState {
         bestTimes.clear()
         _totalTimeMs = 0L
     }
-    // ----------------------------
 
     fun loadQuestionsFromFirestore(onComplete: () -> Unit) {
         FirebaseFirestore.getInstance().collection("treasure_questions").get()
@@ -39,18 +38,22 @@ object GameState {
                 questions.clear()
                 for (doc in snapshot.documents) {
                     val id = doc.getLong("id")?.toInt() ?: continue
+
+                    val keywords = doc.get("targetKeywords") as? List<String> ?: emptyList()
+
                     questions.add(
                         Question(
-                        id = id,
-                        title = doc.getString("title") ?: "",
-                        text = doc.getString("text") ?: "",
-                        cloudAnchorId = doc.getString("cloudAnchorId") ?: "",
-                        modelFilePath = doc.getString("modelFilePath") ?: "",
-                        modelScale = doc.getDouble("modelScale")?.toFloat() ?: 1f,
-                        modelRotationX = doc.getDouble("modelRotationX")?.toFloat() ?: 0f,
-                        modelRotationY = doc.getDouble("modelRotationY")?.toFloat() ?: 0f,
-                        modelRotationZ = doc.getDouble("modelRotationZ")?.toFloat() ?: 0f
-                    )
+                            id = id,
+                            title = doc.getString("title") ?: "",
+                            text = doc.getString("text") ?: "",
+                            cloudAnchorId = doc.getString("cloudAnchorId") ?: "",
+                            modelFilePath = doc.getString("modelFilePath") ?: "",
+                            modelScale = doc.getDouble("modelScale")?.toFloat() ?: 1f,
+                            modelRotationX = doc.getDouble("modelRotationX")?.toFloat() ?: 0f,
+                            modelRotationY = doc.getDouble("modelRotationY")?.toFloat() ?: 0f,
+                            modelRotationZ = doc.getDouble("modelRotationZ")?.toFloat() ?: 0f,
+                            targetKeywords = keywords
+                        )
                     )
                 }
                 questions.sortBy { it.id }
