@@ -1,4 +1,4 @@
-# OrientAR
+[# OrientAR
 
 ## Project Overview
 
@@ -51,4 +51,4 @@ Enable **Firebase Authentication** and **Cloud Firestore**.
 
 ⚠️ The project cannot be fully tested on an emulator because AR features require camera input and real-world tracking.
 
-The project is currently under development and has not yet been published on the Google Play Store.
+The project is currently under development and has not yet been published on the Google Play Store.]()
