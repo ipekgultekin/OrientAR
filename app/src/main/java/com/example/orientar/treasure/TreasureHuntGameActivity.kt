@@ -1,6 +1,7 @@
 package com.example.orientar.treasure
 
 import com.example.orientar.R
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -13,6 +14,7 @@ import android.widget.Button
 import android.widget.Chronometer
 import android.widget.ImageButton
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -20,6 +22,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.ar.core.*
 import com.google.ar.core.exceptions.NotYetAvailableException
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -60,6 +64,11 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val CAMERA_REQ = 44
 
+    // Admin
+    private var arSession: Session? = null
+    private var lastFrame: Frame? = null
+    private var isHosting = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_treasure_hunt_game)
@@ -71,10 +80,13 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         btnClose = findViewById(R.id.btnClose)
         btnNext = findViewById(R.id.btnNext)
 
-        modelLoader = ModelLoader(arSceneView.engine, this, CoroutineScope(Dispatchers.IO))
+        modelLoader = ModelLoader(arSceneView.engine, this, lifecycleScope)
 
         btnClose.setOnClickListener { finish() }
         btnNext.setOnClickListener { handleNextOrFinish() }
+
+        // Admin trigger: tap question title to start hosting for current question
+        tvQuestionTitle.setOnClickListener { startHosting() }
 
         if (!hasCameraPermission()) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_REQ)
@@ -89,18 +101,19 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         }
 
         arSceneView.onSessionCreated = { session ->
+            arSession = session
             val config = session.config
             config.cloudAnchorMode = Config.CloudAnchorMode.ENABLED
             config.focusMode = Config.FocusMode.AUTO
             config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
             config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
-
             config.depthMode = Config.DepthMode.DISABLED
-
             session.configure(config)
         }
 
         arSceneView.onSessionUpdated = onSessionUpdated@{ session, frame ->
+            lastFrame = frame
+
             if (modelPlaced) return@onSessionUpdated
 
             val now = SystemClock.elapsedRealtime()
@@ -131,6 +144,52 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         }
     }
 
+    private fun startHosting() {
+        if (isHosting) return
+        val session = arSession ?: run {
+            Toast.makeText(this, "AR session not ready", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val frame = lastFrame ?: run {
+            Toast.makeText(this, "Frame not ready, try again", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        isHosting = true
+        Toast.makeText(this, "Scanning... Move camera around the object.", Toast.LENGTH_LONG).show()
+
+        val cameraPose = frame.camera.pose
+        val targetPose = cameraPose.compose(Pose.makeTranslation(0f, 0f, -0.5f))
+        val anchor = session.createAnchor(targetPose)
+
+        session.hostCloudAnchorAsync(anchor, 365) { cloudAnchorId, state ->
+            runOnUiThread {
+                isHosting = false
+                anchor.detach()
+                if (state == Anchor.CloudAnchorState.SUCCESS) {
+                    saveAnchorId(cloudAnchorId)
+                } else {
+                    Toast.makeText(this, "Hosting failed: $state", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun saveAnchorId(anchorId: String) {
+        val docName = "q${currentQuestion.id}"
+        FirebaseFirestore.getInstance()
+            .collection("treasure_questions")
+            .document(docName)
+            .set(mapOf("cloudAnchorId" to anchorId), SetOptions.merge())
+            .addOnSuccessListener {
+                currentQuestion = currentQuestion.copy(cloudAnchorId = anchorId)
+                Toast.makeText(this, "Saved! ID: $anchorId", Toast.LENGTH_LONG).show()
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, "Firebase error: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+    }
+
     private fun runOcrTask(session: Session, frame: Frame) {
         try {
             val image = frame.acquireCameraImage()
@@ -139,7 +198,6 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
             recognizer.process(inputImage)
                 .addOnSuccessListener { visionText ->
-
                     val matched = currentQuestion.targetKeywords.any { kw ->
                         fuzzyContainsKeyword(visionText.text, kw)
                     }
@@ -168,7 +226,15 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
         modelPlaced = false
         popupShown = false
-        currentAnchorNode?.let { arSceneView.removeChildNode(it); it.destroy() }
+        cleanupCurrentAnchor()
+    }
+
+    private fun cleanupCurrentAnchor() {
+        currentAnchorNode?.let {
+            arSceneView.removeChildNode(it)
+            it.anchor?.detach()
+            it.destroy()
+        }
         currentAnchorNode = null
     }
 
@@ -206,7 +272,6 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                             rotation = Rotation(q.modelRotationX, q.modelRotationY, q.modelRotationZ)
                         }
                         anchorNode.addChildNode(modelNode)
-
                         mainHandler.postDelayed({ showCorrectDialog(q.id) }, 2000)
                     }
                 }
@@ -226,7 +291,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
         AlertDialog.Builder(this, R.style.CustomDialogTheme)
             .setTitle("✅ Correct!")
-            .setMessage(if(GameState.totalSolved == GameState.totalQuestions()) "You found the last treasure!" else "Great job! Keep going.")
+            .setMessage(if (GameState.totalSolved == GameState.totalQuestions()) "You found the last treasure!" else "Great job! Keep going.")
             .setPositiveButton("Continue") { _, _ -> handleNextOrFinish() }
             .setCancelable(false)
             .show()
@@ -241,9 +306,9 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         }
     }
 
-    private fun hasCameraPermission() = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    private fun hasCameraPermission() =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
-    // OCR Fuzzy Match Methods
     private fun fuzzyContainsKeyword(ocrText: String, keyword: String): Boolean {
         val nOcr = normalize(ocrText)
         val nKey = normalize(keyword)
@@ -261,7 +326,11 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         return false
     }
 
-    private fun normalize(s: String) = s.uppercase(Locale.getDefault()).replace(Regex("[^A-Z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
+    private fun normalize(s: String) =
+        s.uppercase(Locale.getDefault())
+            .replace(Regex("[^A-Z0-9 ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
 
     private fun isSimilar(a: String, b: String): Boolean {
         val dist = levenshtein(a, b)
@@ -276,13 +345,15 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         for (i in 1..a.length) {
             for (j in 1..b.length) {
                 val cost = if (a[i - 1] == b[j - 1]) 0 else 1
-                dp[i][j] = minOf(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost)
+                dp[i][j] = minOf(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
             }
         }
         return dp[a.length][b.length]
     }
 
     override fun onDestroy() {
+        recognizer.close()
+        cleanupCurrentAnchor()
         arSceneView.destroy()
         super.onDestroy()
     }
