@@ -8,6 +8,8 @@ The main goal of the application is to help incoming students explore the campus
 
 The system combines **Augmented Reality (AR)**, gamification, navigation tools, and an AI-powered chatbot.
 
+---
+
 ### Main Features
 
 - AR-based campus navigation  
