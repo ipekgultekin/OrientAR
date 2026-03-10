@@ -83,7 +83,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         modelLoader = ModelLoader(arSceneView.engine, this, lifecycleScope)
 
         btnClose.setOnClickListener { finish() }
-        btnNext.setOnClickListener { handleNextOrFinish() }
+        btnNext.setOnClickListener { skipToNextQuestion() }
 
         // Admin trigger: tap question title to start hosting for current question
         tvQuestionTitle.setOnClickListener { startHosting() }
@@ -93,9 +93,13 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             return
         }
 
+        val isNewGame = intent.getBooleanExtra("isNewGame", false)
+        if (isNewGame) GameState.resetProgress(this)
         GameState.loadQuestionsFromFirestore {
+            GameState.loadProgress(this@TreasureHuntGameActivity)
             runOnUiThread {
-                val firstQ = GameState.nextUnsolved() ?: GameState.questions.firstOrNull()
+                // Always start from question 1 (index 0), regardless of solved status
+                val firstQ = GameState.questions.firstOrNull()
                 firstQ?.let { loadQuestion(it) }
             }
         }
@@ -115,6 +119,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             lastFrame = frame
 
             if (modelPlaced) return@onSessionUpdated
+            if (!::currentQuestion.isInitialized) return@onSessionUpdated
 
             val now = SystemClock.elapsedRealtime()
 
@@ -156,19 +161,43 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         }
 
         isHosting = true
-        Toast.makeText(this, "Scanning... Move camera around the object.", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Scanning... Walk around the object for 20 seconds.", Toast.LENGTH_LONG).show()
 
         val cameraPose = frame.camera.pose
         val targetPose = cameraPose.compose(Pose.makeTranslation(0f, 0f, -0.5f))
         val anchor = session.createAnchor(targetPose)
 
-        session.hostCloudAnchorAsync(anchor, 365) { cloudAnchorId, state ->
-            runOnUiThread {
-                isHosting = false
-                anchor.detach()
-                if (state == Anchor.CloudAnchorState.SUCCESS) {
-                    saveAnchorId(cloudAnchorId)
+        val hostingStartTime = SystemClock.elapsedRealtime()
+        val minScanMs = 20_000L // 20 seconds minimum
+
+        session.hostCloudAnchorAsync(anchor, 1) { cloudAnchorId, state ->
+            val elapsed = SystemClock.elapsedRealtime() - hostingStartTime
+            val remaining = minScanMs - elapsed
+
+            if (state == Anchor.CloudAnchorState.SUCCESS) {
+                if (remaining > 0) {
+                    // ID ready but wait for minimum scan time
+                    runOnUiThread {
+                        Toast.makeText(this, "Almost done! Keep scanning for ${remaining / 1000}s more...", Toast.LENGTH_SHORT).show()
+                    }
+                    mainHandler.postDelayed({
+                        runOnUiThread {
+                            isHosting = false
+                            anchor.detach()
+                            saveAnchorId(cloudAnchorId)
+                        }
+                    }, remaining)
                 } else {
+                    runOnUiThread {
+                        isHosting = false
+                        anchor.detach()
+                        saveAnchorId(cloudAnchorId)
+                    }
+                }
+            } else {
+                runOnUiThread {
+                    isHosting = false
+                    anchor.detach()
                     Toast.makeText(this, "Hosting failed: $state", Toast.LENGTH_LONG).show()
                 }
             }
@@ -287,23 +316,106 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         chronoTimer.stop()
 
         val elapsedMs = SystemClock.elapsedRealtime() - questionStartMs
-        GameState.markSolved(questionId, elapsedMs)
+        GameState.markSolved(questionId, elapsedMs, this)
 
-        AlertDialog.Builder(this, R.style.CustomDialogTheme)
-            .setTitle("✅ Correct!")
-            .setMessage(if (GameState.totalSolved == GameState.totalQuestions()) "You found the last treasure!" else "Great job! Keep going.")
-            .setPositiveButton("Continue") { _, _ -> handleNextOrFinish() }
+        val isLast = GameState.totalSolved == GameState.totalQuestions()
+        val dialogView = layoutInflater.inflate(R.layout.dialog_correct, null)
+        dialogView.findViewById<android.widget.TextView>(R.id.tvDialogTitle).text =
+            if (isLast) "🎉 All Found!" else "✅ Correct!"
+        dialogView.findViewById<android.widget.TextView>(R.id.tvDialogMessage).text =
+            if (isLast) "Amazing! You found all treasures!" else "Great job! Get ready for the next challenge."
+        val btnNext = dialogView.findViewById<android.widget.Button>(R.id.btnDialogContinue)
+        btnNext.text = if (isLast) "VIEW RESULTS" else "NEXT QUESTION"
+
+        val dialog = AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert)
+            .setView(dialogView)
             .setCancelable(false)
+            .create()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        btnNext.setOnClickListener {
+            dialog.dismiss()
+            handleNextOrFinish()
+        }
+        dialog.show()
+    }
+
+    // Get the next question in order (index+1), regardless of solved status
+    private fun nextQuestionInOrder(): Question? {
+        val idx = GameState.questions.indexOfFirst { it.id == currentQuestion.id }
+        return if (idx >= 0 && idx + 1 < GameState.questions.size) GameState.questions[idx + 1] else null
+    }
+
+    // Called from NEXT/FINISH button — always go in order, no leaderboard check
+    private fun skipToNextQuestion() {
+        val next = nextQuestionInOrder()
+        if (next != null) {
+            loadQuestion(next)
+        } else {
+            // Last question reached via NEXT/FINISH — go to menu, check if all solved
+            finishGame()
+        }
+    }
+
+    // Called from correct dialog NEXT QUESTION button — go in order
+    private fun handleNextOrFinish() {
+        val next = nextQuestionInOrder()
+        if (next != null) {
+            loadQuestion(next)
+        } else {
+            // Last question reached via correct dialog — go to menu, check if all solved
+            finishGame()
+        }
+    }
+
+    // Common finish: if all solved show leaderboard dialog, else just go to menu
+    private fun finishGame() {
+        val allDone = GameState.totalSolved >= GameState.totalQuestions() && GameState.totalQuestions() > 0
+        if (allDone) showLeaderboardNameDialog() else goToMenu()
+    }
+
+    private fun showLeaderboardNameDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "Enter your name"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            setPadding(48, 32, 48, 32)
+        }
+
+        AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert)
+            .setTitle("🏆 Congratulations!")
+            .setMessage("You completed all questions!\nEnter your name for the leaderboard:")
+            .setView(input)
+            .setCancelable(false)
+            .setPositiveButton("SUBMIT") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotEmpty()) saveToLeaderboard(name) else goToMenu()
+            }
+            .setNegativeButton("Skip") { _, _ -> goToMenu() }
             .show()
     }
 
-    private fun handleNextOrFinish() {
-        val nextQ = GameState.nextUnsolvedAfter(currentQuestion.id)
-        if (nextQ != null) loadQuestion(nextQ)
-        else {
-            startActivity(Intent(this, ScoreboardActivity::class.java))
-            finish()
-        }
+    private fun saveToLeaderboard(name: String) {
+        val db = FirebaseFirestore.getInstance()
+        val entry = hashMapOf(
+            "name" to name,
+            "solvedCount" to GameState.totalSolved,
+            "totalTimeMs" to GameState.totalTimeMs,
+            "timestamp" to com.google.firebase.Timestamp.now()
+        )
+        db.collection("leaderboard")
+            .add(entry)
+            .addOnSuccessListener {
+                Toast.makeText(this, "Score saved! Good luck 🏆", Toast.LENGTH_SHORT).show()
+                goToMenu()
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Couldn't save score, but well done!", Toast.LENGTH_SHORT).show()
+                goToMenu()
+            }
+    }
+
+    private fun goToMenu() {
+        startActivity(Intent(this, ScoreboardActivity::class.java))
+        finish()
     }
 
     private fun hasCameraPermission() =
