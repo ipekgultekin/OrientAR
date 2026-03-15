@@ -54,10 +54,10 @@
             android:value="required"
             tools:replace="android:value" />
 
-        <!-- ARCore Geospatial API Key (existing) -->
+        <!-- ARCore Geospatial API Key -->
         <meta-data
             android:name="com.google.android.ar.API_KEY"
-            android:value="AIzaSyAhXjK2Div5AL4AzKObIkjrUx5BCH4Exdc" />
+            android:value="@string/arcore_api_key" />
 
         <!-- Google Maps SDK Key (for AR Navigation map view) -->
         <meta-data
@@ -156,6 +156,12 @@
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <!-- ======================================================== -->
+        <!-- ANNOUNCEMENTS                                                 -->
+        <!-- ======================================================== -->
+
+        <activity android:name=".announcements.AnnouncementsActivity" />
 
         <!-- ======================================================== -->
         <!-- PROVIDERS                                                 -->

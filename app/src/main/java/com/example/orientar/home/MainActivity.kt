@@ -270,7 +270,7 @@ fun HomeContent(userRole: String = "student") {
                             Intent(context, CampusTourActivity::class.java)
                         )
                     }
-                    MenuCard("FAQ", "💬", Modifier.weight(1f)) {
+                    MenuCard("Chatbot", "💬", Modifier.weight(1f)) {
                         context.startActivity(Intent(context, ChatbotActivity::class.java).apply {
                             putExtra("USER_ROLE", userRole)
                         })
@@ -295,7 +295,7 @@ fun HomeContent(userRole: String = "student") {
                             Intent(context, CampusTourActivity::class.java)
                         )
                     }
-                    MenuCard("FAQ", "💬", Modifier.weight(1f)) {
+                    MenuCard("Chatbot", "💬", Modifier.weight(1f)) {
                         context.startActivity(Intent(context, ChatbotActivity::class.java).apply {
                             putExtra("USER_ROLE", userRole)
                         })
