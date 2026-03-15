@@ -117,7 +117,7 @@ fun WelcomeScreen() {
                     elevation = CardDefaults.cardElevation(8.dp)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.campus_banner),
+                        painter = painterResource(id = R.drawable.orientar),
                         contentDescription = "Campus Illustration",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
