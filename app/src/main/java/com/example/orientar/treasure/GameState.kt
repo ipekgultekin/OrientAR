@@ -1,7 +1,7 @@
 package com.example.orientar.treasure
 
 import android.content.Context
-import android.content.SharedPreferences
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
 data class Question(
@@ -22,57 +22,71 @@ object GameState {
     val bestTimes: MutableMap<Int, Long> = mutableMapOf()
     private val solvedIds = mutableSetOf<Int>()
     private var _totalTimeMs: Long = 0L
+    private var loadedForUid: String? = null  // track which user's data is in memory
 
     val totalSolved: Int get() = solvedIds.size
     val totalTimeMs: Long get() = _totalTimeMs
 
     fun totalQuestions(): Int = questions.size
 
-    // SharedPreferences keys
-    private const val PREFS_NAME = "treasure_hunt_progress"
-    private const val KEY_SOLVED_IDS = "solved_ids"
-    private const val KEY_TOTAL_TIME = "total_time_ms"
-    private const val KEY_BEST_TIME_PREFIX = "best_time_"
+    // SharedPreferences name is per-user so users never share progress
+    private fun prefsName(): String {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: "guest"
+        return "treasure_hunt_progress_$uid"
+    }
 
-    // Load saved progress from SharedPreferences into memory
-    fun loadProgress(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
+    // Call this on login/logout to wipe in-memory state
+    fun clearMemory() {
         solvedIds.clear()
-        val savedIds = prefs.getString(KEY_SOLVED_IDS, "") ?: ""
+        bestTimes.clear()
+        _totalTimeMs = 0L
+        loadedForUid = null
+    }
+
+    fun loadProgress(context: Context) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+
+        // If different user than what is in memory, wipe first
+        if (uid != loadedForUid) {
+            solvedIds.clear()
+            bestTimes.clear()
+            _totalTimeMs = 0L
+            loadedForUid = uid
+        }
+
+        val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+        solvedIds.clear()
+        val savedIds = prefs.getString("solved_ids", "") ?: ""
         if (savedIds.isNotEmpty()) {
             savedIds.split(",").mapNotNull { it.trim().toIntOrNull() }.forEach { solvedIds.add(it) }
         }
-
-        _totalTimeMs = prefs.getLong(KEY_TOTAL_TIME, 0L)
-
+        _totalTimeMs = prefs.getLong("total_time_ms", 0L)
         bestTimes.clear()
-        // Load best times for all known question IDs
         questions.forEach { q ->
-            val t = prefs.getLong("$KEY_BEST_TIME_PREFIX${q.id}", -1L)
+            val t = prefs.getLong("best_time_${q.id}", -1L)
             if (t >= 0) bestTimes[q.id] = t
         }
     }
 
-    // Save current progress to SharedPreferences
     private fun saveProgress(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
         prefs.edit().apply {
-            putString(KEY_SOLVED_IDS, solvedIds.joinToString(","))
-            putLong(KEY_TOTAL_TIME, _totalTimeMs)
-            bestTimes.forEach { (id, time) ->
-                putLong("$KEY_BEST_TIME_PREFIX$id", time)
-            }
+            putString("solved_ids", solvedIds.joinToString(","))
+            putLong("total_time_ms", _totalTimeMs)
+            bestTimes.forEach { (id, time) -> putLong("best_time_$id", time) }
             apply()
         }
     }
 
-    // Reset everything — called only on "Play Again"
     fun resetProgress(context: Context? = null) {
         solvedIds.clear()
         bestTimes.clear()
         _totalTimeMs = 0L
-        context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)?.edit()?.clear()?.apply()
+        context?.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)?.edit()?.clear()?.apply()
+    }
+
+    fun clearQuestions() {
+        questions.clear()
     }
 
     fun loadQuestionsFromFirestore(onComplete: () -> Unit) {
@@ -113,12 +127,10 @@ object GameState {
     fun nextUnsolved(): Question? = questions.firstOrNull { !solvedIds.contains(it.id) }
 
     fun nextUnsolvedAfter(currentId: Int): Question? {
-        // First look after current question
         val startIndex = questions.indexOfFirst { it.id == currentId }
         for (i in (startIndex + 1) until questions.size) {
             if (!solvedIds.contains(questions[i].id)) return questions[i]
         }
-        // Then wrap around and look before current question too
         for (i in 0 until startIndex) {
             if (!solvedIds.contains(questions[i].id)) return questions[i]
         }
