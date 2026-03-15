@@ -32,6 +32,7 @@ import com.example.orientar.R
 import com.example.orientar.treasure.ScoreboardActivity
 import com.example.orientar.societies.SocietiesActivity
 import com.example.orientar.navigation.CampusTourActivity
+import com.example.orientar.announcements.AnnouncementsActivity
 import com.google.firebase.FirebaseApp
 
 class MainActivity : ComponentActivity() {
@@ -282,12 +283,9 @@ fun HomeContent(userRole: String = "student") {
                         })
                     }
                     MenuCard("Announcements", "🔔", Modifier.weight(1f)) {
-                        context.startActivity(
-                            Intent(context, com.example.orientar.announcements.AnnouncementsActivity::class.java).apply {
-                                putExtra("USER_ROLE", userRole)
-                            }
-                        )
+                        context.startActivity(Intent(context, AnnouncementsActivity::class.java))
                     }
+
                 }
             } else {
                 // Full layout for students and leaders
@@ -318,11 +316,9 @@ fun HomeContent(userRole: String = "student") {
                         modifier = Modifier.weight(1f)
                     ) {
                         if (isLeader) {
-                            Toast.makeText(context, "Announcement panel coming soon", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Leader announcement feature coming soon", Toast.LENGTH_SHORT).show()
                         } else {
-                            context.startActivity(
-                                Intent(context, com.example.orientar.announcements.AnnouncementsActivity::class.java)
-                                    .apply { putExtra("USER_ROLE", userRole) })
+                            context.startActivity(Intent(context, AnnouncementsActivity::class.java))
                         }
                     }
                     Spacer(modifier = Modifier.weight(1f))

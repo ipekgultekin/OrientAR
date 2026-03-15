@@ -1,9 +1,11 @@
 package com.example.orientar.announcements;
 
+import com.example.orientar.announcements.models.FormalAnnouncement;
 import com.example.orientar.announcements.models.ThisWeekEvent;
 import com.example.orientar.announcements.models.ThisWeekResponse;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,7 +17,36 @@ public class AnnouncementsRepository {
         void onSuccess(ThisWeekResponse data);
         void onError(String message);
     }
+    public interface FormalCallback {
+        void onSuccess(List<FormalAnnouncement> data);
+        void onError(String message);
+    }
+    public void fetchFormalAnnouncements(FormalCallback cb) {
+        FirebaseFirestore.getInstance()
+                .collection("formal_announcements")
+                .whereEqualTo("isActive", true)
+                .get()
+                .addOnSuccessListener(querySnapshot -> {
+                    List<FormalAnnouncement> items = new ArrayList<>();
 
+                    for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
+                        FormalAnnouncement item = new FormalAnnouncement();
+                        item.id = doc.getId();
+                        item.title = safeStr(doc.get("title"));
+                        item.message = safeStr(doc.get("message"));
+                        item.target = safeStr(doc.get("target"));
+                        item.createdBy = safeStr(doc.get("createdBy"));
+                        item.isActive = Boolean.TRUE.equals(doc.getBoolean("isActive"));
+                        item.createdAt = doc.getTimestamp("createdAt");
+                        items.add(item);
+                    }
+
+                    cb.onSuccess(items);
+                })
+                .addOnFailureListener(e -> cb.onError(
+                        e.getMessage() != null ? e.getMessage() : "Unknown error"
+                ));
+    }
     public void fetchThisWeekOnCampus(Callback cb) {
         FirebaseFirestore.getInstance()
                 .collection("campus_events_weeks")

@@ -10,7 +10,6 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -18,6 +17,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.orientar.R;
 import com.example.orientar.announcements.models.ThisWeekResponse;
+import com.example.orientar.announcements.ui.FormalAnnouncementsAdapter;
 import com.example.orientar.announcements.ui.ThisWeekAdapter;
 
 import java.time.OffsetDateTime;
@@ -27,7 +27,8 @@ import java.util.Locale;
 public class AnnouncementsFragment extends Fragment {
 
     private AnnouncementsViewModel vm;
-    private ThisWeekAdapter adapter;
+    private ThisWeekAdapter thisWeekAdapter;
+    private FormalAnnouncementsAdapter formalAdapter;
 
     private ProgressBar progress;
     private View errorBox;
@@ -57,10 +58,15 @@ public class AnnouncementsFragment extends Fragment {
         tvUpdatedAt = v.findViewById(R.id.tvUpdatedAt);
         tvSource = v.findViewById(R.id.tvSource);
 
-        RecyclerView rv = v.findViewById(R.id.rvThisWeek);
-        rv.setLayoutManager(new LinearLayoutManager(requireContext()));
-        adapter = new ThisWeekAdapter();
-        rv.setAdapter(adapter);
+        RecyclerView rvFormal = v.findViewById(R.id.rvFormalAnnouncements);
+        rvFormal.setLayoutManager(new LinearLayoutManager(requireContext()));
+        formalAdapter = new FormalAnnouncementsAdapter();
+        rvFormal.setAdapter(formalAdapter);
+
+        RecyclerView rvThisWeek = v.findViewById(R.id.rvThisWeek);
+        rvThisWeek.setLayoutManager(new LinearLayoutManager(requireContext()));
+        thisWeekAdapter = new ThisWeekAdapter();
+        rvThisWeek.setAdapter(thisWeekAdapter);
 
         vm = new ViewModelProvider(this).get(AnnouncementsViewModel.class);
 
@@ -70,47 +76,41 @@ public class AnnouncementsFragment extends Fragment {
             progress.setVisibility(s.loading ? View.VISIBLE : View.GONE);
             errorBox.setVisibility(s.error != null ? View.VISIBLE : View.GONE);
 
-            if (s.error != null) tvError.setText(s.error);
+            if (s.error != null) {
+                tvError.setText(s.error);
+            }
 
-            if (s.data != null) bindData(s.data);
+            if (s.formalAnnouncements != null) {
+                formalAdapter.submitList(s.formalAnnouncements);
+            }
+
+            if (s.thisWeekData != null) {
+                bindThisWeekData(s.thisWeekData);
+            }
         });
 
         vm.refresh();
     }
 
-    private void bindData(ThisWeekResponse data) {
-        // Hero title
+    private void bindThisWeekData(ThisWeekResponse data) {
         tvHeroTitle.setText("Announcements");
-
-        // week_range_text = "This Week on Campus"
         tvWeekRange.setText(data.week_range_text == null ? "" : data.week_range_text);
-
-        // updated_at string -> "Last updated: 24 Feb 2026, 15:59"
         tvUpdatedAt.setText(formatUpdatedAt(data.updated_at));
-
-        // source_url
         tvSource.setText(data.source_url == null ? "" : data.source_url);
-
-        adapter.submitList(data.events);
+        thisWeekAdapter.submitList(data.events);
     }
 
     private String formatUpdatedAt(String iso) {
         if (iso == null || iso.isEmpty()) return "Last updated: -";
         try {
-            OffsetDateTime dt = null;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                dt = OffsetDateTime.parse(iso);
-            }
-            DateTimeFormatter fmt = null;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                fmt = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm", Locale.getDefault());
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                OffsetDateTime dt = OffsetDateTime.parse(iso);
+                DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm", Locale.getDefault());
                 return "Last updated: " + dt.format(fmt);
             }
         } catch (Exception e) {
             return "Last updated: " + iso;
         }
-        return iso;
+        return "Last updated: " + iso;
     }
 }
