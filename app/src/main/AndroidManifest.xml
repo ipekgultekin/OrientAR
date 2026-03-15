@@ -117,9 +117,9 @@
             android:name=".chatbot.ChatbotActivity"
             android:exported="false"
             android:label="Chatbot" />
-        <!-- ======================================================== -->
-        <!-- ANNOUNCEMENTS                                                   -->
-        <!-- ======================================================== -->
+
+
+        <!-- ANNOUNCEMENTS  -->
         <activity
             android:name=".announcements.AnnouncementsActivity"
             android:exported="false"
@@ -152,12 +152,6 @@
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
-
-
-        <!-- ANNOUNCEMENTS -->
-
-        <activity android:name=".announcements.AnnouncementsActivity" />
-
 
         <!-- PROVIDERS -->
 
