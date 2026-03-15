@@ -4,10 +4,13 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orientar.R
 import com.example.orientar.home.MainActivity
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import java.util.Locale
 
 private val MetuRed = Color(0xFF8B0000)
@@ -30,10 +35,23 @@ private val MetuRed = Color(0xFF8B0000)
 class ScoreboardActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        GameState.loadProgress(this)
+        val forcedSolved = intent.getIntExtra("forcedSolved", -1)
+        val forcedTotal = intent.getIntExtra("forcedTotal", -1)
+
+        // If not coming from game session, wipe stale local progress entirely
+        // SharedPreferences may have old solved data from previous sessions
+        if (forcedSolved < 0) {
+            GameState.clearMemory()
+            GameState.resetProgress(this)
+        }
+        GameState.loadQuestionsFromFirestore {}
+
         setContent {
             MaterialTheme {
-                TreasureHuntLandingScreen()
+                TreasureHuntLandingScreen(
+                    forcedSolved = forcedSolved,
+                    forcedTotal = forcedTotal
+                )
             }
         }
     }
@@ -41,12 +59,59 @@ class ScoreboardActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TreasureHuntLandingScreen() {
+fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
     val context = LocalContext.current
-    val solved = remember { GameState.totalSolved }
-    val total = remember { GameState.totalQuestions() }
-    val hasPartialProgress = solved > 0 && solved < total
-    val totalSeconds = remember { GameState.totalTimeMs / 1000.0 }
+    var questionCount by remember { mutableStateOf(
+        if (forcedTotal >= 0) forcedTotal else GameState.totalQuestions()
+    )}
+    var solvedCount by remember { mutableStateOf(
+        if (forcedSolved >= 0) forcedSolved else GameState.totalSolved
+    )}
+    // Only true if user actually has a Firebase leaderboard entry
+    var isOnLeaderboard by remember { mutableStateOf(false) }
+    var leaderboardTimeMs by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(Unit) {
+        // Load questions if needed
+        while (questionCount == 0) {
+            kotlinx.coroutines.delay(200)
+            questionCount = GameState.totalQuestions()
+            solvedCount = GameState.totalSolved
+        }
+        if (forcedSolved < 0) solvedCount = GameState.totalSolved
+        if (forcedTotal < 0) questionCount = GameState.totalQuestions()
+
+        // Force Firebase Auth token refresh to ensure currentUser is up to date
+        val firebaseUser = FirebaseAuth.getInstance().currentUser
+        firebaseUser?.reload()?.addOnCompleteListener {
+            val uid = FirebaseAuth.getInstance().currentUser?.uid
+            if (uid != null) {
+                FirebaseFirestore.getInstance()
+                    .collection("leaderboard")
+                    .document(uid)
+                    .get()
+                    .addOnSuccessListener { doc ->
+                        if (doc.exists()) {
+                            isOnLeaderboard = true
+                            leaderboardTimeMs = doc.getLong("totalTimeMs") ?: 0L
+                        } else {
+                            isOnLeaderboard = false
+                            leaderboardTimeMs = 0L
+                        }
+                    }
+                    .addOnFailureListener {
+                        isOnLeaderboard = false
+                    }
+            }
+        }
+    }
+
+    val solved = solvedCount
+    val total = questionCount
+    val hasPartialProgress = total > 0 && solved > 0 && solved < total && !isOnLeaderboard
+    // allCompleted = only shown to users with a Firebase leaderboard entry
+    val allCompleted = isOnLeaderboard
+    val totalSeconds = leaderboardTimeMs / 1000.0
 
     Scaffold(
         topBar = {
@@ -96,7 +161,8 @@ fun TreasureHuntLandingScreen() {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 28.dp),
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 28.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
@@ -121,7 +187,36 @@ fun TreasureHuntLandingScreen() {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                if (hasPartialProgress) {
+                if (allCompleted) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                        elevation = CardDefaults.cardElevation(2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "🎉 You completed all questions!",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF2E7D32),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Your time: ${String.format(Locale.US, "%.1f", totalSeconds)}s",
+                                fontSize = 13.sp,
+                                color = Color(0xFF388E3C),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                } else if (hasPartialProgress) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -162,11 +257,46 @@ fun TreasureHuntLandingScreen() {
                     }
                 }
 
+                var showReplayConfirm by remember { mutableStateOf(false) }
+
+                if (showReplayConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showReplayConfirm = false },
+                        title = { Text("Play Again?", fontWeight = FontWeight.Bold) },
+                        text = {
+                            Text(
+                                "You've already completed the game! Playing again will remove your current leaderboard score. Are you sure?",
+                                lineHeight = 20.sp
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showReplayConfirm = false
+                                val intent = Intent(context, TreasureHuntGameActivity::class.java)
+                                intent.putExtra("isNewGame", true)
+                                context.startActivity(intent)
+                            }) {
+                                Text("Yes, Play Again", color = MetuRed, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showReplayConfirm = false }) {
+                                Text("Cancel", color = Color.Gray)
+                            }
+                        }
+                    )
+                }
+
                 Button(
                     onClick = {
-                        val intent = Intent(context, TreasureHuntGameActivity::class.java)
-                        intent.putExtra("isNewGame", solved == total && total > 0)
-                        context.startActivity(intent)
+                        when {
+                            allCompleted -> showReplayConfirm = true
+                            else -> {
+                                val intent = Intent(context, TreasureHuntGameActivity::class.java)
+                                intent.putExtra("isNewGame", false)
+                                context.startActivity(intent)
+                            }
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -177,12 +307,24 @@ fun TreasureHuntLandingScreen() {
                 ) {
                     Text(
                         text = when {
+                            allCompleted -> "🔄  PLAY AGAIN"
                             hasPartialProgress -> "▶  CONTINUE GAME"
-                            solved == total && total > 0 -> "🔄  PLAY AGAIN"
                             else -> "▶  START GAME"
                         },
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Show hint text when game is incomplete
+                if (hasPartialProgress) {
+                    Text(
+                        text = "⚠️ You need to find all answers to appear on the leaderboard. No worries, you can play again anytime!",
+                        fontSize = 12.sp,
+                        color = Color(0xFFBF360C),
+                        textAlign = TextAlign.Center,
+                        lineHeight = 17.sp,
+                        modifier = Modifier.padding(horizontal = 4.dp)
                     )
                 }
 
@@ -211,12 +353,22 @@ fun TreasureHuntLandingScreen() {
 @Composable
 fun TreasureBottomBar() {
     val context = LocalContext.current
+
+    fun goToMain(tab: Int) {
+        context.startActivity(
+            Intent(context, MainActivity::class.java).apply {
+                putExtra("OPEN_TAB", tab)
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+        )
+    }
+
     NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
         NavigationBarItem(
             icon = { Text("🏠", fontSize = 24.sp) },
             label = { Text("Home", fontSize = 11.sp) },
             selected = false,
-            onClick = { context.startActivity(Intent(context, MainActivity::class.java)) },
+            onClick = { goToMain(0) },
             colors = NavigationBarItemDefaults.colors(
                 unselectedIconColor = Color.Gray,
                 unselectedTextColor = Color.Gray
@@ -224,9 +376,9 @@ fun TreasureBottomBar() {
         )
         NavigationBarItem(
             icon = { Text("📋", fontSize = 24.sp) },
-            label = { Text("My Orientation\nUnit", fontSize = 10.sp, maxLines = 2, textAlign = TextAlign.Center, lineHeight = 11.sp) },
+            label = { Text("My Unit", fontSize = 11.sp) },
             selected = false,
-            onClick = { Toast.makeText(context, "Coming Soon...", Toast.LENGTH_SHORT).show() },
+            onClick = { goToMain(1) },
             colors = NavigationBarItemDefaults.colors(
                 unselectedIconColor = Color.Gray,
                 unselectedTextColor = Color.Gray
@@ -236,7 +388,7 @@ fun TreasureBottomBar() {
             icon = { Text("👤", fontSize = 24.sp) },
             label = { Text("Profile", fontSize = 11.sp) },
             selected = false,
-            onClick = { Toast.makeText(context, "Coming Soon...", Toast.LENGTH_SHORT).show() },
+            onClick = { goToMain(2) },
             colors = NavigationBarItemDefaults.colors(
                 unselectedIconColor = Color.Gray,
                 unselectedTextColor = Color.Gray

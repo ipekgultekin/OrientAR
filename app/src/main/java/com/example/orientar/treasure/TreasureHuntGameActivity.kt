@@ -22,6 +22,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.ar.core.*
 import com.google.ar.core.exceptions.NotYetAvailableException
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.mlkit.vision.common.InputImage
@@ -94,12 +95,25 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         }
 
         val isNewGame = intent.getBooleanExtra("isNewGame", false)
-        if (isNewGame) GameState.resetProgress(this)
+        // Always clear stale memory before loading fresh state for current user
+        GameState.clearMemory()
+        if (isNewGame) {
+            GameState.resetProgress(this)
+            // Delete old leaderboard entry so replay starts fresh
+            val uid = FirebaseAuth.getInstance().currentUser?.uid
+            if (uid != null) {
+                FirebaseFirestore.getInstance()
+                    .collection("leaderboard")
+                    .document(uid)
+                    .delete()
+            }
+        }
+        // Always reload questions fresh, then load progress
         GameState.loadQuestionsFromFirestore {
             GameState.loadProgress(this@TreasureHuntGameActivity)
             runOnUiThread {
-                // Always start from question 1 (index 0), regardless of solved status
-                val firstQ = GameState.questions.firstOrNull()
+                val firstQ = if (isNewGame) GameState.questions.firstOrNull()
+                else GameState.nextUnsolved() ?: GameState.questions.firstOrNull()
                 firstQ?.let { loadQuestion(it) }
             }
         }
@@ -318,7 +332,8 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         val elapsedMs = SystemClock.elapsedRealtime() - questionStartMs
         GameState.markSolved(questionId, elapsedMs, this)
 
-        val isLast = GameState.totalSolved == GameState.totalQuestions()
+        val total = GameState.totalQuestions()
+        val isLast = total > 0 && GameState.totalSolved == total
         val dialogView = layoutInflater.inflate(R.layout.dialog_correct, null)
         dialogView.findViewById<android.widget.TextView>(R.id.tvDialogTitle).text =
             if (isLast) "🎉 All Found!" else "✅ Correct!"
@@ -367,33 +382,38 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         }
     }
 
-    // Common finish: if all solved show leaderboard dialog, else just go to menu
+    // Common finish: ALL questions must be solved (and questions must be loaded)
     private fun finishGame() {
-        val allDone = GameState.totalSolved >= GameState.totalQuestions() && GameState.totalQuestions() > 0
-        if (allDone) showLeaderboardNameDialog() else goToMenu()
+        val total = GameState.totalQuestions()
+        val solved = GameState.totalSolved
+        // Guard: if questions not loaded yet, just go to menu
+        if (total == 0) { goToMenu(); return }
+        if (solved == total) fetchUserNameAndSaveToLeaderboard() else goToMenu()
     }
 
-    private fun showLeaderboardNameDialog() {
-        val input = android.widget.EditText(this).apply {
-            hint = "Enter your name"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS
-            setPadding(48, 32, 48, 32)
+    private fun fetchUserNameAndSaveToLeaderboard() {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (uid == null) {
+            goToMenu()
+            return
         }
-
-        AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert)
-            .setTitle("🏆 Congratulations!")
-            .setMessage("You completed all questions!\nEnter your name for the leaderboard:")
-            .setView(input)
-            .setCancelable(false)
-            .setPositiveButton("SUBMIT") { _, _ ->
-                val name = input.text.toString().trim()
-                if (name.isNotEmpty()) saveToLeaderboard(name) else goToMenu()
+        FirebaseFirestore.getInstance()
+            .collection("users")
+            .document(uid)
+            .get()
+            .addOnSuccessListener { doc ->
+                val firstName = doc.getString("firstName") ?: ""
+                val lastName = doc.getString("lastName") ?: ""
+                val fullName = "$firstName $lastName".trim()
+                saveToLeaderboard(if (fullName.isNotEmpty()) fullName else uid)
             }
-            .setNegativeButton("Skip") { _, _ -> goToMenu() }
-            .show()
+            .addOnFailureListener {
+                goToMenu()
+            }
     }
 
     private fun saveToLeaderboard(name: String) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         val db = FirebaseFirestore.getInstance()
         val entry = hashMapOf(
             "name" to name,
@@ -401,8 +421,10 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             "totalTimeMs" to GameState.totalTimeMs,
             "timestamp" to com.google.firebase.Timestamp.now()
         )
+        // Use uid as document ID so each user has one entry (overwrites on replay)
         db.collection("leaderboard")
-            .add(entry)
+            .document(uid)
+            .set(entry)
             .addOnSuccessListener {
                 Toast.makeText(this, "Score saved! Good luck 🏆", Toast.LENGTH_SHORT).show()
                 goToMenu()
@@ -414,7 +436,10 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     }
 
     private fun goToMenu() {
-        startActivity(Intent(this, ScoreboardActivity::class.java))
+        val intent = Intent(this, ScoreboardActivity::class.java)
+        intent.putExtra("forcedSolved", GameState.totalSolved)
+        intent.putExtra("forcedTotal", GameState.totalQuestions())
+        startActivity(intent)
         finish()
     }
 

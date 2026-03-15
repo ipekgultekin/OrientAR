@@ -24,10 +24,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orientar.R
 import com.example.orientar.home.MainActivity
+import com.example.orientar.treasure.GameState
 
 class WelcomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        GameState.clearMemory()
         setContent {
             MaterialTheme {
                 WelcomeScreen()
