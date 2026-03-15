@@ -117,6 +117,13 @@
             android:name=".chatbot.ChatbotActivity"
             android:exported="false"
             android:label="Chatbot" />
+        <!-- ======================================================== -->
+        <!-- ANNOUNCEMENTS                                                   -->
+        <!-- ======================================================== -->
+        <activity
+            android:name=".announcements.AnnouncementsActivity"
+            android:exported="false"
+            android:label="Announcements" />
 
 
         <!-- SOCIETIES -->
