@@ -3,18 +3,17 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- ============================================================ -->
-    <!-- PERMISSIONS                                                   -->
-    <!-- ============================================================ -->
+    <!-- PERMISSIONS -->
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- ============================================================ -->
-    <!-- HARDWARE FEATURES                                             -->
-    <!-- ============================================================ -->
+
+    <!-- HARDWARE FEATURES -->
+
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />
@@ -28,9 +27,9 @@
         android:name="android.hardware.location.gps"
         android:required="true" />
 
-    <!-- ============================================================ -->
-    <!-- APPLICATION                                                   -->
-    <!-- ============================================================ -->
+
+    <!-- APPLICATION -->
+
     <application
         android:name=".MyApp"
         android:usesCleartextTraffic="true"
@@ -44,10 +43,8 @@
         android:theme="@style/Theme.OrientAR"
         tools:targetApi="31">
 
-        <!-- ======================================================== -->
-        <!-- META-DATA                                                 -->
-        <!-- ======================================================== -->
 
+        <!-- META-DATA  -->
         <!-- ARCore -->
         <meta-data
             android:name="com.google.ar.core"
@@ -64,9 +61,8 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="@string/google_maps_key" />
 
-        <!-- ======================================================== -->
-        <!-- AUTH ACTIVITIES                                            -->
-        <!-- ======================================================== -->
+
+        <!-- AUTH ACTIVITIES -->
 
         <activity
             android:name=".auth.WelcomeActivity"
@@ -88,18 +84,16 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- ======================================================== -->
-        <!-- HOME                                                      -->
-        <!-- ======================================================== -->
+
+        <!-- HOME  -->
 
         <activity
             android:name=".home.MainActivity"
             android:exported="false"
             android:label="METU NCC Orientation" />
 
-        <!-- ======================================================== -->
-        <!-- TREASURE HUNT                                             -->
-        <!-- ======================================================== -->
+
+        <!-- TREASURE HUNT  -->
 
         <activity
             android:name=".treasure.ScoreboardActivity"
@@ -111,25 +105,28 @@
             android:exported="false"
             android:label="Treasure Hunt Game" />
 
-        <!-- ======================================================== -->
-        <!-- CHATBOT                                                   -->
-        <!-- ======================================================== -->
+        <activity
+            android:name=".treasure.LeaderboardActivity"
+            android:exported="false"
+            android:label="Leaderboard" />
+
+
+        <!-- CHATBOT -->
 
         <activity
             android:name=".chatbot.ChatbotActivity"
             android:exported="false"
             android:label="Chatbot" />
-        <!-- ======================================================== -->
-        <!-- ANNOUNCEMENTS                                                   -->
-        <!-- ======================================================== -->
+
+
+        <!-- ANNOUNCEMENTS  -->
         <activity
             android:name=".announcements.AnnouncementsActivity"
             android:exported="false"
             android:label="Announcements" />
 
-        <!-- ======================================================== -->
-        <!-- SOCIETIES                                                 -->
-        <!-- ======================================================== -->
+
+        <!-- SOCIETIES -->
 
         <activity
             android:name=".societies.SocietiesActivity"
@@ -141,9 +138,8 @@
             android:exported="false"
             android:label="Society Detail" />
 
-        <!-- ======================================================== -->
-        <!-- AR NAVIGATION (integrated from Navigation module)         -->
-        <!-- ======================================================== -->
+
+        <!-- AR NAVIGATION (integrated from Navigation module) -->
 
         <activity
             android:name=".navigation.CampusTourActivity"
@@ -157,15 +153,7 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
-        <!-- ======================================================== -->
-        <!-- ANNOUNCEMENTS                                                 -->
-        <!-- ======================================================== -->
-
-        <activity android:name=".announcements.AnnouncementsActivity" />
-
-        <!-- ======================================================== -->
-        <!-- PROVIDERS                                                 -->
-        <!-- ======================================================== -->
+        <!-- PROVIDERS -->
 
         <provider
             android:name="androidx.core.content.FileProvider"
