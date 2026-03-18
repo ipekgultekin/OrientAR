@@ -9,11 +9,16 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -22,17 +27,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import com.example.orientar.R
+import com.example.orientar.announcements.AnnouncementsActivity
 import com.example.orientar.auth.WelcomeActivity
 import com.example.orientar.chatbot.ChatbotActivity
+import com.example.orientar.navigation.CampusTourActivity
 import com.example.orientar.orientation.OrientationUnitScreen
 import com.example.orientar.profile.ProfileScreen
-import com.example.orientar.R
-import com.example.orientar.treasure.ScoreboardActivity
 import com.example.orientar.societies.SocietiesActivity
-import com.example.orientar.navigation.CampusTourActivity
-import com.example.orientar.announcements.AnnouncementsActivity
+import com.example.orientar.treasure.ScoreboardActivity
 import com.google.firebase.FirebaseApp
 
 class MainActivity : ComponentActivity() {
@@ -62,59 +65,30 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrientationScreen(
     userRole: String = "student",
     selectedTab: Int = 0,
     onTabChange: (Int) -> Unit = {}
 ) {
-    val metuRed  = Color(0xFF8B0000)
     val isGuest  = userRole == "guest"
-    val isLeader = userRole == "leader"
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 8.dp)
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.metu_logo),
-                            contentDescription = "METU Logo",
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "METU NCC ORIENTATION",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = metuRed
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-            )
-        },
         bottomBar = {
             MainBottomBar(
-                selectedTab = selectedTab,
+                selectedTab   = selectedTab,
                 onTabSelected = { onTabChange(it) },
-                showMyUnit = !isGuest
+                showMyUnit    = !isGuest
             )
         }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             if (isGuest) {
-                // Guest: tab 0 = Home, tab 1 = Profile
                 when (selectedTab) {
                     0 -> HomeContent(userRole = userRole)
                     1 -> GuestProfileScreen()
                 }
             } else {
-                // Student / Leader: tab 0 = Home, tab 1 = My Unit, tab 2 = Profile
                 when (selectedTab) {
                     0 -> HomeContent(userRole = userRole)
                     1 -> OrientationUnitScreen()
@@ -125,7 +99,7 @@ fun OrientationScreen(
     }
 }
 
-// ── Guest profile screen ──────────────────────────────────────────────────────
+// ── Guest profile screen
 @Composable
 fun GuestProfileScreen() {
     val context = LocalContext.current
@@ -142,17 +116,17 @@ fun GuestProfileScreen() {
         Spacer(Modifier.height(16.dp))
         Text(
             "You're browsing as a guest",
-            fontSize = 20.sp,
+            fontSize   = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF333333),
-            textAlign = TextAlign.Center
+            color      = Color(0xFF333333),
+            textAlign  = TextAlign.Center
         )
         Spacer(Modifier.height(8.dp))
         Text(
             "Sign in or register to access your orientation group, treasure hunt, and full profile.",
-            fontSize = 14.sp,
-            color = Color(0xFF888888),
-            textAlign = TextAlign.Center,
+            fontSize   = 14.sp,
+            color      = Color(0xFF888888),
+            textAlign  = TextAlign.Center,
             lineHeight = 20.sp
         )
         Spacer(Modifier.height(28.dp))
@@ -165,15 +139,15 @@ fun GuestProfileScreen() {
                 )
             },
             modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B0000))
+            shape    = RoundedCornerShape(14.dp),
+            colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B0000))
         ) {
             Text("Sign In / Register", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
     }
 }
 
-// ── Home content ──────────────────────────────────────────────────────────────
+// ── Home content
 @Composable
 fun HomeContent(userRole: String = "student") {
     val context  = LocalContext.current
@@ -187,33 +161,72 @@ fun HomeContent(userRole: String = "student") {
             .verticalScroll(rememberScrollState())
             .padding(bottom = 80.dp)
     ) {
-        // Hero banner
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(240.dp)
+                .height(230.dp)
         ) {
             Image(
-                painter = painterResource(id = R.drawable.campus_banner),
+                painter            = painterResource(id = R.drawable.campus_banner),
                 contentDescription = "METU NCC Campus",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+                modifier           = Modifier.fillMaxSize(),
+                contentScale       = ContentScale.Crop
             )
-            Box(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(80.dp)
-                    .align(Alignment.BottomCenter)
-                    .background(Color(0xAA8B0000))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color(0xBB000000), Color.Transparent)
+                        )
+                    )
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text("Welcome to your new life!", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Text("Let's discover the campus", color = Color.White, fontSize = 16.sp)
+                Image(
+                    painter            = painterResource(id = R.drawable.metu_logo),
+                    contentDescription = "METU Logo",
+                    modifier           = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape),
+                    contentScale       = ContentScale.Fit
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text          = "Orientation",
+                        fontSize      = 10.sp,
+                        color         = Color(0xAAFFFFFF),
+                        letterSpacing = 0.06.sp
+                    )
+                    Text(
+                        text          = "METU NCC ",
+                        fontSize      = 15.sp,
+                        fontWeight    = FontWeight.Bold,
+                        color         = Color.White,
+                        letterSpacing = (-0.2).sp
+                    )
                 }
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color(0xDD000000))
+                        )
+                    )
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+            ) {
+                Text(
+                    text          = "Welcome to your new campus life.",
+                    fontSize      = 20.sp,
+                    fontWeight    = FontWeight.Bold,
+                    color         = Color.White,
+                    letterSpacing = (-0.3).sp,
+                    lineHeight    = 26.sp
+                )
             }
         }
 
@@ -222,15 +235,17 @@ fun HomeContent(userRole: String = "student") {
             Spacer(modifier = Modifier.height(12.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
+                shape    = RoundedCornerShape(12.dp),
+                colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
             ) {
                 Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("🏅", fontSize = 20.sp)
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         "You are signed in as an Orientation Leader.",
-                        fontSize = 13.sp, color = Color(0xFF795548), fontWeight = FontWeight.Medium
+                        fontSize   = 13.sp,
+                        color      = Color(0xFF795548),
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
@@ -241,15 +256,16 @@ fun HomeContent(userRole: String = "student") {
             Spacer(modifier = Modifier.height(12.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
+                shape    = RoundedCornerShape(12.dp),
+                colors   = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
             ) {
                 Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("ℹ️", fontSize = 18.sp)
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         "You're browsing as a guest. Sign in for full access.",
-                        fontSize = 13.sp, color = Color(0xFF1565C0)
+                        fontSize = 13.sp,
+                        color    = Color(0xFF1565C0)
                     )
                 }
             }
@@ -257,18 +273,15 @@ fun HomeContent(userRole: String = "student") {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Menu cards — guest sees 2x2 grid, others see 3+2 layout
+        // Menu cards
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            modifier            = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (isGuest) {
-                // 2x2 symmetric grid for guests (no Treasure Hunt)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     MenuCard("Campus Tour", "🔍", Modifier.weight(1f)) {
-                        context.startActivity(
-                            Intent(context, CampusTourActivity::class.java)
-                        )
+                        context.startActivity(Intent(context, CampusTourActivity::class.java))
                     }
                     MenuCard("Chatbot", "💬", Modifier.weight(1f)) {
                         context.startActivity(Intent(context, ChatbotActivity::class.java).apply {
@@ -285,15 +298,11 @@ fun HomeContent(userRole: String = "student") {
                     MenuCard("Announcements", "🔔", Modifier.weight(1f)) {
                         context.startActivity(Intent(context, AnnouncementsActivity::class.java))
                     }
-
                 }
             } else {
-                // Full layout for students and leaders
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     MenuCard("Campus Tour", "🔍", Modifier.weight(1f)) {
-                        context.startActivity(
-                            Intent(context, CampusTourActivity::class.java)
-                        )
+                        context.startActivity(Intent(context, CampusTourActivity::class.java))
                     }
                     MenuCard("Chatbot", "💬", Modifier.weight(1f)) {
                         context.startActivity(Intent(context, ChatbotActivity::class.java).apply {
@@ -311,8 +320,8 @@ fun HomeContent(userRole: String = "student") {
                         })
                     }
                     MenuCard(
-                        title = if (isLeader) "Post Announcement" else "Announcements",
-                        icon = "🔔",
+                        title    = if (isLeader) "Post Announcement" else "Announcements",
+                        icon     = "🔔",
                         modifier = Modifier.weight(1f)
                     ) {
                         if (isLeader) {
@@ -328,77 +337,76 @@ fun HomeContent(userRole: String = "student") {
     }
 }
 
-// ── Bottom navigation bar ─────────────────────────────────────────────────────
+// ── Bottom navigation bar
 @Composable
 fun MainBottomBar(
-    selectedTab: Int,
+    selectedTab  : Int,
     onTabSelected: (Int) -> Unit,
-    showMyUnit: Boolean = true
+    showMyUnit   : Boolean = true
 ) {
     NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
         NavigationBarItem(
-            icon = { Text("🏠", fontSize = 24.sp) },
-            label = { Text("Home", fontSize = 11.sp) },
+            icon     = { Text("🏠", fontSize = 24.sp) },
+            label    = { Text("Home", fontSize = 11.sp) },
             selected = selectedTab == 0,
-            onClick = { onTabSelected(0) },
-            colors = NavigationBarItemDefaults.colors(
-                selectedTextColor = Color(0xFF8B0000),
+            onClick  = { onTabSelected(0) },
+            colors   = NavigationBarItemDefaults.colors(
+                selectedTextColor   = Color(0xFF8B0000),
                 unselectedIconColor = Color.Gray,
-                indicatorColor = Color.Transparent
+                indicatorColor      = Color.Transparent
             )
         )
         if (showMyUnit) {
             NavigationBarItem(
-                icon = { Text("📋", fontSize = 24.sp) },
-                label = { Text("My Unit", fontSize = 11.sp) },
+                icon     = { Text("📋", fontSize = 24.sp) },
+                label    = { Text("My Unit", fontSize = 11.sp) },
                 selected = selectedTab == 1,
-                onClick = { onTabSelected(1) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedTextColor = Color(0xFF8B0000),
+                onClick  = { onTabSelected(1) },
+                colors   = NavigationBarItemDefaults.colors(
+                    selectedTextColor   = Color(0xFF8B0000),
                     unselectedIconColor = Color.Gray,
-                    indicatorColor = Color.Transparent
+                    indicatorColor      = Color.Transparent
                 )
             )
         }
         NavigationBarItem(
-            icon = { Text("👤", fontSize = 24.sp) },
-            label = { Text("Profile", fontSize = 11.sp) },
-            // For guests: profile is tab 1. For others: tab 2.
+            icon     = { Text("👤", fontSize = 24.sp) },
+            label    = { Text("Profile", fontSize = 11.sp) },
             selected = if (showMyUnit) selectedTab == 2 else selectedTab == 1,
-            onClick = { onTabSelected(if (showMyUnit) 2 else 1) },
-            colors = NavigationBarItemDefaults.colors(
-                selectedTextColor = Color(0xFF8B0000),
+            onClick  = { onTabSelected(if (showMyUnit) 2 else 1) },
+            colors   = NavigationBarItemDefaults.colors(
+                selectedTextColor   = Color(0xFF8B0000),
                 unselectedIconColor = Color.Gray,
-                indicatorColor = Color.Transparent
+                indicatorColor      = Color.Transparent
             )
         )
     }
 }
 
-// ── Reusable menu card ────────────────────────────────────────────────────────
+// ── Reusable menu card
 @Composable
 fun MenuCard(title: String, icon: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Card(
-        onClick = onClick,
-        modifier = modifier
+        onClick   = onClick,
+        modifier  = modifier
             .height(100.dp)
             .border(1.dp, Color(0xFFEEEEEE), RoundedCornerShape(12.dp)),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape     = RoundedCornerShape(12.dp),
+        colors    = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier            = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Text(text = icon, fontSize = 32.sp)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = title,
-                fontSize = 13.sp,
+                text       = title,
+                fontSize   = 13.sp,
                 fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
+                textAlign  = TextAlign.Center,
                 lineHeight = 14.sp
             )
         }
