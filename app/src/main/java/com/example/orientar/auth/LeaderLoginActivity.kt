@@ -56,40 +56,47 @@ fun LeaderLoginScreen() {
             errorMessage = "Please fill in all fields."
             return
         }
-        isLoading    = true
+
+        isLoading = true
         errorMessage = ""
 
         auth.signInWithEmailAndPassword(email.trim(), password)
             .addOnSuccessListener { result ->
-                val uid = result.user?.uid ?: run { isLoading = false; return@addOnSuccessListener }
+                val uid = result.user?.uid ?: run {
+                    isLoading = false
+                    return@addOnSuccessListener
+                }
 
-                // Check Firestore to confirm this account has the "leader" role
-                db.collection("users").document(uid)
+                db.collection("users")
+                    .whereEqualTo("authUid", uid)
+                    .whereEqualTo("role", "leader")
+                    .limit(1)
                     .get()
-                    .addOnSuccessListener { doc ->
+                    .addOnSuccessListener { query ->
                         isLoading = false
-                        val role = doc.getString("role")
-                        if (role == "leader") {
+                        if (!query.isEmpty) {
+                            val leaderDocId = query.documents.first().id
+
                             context.startActivity(
                                 Intent(context, MainActivity::class.java).apply {
                                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                                     putExtra("USER_ROLE", "leader")
+                                    putExtra("LEADER_DOC_ID", leaderDocId)
                                 }
                             )
                         } else {
-                            // Sign out immediately — this email belongs to a student account
                             auth.signOut()
                             errorMessage = "This account is not registered as an Orientation Leader."
                         }
                     }
                     .addOnFailureListener {
-                        isLoading    = false
+                        isLoading = false
                         errorMessage = "Failed to verify account. Please try again."
                         auth.signOut()
                     }
             }
             .addOnFailureListener {
-                isLoading    = false
+                isLoading = false
                 errorMessage = "Incorrect email or password. Please try again."
             }
     }

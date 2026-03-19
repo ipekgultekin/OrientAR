@@ -2,7 +2,7 @@ package com.example.orientar.home
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
+
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -43,11 +43,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         FirebaseApp.initializeApp(this)
         val userRole = intent.getStringExtra("USER_ROLE") ?: "student"
+        val leaderDocId = intent.getStringExtra("LEADER_DOC_ID") ?: ""
         currentTab.intValue = intent.getIntExtra("OPEN_TAB", 0)
+
         setContent {
             MaterialTheme {
                 OrientationScreen(
-                    userRole    = userRole,
+                    userRole = userRole,
+                    leaderDocId = leaderDocId,
                     selectedTab = currentTab.intValue,
                     onTabChange = { currentTab.intValue = it }
                 )
@@ -66,6 +69,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun OrientationScreen(
     userRole: String = "student",
+    leaderDocId: String = "",
     selectedTab: Int = 0,
     onTabChange: (Int) -> Unit = {}
 ) {
@@ -110,13 +114,13 @@ fun OrientationScreen(
             if (isGuest) {
                 // Guest: tab 0 = Home, tab 1 = Profile
                 when (selectedTab) {
-                    0 -> HomeContent(userRole = userRole)
+                    0 -> HomeContent(userRole = userRole, leaderDocId = leaderDocId)
                     1 -> GuestProfileScreen()
                 }
             } else {
                 // Student / Leader: tab 0 = Home, tab 1 = My Unit, tab 2 = Profile
                 when (selectedTab) {
-                    0 -> HomeContent(userRole = userRole)
+                    0 -> HomeContent(userRole = userRole, leaderDocId = leaderDocId)
                     1 -> OrientationUnitScreen()
                     2 -> ProfileScreen()
                 }
@@ -175,7 +179,10 @@ fun GuestProfileScreen() {
 
 // ── Home content ──────────────────────────────────────────────────────────────
 @Composable
-fun HomeContent(userRole: String = "student") {
+fun HomeContent(
+    userRole: String = "student",
+    leaderDocId: String = ""
+) {
     val context  = LocalContext.current
     val isLeader = userRole == "leader"
     val isGuest  = userRole == "guest"
@@ -316,9 +323,18 @@ fun HomeContent(userRole: String = "student") {
                         modifier = Modifier.weight(1f)
                     ) {
                         if (isLeader) {
-                            Toast.makeText(context, "Leader announcement feature coming soon", Toast.LENGTH_SHORT).show()
+                            context.startActivity(
+                                Intent(context, AnnouncementsActivity::class.java).apply {
+                                    putExtra("USER_ROLE", userRole)
+                                    putExtra("LEADER_DOC_ID", leaderDocId)
+                                }
+                            )
                         } else {
-                            context.startActivity(Intent(context, AnnouncementsActivity::class.java))
+                            context.startActivity(
+                                Intent(context, AnnouncementsActivity::class.java).apply {
+                                    putExtra("USER_ROLE", userRole)
+                                }
+                            )
                         }
                     }
                     Spacer(modifier = Modifier.weight(1f))
