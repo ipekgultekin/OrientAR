@@ -3,6 +3,7 @@ package com.example.orientar.announcements;
 import com.example.orientar.announcements.models.FormalAnnouncement;
 import com.example.orientar.announcements.models.ThisWeekEvent;
 import com.example.orientar.announcements.models.ThisWeekResponse;
+import com.example.orientar.announcements.models.GroupAnnouncement;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 
@@ -19,6 +20,10 @@ public class AnnouncementsRepository {
     }
     public interface FormalCallback {
         void onSuccess(List<FormalAnnouncement> data);
+        void onError(String message);
+    }
+    public interface GroupCallback {
+        void onSuccess(List<GroupAnnouncement> data);
         void onError(String message);
     }
     public void fetchFormalAnnouncements(FormalCallback cb) {
@@ -95,6 +100,39 @@ public class AnnouncementsRepository {
         }
         res.events = events;
         return res;
+    }
+    public void fetchGroupAnnouncements(String groupId, GroupCallback cb) {
+        if (groupId == null || groupId.trim().isEmpty()) {
+            cb.onSuccess(new ArrayList<>());
+            return;
+        }
+
+        FirebaseFirestore.getInstance()
+                .collection("group_announcements")
+                .whereEqualTo("isActive", true)
+                .whereEqualTo("groupId", groupId)
+                .get()
+                .addOnSuccessListener(querySnapshot -> {
+                    List<GroupAnnouncement> items = new ArrayList<>();
+
+                    for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
+                        GroupAnnouncement item = new GroupAnnouncement();
+                        item.id = doc.getId();
+                        item.title = safeStr(doc.get("title"));
+                        item.message = safeStr(doc.get("message"));
+                        item.groupId = safeStr(doc.get("groupId"));
+                        item.leaderId = safeStr(doc.get("leaderId"));
+                        item.leaderName = safeStr(doc.get("leaderName"));
+                        item.isActive = Boolean.TRUE.equals(doc.getBoolean("isActive"));
+                        item.createdAt = doc.getTimestamp("createdAt");
+                        items.add(item);
+                    }
+
+                    cb.onSuccess(items);
+                })
+                .addOnFailureListener(e -> cb.onError(
+                        e.getMessage() != null ? e.getMessage() : "Unknown error"
+                ));
     }
 
     private String safeStr(Object o) {
