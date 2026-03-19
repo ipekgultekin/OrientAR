@@ -43,12 +43,6 @@ data class SocietyDetailUiModel(
     val academicAdvisor: String = ""
 )
 
-data class SocietyDetailUiModel(
-    val id: String,
-    val name: String,
-    val description: String
-)
-
 class SocietyDetailActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
