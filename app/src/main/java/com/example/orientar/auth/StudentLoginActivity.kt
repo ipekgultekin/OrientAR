@@ -59,7 +59,7 @@ fun StudentLoginScreen() {
     // Data fetched from Firestore after code verification
     var verifiedGroupId       by remember { mutableStateOf("") }
     var verifiedStudentNumber by remember { mutableStateOf("") }
-
+    var verifiedEmail         by remember { mutableStateOf("") }
     // ── Login state ──────────────────────────────────────────────────────────
     var loginEmail           by remember { mutableStateOf("") }
     var loginPassword        by remember { mutableStateOf("") }
@@ -91,30 +91,49 @@ fun StudentLoginScreen() {
             invitationError = "Please enter your invitation code."
             return
         }
+
         invitationLoading = true
-        invitationError   = ""
+        invitationError = ""
 
         db.collection("invitation_codes")
             .document(invitationCode.trim().uppercase())
             .get()
             .addOnSuccessListener { doc ->
                 invitationLoading = false
+
                 when {
-                    !doc.exists() ->
+                    !doc.exists() -> {
                         invitationError = "Invalid invitation code. Please check and try again."
-                    doc.getBoolean("used") == true ->
+                    }
+
+                    doc.getBoolean("used") == true -> {
                         invitationError = "This invitation code has already been used."
+                    }
+
                     else -> {
-                        // Cache group and student number attached to this code
-                        verifiedGroupId       = doc.getString("groupId")       ?: ""
-                        verifiedStudentNumber = doc.getString("studentNumber") ?: ""
-                        currentScreen         = StudentScreen.REGISTER
+                        val codeEmail = (doc.getString("email") ?: "").trim().lowercase()
+                        val codeGroupId = doc.getString("groupId") ?: ""
+                        val codeStudentNumber = doc.getString("studentNumber") ?: ""
+
+                        if (codeEmail.isBlank()) {
+                            invitationError = "This invitation code is not linked to a valid student record."
+                            return@addOnSuccessListener
+                        }
+
+                        verifiedEmail = codeEmail
+                        verifiedGroupId = codeGroupId
+                        verifiedStudentNumber = codeStudentNumber
+
+                        // auto-fill register form with coordinator-provided email
+                        regEmail = codeEmail
+                        regError = ""
+                        currentScreen = StudentScreen.REGISTER
                     }
                 }
             }
-            .addOnFailureListener { e ->
+            .addOnFailureListener {
                 invitationLoading = false
-                invitationError   = "Connection error. Please try again."
+                invitationError = "Connection error. Please try again."
             }
     }
 
@@ -148,77 +167,175 @@ fun StudentLoginScreen() {
     //       → mark code as used → save user doc in Firestore → add to group
     fun register() {
         when {
-            regFirstName.trim().isEmpty() -> { regError = "Please enter your first name.";     return }
-            regLastName.trim().isEmpty()  -> { regError = "Please enter your last name.";      return }
-            regEmail.trim().isEmpty()     -> { regError = "Please enter your email address.";  return }
+            regFirstName.trim().isEmpty() -> {
+                regError = "Please enter your first name."
+                return
+            }
+            regLastName.trim().isEmpty() -> {
+                regError = "Please enter your last name."
+                return
+            }
+            regEmail.trim().isEmpty() -> {
+                regError = "Please enter your email address."
+                return
+            }
             !regEmail.trim().endsWith("@metu.edu.tr") -> {
-                // Only METU institutional email addresses are accepted
                 regError = "You must use your METU email address (@metu.edu.tr)."
                 return
             }
-            else -> validatePassword(regPassword)?.let { regError = it; return }
+            else -> validatePassword(regPassword)?.let {
+                regError = it
+                return
+            }
         }
 
         regLoading = true
-        regError   = ""
+        regError = ""
 
-        // Create Firebase Auth account
-        auth.createUserWithEmailAndPassword(regEmail.trim(), regPassword)
-            .addOnSuccessListener { result ->
-                val uid = result.user?.uid ?: run { regLoading = false; return@addOnSuccessListener }
+        val normalizedEmail = regEmail.trim().lowercase()
+        val normalizedCode = invitationCode.trim().uppercase()
 
-                // Mark invitation code as used so it cannot be reused
-                db.collection("invitation_codes")
-                    .document(invitationCode.trim().uppercase())
-                    .update(
-                        mapOf(
-                            "used"       to true,
-                            "usedByUid"  to uid,
-                            "usedAt"     to FieldValue.serverTimestamp()
-                        )
-                    )
+        // First check invitation code again and make sure it belongs to this email
+        db.collection("invitation_codes")
+            .document(normalizedCode)
+            .get()
+            .addOnSuccessListener { inviteDoc ->
+                if (!inviteDoc.exists()) {
+                    regLoading = false
+                    regError = "Invalid invitation code."
+                    return@addOnSuccessListener
+                }
 
-                // Save student profile in Firestore
-                val userDoc = hashMapOf(
-                    "firstName"     to regFirstName.trim(),
-                    "lastName"      to regLastName.trim(),
-                    "email"         to regEmail.trim(),
-                    "role"          to "student",
-                    "studentNumber" to verifiedStudentNumber,
-                    "groupId"       to verifiedGroupId,
-                    "createdAt"     to FieldValue.serverTimestamp()
-                )
+                if (inviteDoc.getBoolean("used") == true) {
+                    regLoading = false
+                    regError = "This invitation code has already been used."
+                    return@addOnSuccessListener
+                }
 
-                db.collection("users").document(uid)
-                    .set(userDoc)
-                    .addOnSuccessListener {
-                        regLoading = false
+                val inviteEmail = (inviteDoc.getString("email") ?: "").trim().lowercase()
+                val inviteGroupId = inviteDoc.getString("groupId") ?: ""
+                val inviteStudentNumber = inviteDoc.getString("studentNumber") ?: ""
 
-                        // Add this student's uid to the group's members array
-                        if (verifiedGroupId.isNotEmpty()) {
-                            db.collection("orientation_groups").document(verifiedGroupId)
-                                .update("members", FieldValue.arrayUnion(uid))
+                if (inviteEmail.isBlank()) {
+                    regLoading = false
+                    regError = "This invitation code is not linked to a student account."
+                    return@addOnSuccessListener
+                }
+
+                if (inviteEmail != normalizedEmail) {
+                    regLoading = false
+                    regError = "This email does not match the invitation record."
+                    return@addOnSuccessListener
+                }
+
+                // Now check if this student was already created by the coordinator in Firestore
+                db.collection("users")
+                    .whereEqualTo("email", normalizedEmail)
+                    .whereEqualTo("role", "student")
+                    .limit(1)
+                    .get()
+                    .addOnSuccessListener { userQuery ->
+                        if (userQuery.isEmpty) {
+                            regLoading = false
+                            regError = "You are not registered by the coordinator."
+                            return@addOnSuccessListener
                         }
 
-                        // Navigate to main app, clear back stack
-                        context.startActivity(
-                            Intent(context, MainActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        val existingUserDoc = userQuery.documents.first()
+                        val existingUserDocId = existingUserDoc.id
+
+                        // Optional consistency check: student number should match too
+                        val existingStudentNumber =
+                            (existingUserDoc.getString("studentNumber") ?: "").trim()
+
+                        if (
+                            inviteStudentNumber.isNotBlank() &&
+                            existingStudentNumber.isNotBlank() &&
+                            inviteStudentNumber != existingStudentNumber
+                        ) {
+                            regLoading = false
+                            regError = "Invitation information does not match your coordinator record."
+                            return@addOnSuccessListener
+                        }
+
+                        // Create Firebase Auth account only after confirming panel-created Firestore user exists
+                        auth.createUserWithEmailAndPassword(normalizedEmail, regPassword)
+                            .addOnSuccessListener { result ->
+                                val uid = result.user?.uid
+                                if (uid.isNullOrBlank()) {
+                                    regLoading = false
+                                    regError = "Registration failed. Please try again."
+                                    return@addOnSuccessListener
+                                }
+
+                                // Mark invite as used
+                                db.collection("invitation_codes")
+                                    .document(normalizedCode)
+                                    .update(
+                                        mapOf(
+                                            "used" to true,
+                                            "usedByUid" to uid,
+                                            "usedAt" to FieldValue.serverTimestamp()
+                                        )
+                                    )
+
+                                // Update existing Firestore student record created by panel
+                                val updates = hashMapOf<String, Any>(
+                                    "firstName" to regFirstName.trim(),
+                                    "lastName" to regLastName.trim(),
+                                    "email" to normalizedEmail,
+                                    "role" to "student",
+                                    "studentNumber" to inviteStudentNumber,
+                                    "groupId" to inviteGroupId,
+                                    "credentialsSent" to true,
+                                    "mustChangePassword" to false,
+                                    "authUid" to uid,
+                                    "updatedAt" to FieldValue.serverTimestamp()
+                                )
+
+                                db.collection("users")
+                                    .document(existingUserDocId)
+                                    .update(updates)
+                                    .addOnSuccessListener {
+                                        regLoading = false
+
+                                        // Keep group membership consistent with panel-side user doc id
+                                        if (inviteGroupId.isNotEmpty()) {
+                                            db.collection("orientation_groups")
+                                                .document(inviteGroupId)
+                                                .update("members", FieldValue.arrayUnion(existingUserDocId))
+                                        }
+
+                                        context.startActivity(
+                                            Intent(context, MainActivity::class.java).apply {
+                                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                                        Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                            }
+                                        )
+                                    }
+                                    .addOnFailureListener {
+                                        regLoading = false
+                                        regError = "Failed to update profile. Please try again."
+                                    }
                             }
-                        )
+                            .addOnFailureListener { e ->
+                                regLoading = false
+                                regError = when {
+                                    e.message?.contains("email address is already in use", ignoreCase = true) == true ->
+                                        "This email is already registered. Please sign in instead."
+                                    else ->
+                                        "Registration failed. Please try again."
+                                }
+                            }
                     }
-                    .addOnFailureListener { e ->
+                    .addOnFailureListener {
                         regLoading = false
-                        regError   = "Failed to save profile. Please try again."
+                        regError = "Failed to verify coordinator record. Please try again."
                     }
             }
-            .addOnFailureListener { e ->
+            .addOnFailureListener {
                 regLoading = false
-                regError = when {
-                    e.message?.contains("email address is already in use") == true ->
-                        "This email is already registered. Please sign in instead."
-                    else -> "Registration failed. Please try again."
-                }
+                regError = "Connection error. Please try again."
             }
     }
 
@@ -442,11 +559,20 @@ fun StudentLoginScreen() {
 
                             // METU email — must end with @metu.edu.tr
                             OutlinedTextField(
-                                value = regEmail, onValueChange = { regEmail = it; regError = "" },
-                                label = { Text("METU Email") }, placeholder = { Text("e12345678@metu.edu.tr") },
-                                singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF8B0000), focusedLabelColor = Color(0xFF8B0000), cursorColor = Color(0xFF8B0000))
+                                value = regEmail,
+                                onValueChange = { },
+                                label = { Text("METU Email") },
+                                placeholder = { Text("e12345678@metu.edu.tr") },
+                                singleLine = true,
+                                readOnly = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF8B0000),
+                                    focusedLabelColor = Color(0xFF8B0000),
+                                    cursorColor = Color(0xFF8B0000)
+                                )
                             )
                             Spacer(Modifier.height(12.dp))
 
