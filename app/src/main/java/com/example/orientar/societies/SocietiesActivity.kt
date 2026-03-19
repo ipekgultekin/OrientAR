@@ -27,15 +27,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orientar.R
 import com.example.orientar.home.MainActivity
+import com.google.firebase.firestore.FirebaseFirestore
 
 private val MetuRed = Color(0xFF8B0000)
 
-data class SocietyUiModel(val id: String, val name: String, val logoEmoji: String)
+data class SocietyUiModel(
+    val id: String,
+    val name: String,
+    val description: String
+)
 
 class SocietiesActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val userRole = intent.getStringExtra("USER_ROLE") ?: "student"
+
         setContent {
             MaterialTheme {
                 SocietiesScreen(userRole = userRole)
@@ -51,11 +57,23 @@ fun SocietiesScreen(userRole: String = "student") {
     val activity = context as? Activity
     var searchQuery by remember { mutableStateOf("") }
 
-    val societies = listOf(
-        SocietyUiModel("1", "ACM Student Chapter", "💻"),
-        SocietyUiModel("2", "Photography Society", "📷"),
-        SocietyUiModel("3", "Dance Club", "💃")
-    )
+    var societies by remember { mutableStateOf<List<SocietyUiModel>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        fetchSocieties(
+            onSuccess = { fetched ->
+                societies = fetched
+                isLoading = false
+            },
+            onError = { error ->
+                errorMessage = error
+                isLoading = false
+            }
+        )
+    }
+
     val filteredSocieties = societies.filter {
         it.name.contains(searchQuery, ignoreCase = true)
     }
@@ -65,7 +83,11 @@ fun SocietiesScreen(userRole: String = "student") {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = { activity?.finish() }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = MetuRed)
+                        Icon(
+                            Icons.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MetuRed
+                        )
                     }
                 },
                 title = {
@@ -76,8 +98,12 @@ fun SocietiesScreen(userRole: String = "student") {
                             modifier = Modifier.size(36.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text("METU NCC ORIENTATION", fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold, color = MetuRed)
+                        Text(
+                            "METU NCC ORIENTATION",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MetuRed
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -93,50 +119,149 @@ fun SocietiesScreen(userRole: String = "student") {
                 .padding(16.dp)
                 .padding(bottom = 80.dp)
         ) {
-            Text("Student Societies", fontSize = 22.sp,
-                fontWeight = FontWeight.Bold, color = MetuRed)
+            Text(
+                "Student Societies",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = MetuRed
+            )
+
             Spacer(modifier = Modifier.height(12.dp))
+
             OutlinedTextField(
-                value = searchQuery, onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
                 label = { Text("Search societies") },
                 placeholder = { Text("Type a society name...") }
             )
+
             Spacer(modifier = Modifier.height(12.dp))
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(filteredSocieties) { society ->
-                    SocietyCard(society = society, onDetailsClick = {
-                        val intent = Intent(context, SocietyDetailActivity::class.java).apply {
-                            putExtra("society_id", society.id)
-                            putExtra("society_name", society.name)
-                            putExtra("society_emoji", society.logoEmoji)
+
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = MetuRed)
+                    }
+                }
+
+                errorMessage != null -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = errorMessage ?: "An unexpected error occurred.",
+                            color = Color.Red,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                filteredSocieties.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (searchQuery.isBlank())
+                                "No societies found."
+                            else
+                                "No matching society found.",
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(filteredSocieties) { society ->
+                            SocietyCard(
+                                society = society,
+                                onDetailsClick = {
+                                    val intent = Intent(context, SocietyDetailActivity::class.java).apply {
+                                        putExtra("society_id", society.id)
+                                        putExtra("USER_ROLE", userRole)
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            )
                         }
-                        context.startActivity(intent)
-                    })
+                    }
                 }
             }
         }
     }
 }
 
+private fun fetchSocieties(
+    onSuccess: (List<SocietyUiModel>) -> Unit,
+    onError: (String) -> Unit
+) {
+    FirebaseFirestore.getInstance()
+        .collection("student_societies")
+        .get()
+        .addOnSuccessListener { result ->
+            val societies = result.documents.map { doc ->
+                val details = doc.get("details") as? Map<*, *>
+                val name =
+                    details?.get("student association name")?.toString()
+                        ?: doc.getString("name")
+                        ?: "Unnamed Society"
+
+                val description = doc.getString("description").orEmpty()
+
+                SocietyUiModel(
+                    id = doc.id,
+                    name = name,
+                    description = description
+                )
+            }.sortedBy { it.name.lowercase() }
+
+            onSuccess(societies)
+        }
+        .addOnFailureListener { exception ->
+            onError(exception.localizedMessage ?: "Failed to load societies.")
+        }
+}
+
 @Composable
-fun SocietyCard(society: SocietyUiModel, onDetailsClick: () -> Unit) {
+fun SocietyCard(
+    society: SocietyUiModel,
+    onDetailsClick: () -> Unit
+) {
     Card(
-        modifier = Modifier.fillMaxWidth().border(2.dp, MetuRed, RoundedCornerShape(14.dp)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(2.dp, MetuRed, RoundedCornerShape(14.dp)),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = society.logoEmoji, fontSize = 42.sp)
+                Text(text = "🏛️", fontSize = 34.sp)
                 Spacer(modifier = Modifier.width(12.dp))
-                Text(text = society.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = society.name,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
+
             Spacer(modifier = Modifier.height(10.dp))
-            TextButton(onClick = onDetailsClick, contentPadding = PaddingValues(0.dp)) {
+
+            TextButton(
+                onClick = onDetailsClick,
+                contentPadding = PaddingValues(0.dp)
+            ) {
                 Text("Get details", color = MetuRed)
             }
         }
@@ -162,15 +287,24 @@ fun SocietiesBottomBar(userRole: String = "student") {
                 )
             },
             colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray,
+                unselectedIconColor = Color.Gray,
+                unselectedTextColor = Color.Gray,
                 indicatorColor = Color.Transparent
             )
         )
+
         if (!isGuest) {
             NavigationBarItem(
                 icon = { Text("📋", fontSize = 24.sp) },
-                label = { Text("My Unit", fontSize = 10.sp, maxLines = 2,
-                    textAlign = TextAlign.Center, lineHeight = 11.sp) },
+                label = {
+                    Text(
+                        "My Unit",
+                        fontSize = 10.sp,
+                        maxLines = 2,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 11.sp
+                    )
+                },
                 selected = false,
                 onClick = {
                     context.startActivity(
@@ -182,11 +316,13 @@ fun SocietiesBottomBar(userRole: String = "student") {
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray,
+                    unselectedIconColor = Color.Gray,
+                    unselectedTextColor = Color.Gray,
                     indicatorColor = Color.Transparent
                 )
             )
         }
+
         NavigationBarItem(
             icon = { Text("👤", fontSize = 24.sp) },
             label = { Text("Profile", fontSize = 11.sp, maxLines = 1) },
@@ -201,7 +337,8 @@ fun SocietiesBottomBar(userRole: String = "student") {
                 )
             },
             colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray,
+                unselectedIconColor = Color.Gray,
+                unselectedTextColor = Color.Gray,
                 indicatorColor = Color.Transparent
             )
         )
