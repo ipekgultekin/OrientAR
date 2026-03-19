@@ -152,7 +152,7 @@ fun ChatbotScreen(userRole: String = "student") {
                                 try {
                                     val response = ApiClient.api.askQuestion(ChatRequest(question))
                                     if (messages.isNotEmpty()) messages.removeAt(messages.size - 1)
-                                    messages.add(response.message to false)
+                                    messages.add(response.answer to false)
                                 } catch (e: Exception) {
                                     if (messages.isNotEmpty()) messages.removeAt(messages.size - 1)
                                     messages.add("Sorry, I couldn't reach the server." to false)

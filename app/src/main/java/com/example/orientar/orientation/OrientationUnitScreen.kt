@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,7 +14,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,119 +23,352 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 
+private val MetuRed = Color(0xFF8B0000)
+
+data class GroupMember(
+    val uid: String = "",
+    val firstName: String = "",
+    val lastName: String = "",
+    val email: String = "",
+    val phone: String = ""
+)
+
+data class OrientationGroup(
+    val id: String = "",
+    val name: String = "",
+    val leaderId: String = "",
+    val leaderName: String = "",
+    val leaderEmail: String = "",
+    val leaderPhone: String = "",
+    val whatsappLink: String = "",
+    val members: List<GroupMember> = emptyList()
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrientationUnitScreen() {
-    val metuRed = Color(0xFF8B0000)
     val context = LocalContext.current
+    val currentUid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+    val db = FirebaseFirestore.getInstance()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.White)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    var role by remember { mutableStateOf("student") }
+    var group by remember { mutableStateOf<OrientationGroup?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var notAssigned by remember { mutableStateOf(false) }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = metuRed),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("Unit: Northern Shields", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Text("Group: G-14", color = Color.White.copy(alpha = 0.8f), fontSize = 16.sp)
+    LaunchedEffect(Unit) {
+        db.collection("users").document(currentUid).get()
+            .addOnSuccessListener { userDoc ->
+                role = userDoc.getString("role") ?: "student"
+                val groupId = userDoc.getString("groupId") ?: ""
+                if (groupId.isEmpty()) { notAssigned = true; loading = false; return@addOnSuccessListener }
+
+                db.collection("orientation_groups").document(groupId).get()
+                    .addOnSuccessListener { groupDoc ->
+                        val leaderId = groupDoc.getString("leaderId") ?: ""
+                        val memberUids = groupDoc.get("members") as? List<String> ?: emptyList()
+                        val whatsappLink = groupDoc.getString("whatsappLink") ?: ""
+                        val groupName = groupDoc.getString("name") ?: ""
+
+                        if (memberUids.isEmpty()) {
+                            group = OrientationGroup(id = groupId, name = groupName, leaderId = leaderId, whatsappLink = whatsappLink)
+                            loading = false; return@addOnSuccessListener
+                        }
+
+                        val memberList = mutableListOf<GroupMember>()
+                        var fetched = 0
+                        var leaderName = ""; var leaderEmail = ""; var leaderPhone = ""
+
+                        fun finalize() {
+                            group = OrientationGroup(
+                                id = groupId, name = groupName, leaderId = leaderId,
+                                leaderName = leaderName, leaderEmail = leaderEmail, leaderPhone = leaderPhone,
+                                whatsappLink = whatsappLink,
+                                members = memberList.filter { it.uid != leaderId }
+                            )
+                            loading = false
+                        }
+
+                        fun fetchMembers() {
+                            memberUids.forEach { uid ->
+                                db.collection("users").document(uid).get()
+                                    .addOnSuccessListener { mDoc ->
+                                        memberList.add(GroupMember(uid = uid,
+                                            firstName = mDoc.getString("firstName") ?: "",
+                                            lastName = mDoc.getString("lastName") ?: "",
+                                            email = mDoc.getString("email") ?: "",
+                                            phone = mDoc.getString("phone") ?: ""))
+                                        fetched++; if (fetched == memberUids.size) finalize()
+                                    }
+                                    .addOnFailureListener { fetched++; if (fetched == memberUids.size) finalize() }
+                            }
+                        }
+
+                        if (leaderId.isNotEmpty()) {
+                            db.collection("users").document(leaderId).get()
+                                .addOnSuccessListener { ld ->
+                                    leaderName = "${ld.getString("firstName") ?: ""} ${ld.getString("lastName") ?: ""}".trim()
+                                    leaderEmail = ld.getString("email") ?: ""
+                                    leaderPhone = ld.getString("phone") ?: ""
+                                    fetchMembers()
+                                }
+                                .addOnFailureListener { fetchMembers() }
+                        } else fetchMembers()
+                    }
+                    .addOnFailureListener { loading = false }
             }
+            .addOnFailureListener { loading = false }
+    }
+
+    when {
+        loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = MetuRed)
         }
+        notAssigned -> NotAssignedView()
+        group != null -> if (role == "leader") LeaderUnitView(group = group!!, db = db)
+        else StudentUnitView(group = group!!)
+    }
+}
 
-        Spacer(modifier = Modifier.height(24.dp))
+// ── NOT ASSIGNED ──────────────────────────────────────────────────────────────
+@Composable
+fun NotAssignedView() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+            Text("👥", fontSize = 56.sp)
+            Spacer(Modifier.height(16.dp))
+            Text("Not assigned to a group yet", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.Gray, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(8.dp))
+            Text("Your coordinator will assign you soon.", fontSize = 14.sp, color = Color.LightGray, textAlign = TextAlign.Center)
+        }
+    }
+}
 
+// ── STUDENT VIEW with tabs
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun StudentUnitView(group: OrientationGroup) {
+    var selectedTab by remember { mutableIntStateOf(0) }
+
+    Column(Modifier.fillMaxSize().background(Color(0xFFF5F5F5))) {
+        // Group name header
         Box(
-            modifier = Modifier
-                .size(120.dp)
-                .clip(CircleShape)
-                .background(metuRed.copy(alpha = 0.1f))
-                .border(3.dp, metuRed, CircleShape),
+            Modifier.fillMaxWidth().background(MetuRed).padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(60.dp), tint = metuRed)
+            Text(group.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text("Orientation Leader", color = metuRed, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-        Text("İpek Gültekin", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            "Contact Information",
-            modifier = Modifier.align(Alignment.Start).padding(start = 4.dp, bottom = 8.dp),
-            fontWeight = FontWeight.Bold,
-            color = Color.DarkGray
-        )
-
-        ContactInfoItem(
-            icon = Icons.Default.Phone,
-            label = "TRNC Phone",
-            value = "+90 533 123 45 67",
-            onClick = {
-                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:+905331234567"))
-                context.startActivity(intent)
+        // Tab row
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = Color.White,
+            contentColor = MetuRed,
+            indicator = { tabPositions ->
+                TabRowDefaults.Indicator(
+                    Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                    color = MetuRed
+                )
             }
-        )
+        ) {
+            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = {
+                Text("My Leader", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal)
+            })
+            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = {
+                Text("My Group", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal)
+            })
+        }
 
-        ContactInfoItem(
-            icon = Icons.Default.Send, // WhatsApp icon
-            label = "WhatsApp",
-            value = "Message on WhatsApp",
-            onClick = {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/905331234567"))
-                context.startActivity(intent)
-            }
-        )
+        when (selectedTab) {
+            0 -> LeaderTab(group = group)
+            1 -> GroupTab(members = group.members)
+        }
+    }
+}
 
-        ContactInfoItem(
-            icon = Icons.Default.Email,
-            label = "Email Address",
-            value = "ipek.gultekin@metu.edu.tr",
-            onClick = {
-                val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:ipek.gultekin@metu.edu.tr"))
-                context.startActivity(intent)
+@Composable
+fun LeaderTab(group: OrientationGroup) {
+    val context = LocalContext.current
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(12.dp))
+
+        // Avatar
+        Box(
+            Modifier.size(90.dp).clip(CircleShape)
+                .background(MetuRed.copy(alpha = 0.1f)).border(2.dp, MetuRed, CircleShape),
+            contentAlignment = Alignment.Center
+        ) { Text("⭐", fontSize = 40.sp) }
+
+        Spacer(Modifier.height(12.dp))
+        Text(group.leaderName.ifEmpty { "—" }, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text("Orientation Leader", fontSize = 13.sp, color = MetuRed, fontWeight = FontWeight.Medium)
+
+        Spacer(Modifier.height(28.dp))
+
+        if (group.leaderPhone.isEmpty() && group.leaderEmail.isEmpty() && group.whatsappLink.isEmpty()) {
+            Text("Contact information not added yet.", fontSize = 14.sp, color = Color.Gray, textAlign = TextAlign.Center)
+        } else {
+            Text("Contact", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.DarkGray, modifier = Modifier.align(Alignment.Start))
+            Spacer(Modifier.height(10.dp))
+
+            if (group.leaderPhone.isNotEmpty()) {
+                val cleaned = group.leaderPhone.replace(Regex("[^0-9+]"), "")
+                ContactRow(icon = Icons.Default.Send, label = "WhatsApp", value = "Message on WhatsApp") {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$cleaned")))
+                }
+                Spacer(Modifier.height(8.dp))
+                ContactRow(icon = Icons.Default.Phone, label = "Phone", value = group.leaderPhone) {
+                    context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${group.leaderPhone}")))
+                }
+                Spacer(Modifier.height(8.dp))
             }
-        )
+
+            if (group.leaderEmail.isNotEmpty()) {
+                ContactRow(icon = Icons.Default.Email, label = "Email", value = group.leaderEmail) {
+                    context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${group.leaderEmail}")))
+                }
+            }
+
+            if (group.whatsappLink.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                ContactRow(
+                    icon = Icons.Default.People,
+                    label = "WhatsApp Group",
+                    value = "Join Group Chat"
+                ) {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(group.whatsappLink)))
+                }
+
+            }
+        }
+    }
+}
+
+@Composable
+fun GroupTab(members: List<GroupMember>) {
+    if (members.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No members yet.", color = Color.Gray)
+        }
+        return
+    }
+    LazyColumn(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            Text("${members.size} members", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
+        }
+        items(members) { member ->
+            MemberCard(member = member, showContact = true)
+        }
+    }
+}
+
+// ── LEADER VIEW
+@Composable
+fun LeaderUnitView(group: OrientationGroup, db: FirebaseFirestore) {
+    if (group.members.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+                Text("👥", fontSize = 48.sp)
+                Spacer(Modifier.height(12.dp))
+                Text("No members assigned yet.", fontSize = 16.sp, color = Color.Gray, textAlign = TextAlign.Center)
+            }
+        }
+        return
+    }
+
+    Column(Modifier.fillMaxSize().background(Color(0xFFF5F5F5))) {
+        Box(Modifier.fillMaxWidth().background(MetuRed).padding(16.dp), contentAlignment = Alignment.Center) {
+            Text(group.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+        LazyColumn(
+            Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                Text("${group.members.size} members", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
+            }
+            items(group.members) { member ->
+                MemberCard(member = member, showContact = true)
+            }
+        }
+    }
+}
+
+// ── SHARED COMPONENTS
+@Composable
+fun MemberCard(member: GroupMember, showContact: Boolean) {
+    val context = LocalContext.current
+    val fullName = "${member.firstName} ${member.lastName}".trim()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(1.dp)
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(42.dp).clip(CircleShape).background(MetuRed.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (member.firstName.isNotEmpty()) member.firstName.first().toString() else "?",
+                    fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MetuRed
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(fullName.ifEmpty { "—" }, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                if (showContact) {
+                    Text(member.email, fontSize = 12.sp, color = Color.Gray)
+                    if (member.phone.isNotEmpty())
+                        Text(member.phone, fontSize = 12.sp, color = MetuRed)
+                }
+            }
+            if (showContact && member.email.isNotEmpty()) {
+                IconButton(onClick = {
+                    context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${member.email}")))
+                }) {
+                    Icon(Icons.Default.Email, contentDescription = null, tint = MetuRed, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ContactInfoItem(icon: ImageVector, label: String, value: String, onClick: () -> Unit) {
+fun ContactRow(icon: ImageVector, label: String, value: String, onClick: () -> Unit) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(12.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        onClick = onClick
+        modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFFEEEEEE), RoundedCornerShape(12.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF9F9F9)),
+        onClick = onClick, shape = RoundedCornerShape(12.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, contentDescription = null, tint = Color(0xFF8B0000), modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(label, fontSize = 12.sp, color = Color.Gray)
-                Text(value, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = MetuRed, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(label, fontSize = 11.sp, color = Color.Gray)
+                Text(value, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
-            Spacer(modifier = Modifier.weight(1f))
-            Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(16.dp))
         }
     }
 }
+
+@Suppress("UNUSED_PARAMETER")
+fun tabIndicatorOffset(tabPosition: androidx.compose.material3.TabPosition): androidx.compose.ui.Modifier =
+    androidx.compose.ui.Modifier
