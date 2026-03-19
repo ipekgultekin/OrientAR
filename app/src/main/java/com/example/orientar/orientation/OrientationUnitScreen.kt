@@ -36,7 +36,8 @@ data class GroupMember(
     val firstName: String = "",
     val lastName: String = "",
     val email: String = "",
-    val phone: String = ""
+    val phone: String = "",
+    val sharePhone: Boolean = false
 )
 
 data class OrientationGroup(
@@ -53,7 +54,6 @@ data class OrientationGroup(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrientationUnitScreen() {
-    val context = LocalContext.current
     val currentUid = FirebaseAuth.getInstance().currentUser?.uid ?: return
     val db = FirebaseFirestore.getInstance()
 
@@ -63,13 +63,14 @@ fun OrientationUnitScreen() {
     var notAssigned by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        db.collection("users").document(currentUid).get()
-            .addOnSuccessListener { userDoc ->
-                role = userDoc.getString("role") ?: "student"
-                val groupId = userDoc.getString("groupId") ?: ""
-                if (groupId.isEmpty()) { notAssigned = true; loading = false; return@addOnSuccessListener }
 
-                db.collection("orientation_groups").document(groupId).get()
+        fun processUserDoc(userDoc: com.google.firebase.firestore.DocumentSnapshot) {
+            role = userDoc.getString("role") ?: "student"
+            val groupId = userDoc.getString("groupId") ?: ""
+            android.util.Log.d("UNIT_DEBUG", "role=$role groupId='$groupId' docId=${userDoc.id}")
+
+            fun loadGroup(gId: String) {
+                db.collection("orientation_groups").document(gId).get()
                     .addOnSuccessListener { groupDoc ->
                         val leaderId = groupDoc.getString("leaderId") ?: ""
                         val memberUids = groupDoc.get("members") as? List<String> ?: emptyList()
@@ -77,19 +78,25 @@ fun OrientationUnitScreen() {
                         val groupName = groupDoc.getString("name") ?: ""
 
                         if (memberUids.isEmpty()) {
-                            group = OrientationGroup(id = groupId, name = groupName, leaderId = leaderId, whatsappLink = whatsappLink)
-                            loading = false; return@addOnSuccessListener
+                            group = OrientationGroup(
+                                id = gId, name = groupName,
+                                leaderId = leaderId, whatsappLink = whatsappLink
+                            )
+                            loading = false
+                            return@addOnSuccessListener
                         }
 
                         val memberList = mutableListOf<GroupMember>()
                         var fetched = 0
-                        var leaderName = ""; var leaderEmail = ""; var leaderPhone = ""
+                        var leaderName = ""
+                        var leaderEmail = ""
+                        var leaderPhone = ""
 
                         fun finalize() {
                             group = OrientationGroup(
-                                id = groupId, name = groupName, leaderId = leaderId,
-                                leaderName = leaderName, leaderEmail = leaderEmail, leaderPhone = leaderPhone,
-                                whatsappLink = whatsappLink,
+                                id = gId, name = groupName, leaderId = leaderId,
+                                leaderName = leaderName, leaderEmail = leaderEmail,
+                                leaderPhone = leaderPhone, whatsappLink = whatsappLink,
                                 members = memberList.filter { it.uid != leaderId }
                             )
                             loading = false
@@ -99,14 +106,23 @@ fun OrientationUnitScreen() {
                             memberUids.forEach { uid ->
                                 db.collection("users").document(uid).get()
                                     .addOnSuccessListener { mDoc ->
-                                        memberList.add(GroupMember(uid = uid,
-                                            firstName = mDoc.getString("firstName") ?: "",
-                                            lastName = mDoc.getString("lastName") ?: "",
-                                            email = mDoc.getString("email") ?: "",
-                                            phone = mDoc.getString("phone") ?: ""))
-                                        fetched++; if (fetched == memberUids.size) finalize()
+                                        memberList.add(
+                                            GroupMember(
+                                                uid = uid,
+                                                firstName = mDoc.getString("firstName") ?: "",
+                                                lastName = mDoc.getString("lastName") ?: "",
+                                                email = mDoc.getString("email") ?: "",
+                                                phone = mDoc.getString("phone") ?: "",
+                                                sharePhone = mDoc.getBoolean("sharePhone") ?: false
+                                            )
+                                        )
+                                        fetched++
+                                        if (fetched == memberUids.size) finalize()
                                     }
-                                    .addOnFailureListener { fetched++; if (fetched == memberUids.size) finalize() }
+                                    .addOnFailureListener {
+                                        fetched++
+                                        if (fetched == memberUids.size) finalize()
+                                    }
                             }
                         }
 
@@ -119,45 +135,111 @@ fun OrientationUnitScreen() {
                                     fetchMembers()
                                 }
                                 .addOnFailureListener { fetchMembers() }
-                        } else fetchMembers()
+                        } else {
+                            fetchMembers()
+                        }
                     }
                     .addOnFailureListener { loading = false }
+            }
+
+            // Leaders may not have groupId — find by leaderId field (using doc ID not auth UID)
+            val leaderDocId = userDoc.id
+            if (groupId.isEmpty() && role == "leader") {
+                db.collection("orientation_groups")
+                    .whereEqualTo("leaderId", leaderDocId)
+                    .limit(1)
+                    .get()
+                    .addOnSuccessListener { snap ->
+                        if (snap.isEmpty) {
+                            notAssigned = true
+                            loading = false
+                        } else {
+                            loadGroup(snap.documents.first().id)
+                        }
+                    }
+                    .addOnFailureListener { loading = false }
+                return
+            }
+
+            if (groupId.isEmpty()) {
+                notAssigned = true
+                loading = false
+                return
+            }
+
+            loadGroup(groupId)
+        }
+
+        // Try direct uid lookup first; leaders have different doc ID so fall back to authUid query
+        db.collection("users").document(currentUid).get()
+            .addOnSuccessListener { doc ->
+                if (doc.exists()) {
+                    processUserDoc(doc)
+                } else {
+                    db.collection("users")
+                        .whereEqualTo("authUid", currentUid)
+                        .limit(1)
+                        .get()
+                        .addOnSuccessListener { snap ->
+                            if (!snap.isEmpty) {
+                                processUserDoc(snap.documents.first())
+                            } else {
+                                notAssigned = true
+                                loading = false
+                            }
+                        }
+                        .addOnFailureListener { loading = false }
+                }
             }
             .addOnFailureListener { loading = false }
     }
 
     when {
-        loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = MetuRed)
+        loading -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = MetuRed)
+            }
         }
         notAssigned -> NotAssignedView()
-        group != null -> if (role == "leader") LeaderUnitView(group = group!!, db = db)
-        else StudentUnitView(group = group!!)
+        group != null -> {
+            if (role == "leader") {
+                LeaderUnitView(group = group!!, db = db)
+            } else {
+                StudentUnitView(group = group!!)
+            }
+        }
     }
 }
 
-// ── NOT ASSIGNED ──────────────────────────────────────────────────────────────
 @Composable
 fun NotAssignedView() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(32.dp)
+        ) {
             Text("👥", fontSize = 56.sp)
             Spacer(Modifier.height(16.dp))
-            Text("Not assigned to a group yet", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.Gray, textAlign = TextAlign.Center)
+            Text(
+                "Not assigned to a group yet",
+                fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                color = Color.Gray, textAlign = TextAlign.Center
+            )
             Spacer(Modifier.height(8.dp))
-            Text("Your coordinator will assign you soon.", fontSize = 14.sp, color = Color.LightGray, textAlign = TextAlign.Center)
+            Text(
+                "Your coordinator will assign you soon.",
+                fontSize = 14.sp, color = Color.LightGray, textAlign = TextAlign.Center
+            )
         }
     }
 }
 
-// ── STUDENT VIEW with tabs
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StudentUnitView(group: OrientationGroup) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
     Column(Modifier.fillMaxSize().background(Color(0xFFF5F5F5))) {
-        // Group name header
         Box(
             Modifier.fillMaxWidth().background(MetuRed).padding(16.dp),
             contentAlignment = Alignment.Center
@@ -165,7 +247,6 @@ fun StudentUnitView(group: OrientationGroup) {
             Text(group.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
 
-        // Tab row
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = Color.White,
@@ -177,12 +258,26 @@ fun StudentUnitView(group: OrientationGroup) {
                 )
             }
         ) {
-            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = {
-                Text("My Leader", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal)
-            })
-            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = {
-                Text("My Group", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal)
-            })
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = {
+                    Text(
+                        "My Leader",
+                        fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = {
+                    Text(
+                        "My Group",
+                        fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            )
         }
 
         when (selectedTab) {
@@ -200,24 +295,29 @@ fun LeaderTab(group: OrientationGroup) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(Modifier.height(12.dp))
-
-        // Avatar
         Box(
             Modifier.size(90.dp).clip(CircleShape)
                 .background(MetuRed.copy(alpha = 0.1f)).border(2.dp, MetuRed, CircleShape),
             contentAlignment = Alignment.Center
-        ) { Text("⭐", fontSize = 40.sp) }
-
+        ) {
+            Text("⭐", fontSize = 40.sp)
+        }
         Spacer(Modifier.height(12.dp))
         Text(group.leaderName.ifEmpty { "—" }, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Text("Orientation Leader", fontSize = 13.sp, color = MetuRed, fontWeight = FontWeight.Medium)
-
         Spacer(Modifier.height(28.dp))
 
         if (group.leaderPhone.isEmpty() && group.leaderEmail.isEmpty() && group.whatsappLink.isEmpty()) {
-            Text("Contact information not added yet.", fontSize = 14.sp, color = Color.Gray, textAlign = TextAlign.Center)
+            Text(
+                "Contact information not added yet.",
+                fontSize = 14.sp, color = Color.Gray, textAlign = TextAlign.Center
+            )
         } else {
-            Text("Contact", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.DarkGray, modifier = Modifier.align(Alignment.Start))
+            Text(
+                "Contact",
+                fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                color = Color.DarkGray, modifier = Modifier.align(Alignment.Start)
+            )
             Spacer(Modifier.height(10.dp))
 
             if (group.leaderPhone.isNotEmpty()) {
@@ -247,7 +347,6 @@ fun LeaderTab(group: OrientationGroup) {
                 ) {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(group.whatsappLink)))
                 }
-
             }
         }
     }
@@ -267,30 +366,42 @@ fun GroupTab(members: List<GroupMember>) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Text("${members.size} members", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
+            Text(
+                "${members.size} members",
+                fontSize = 13.sp, color = Color.Gray,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
         }
         items(members) { member ->
-            MemberCard(member = member, showContact = true)
+            MemberCard(member = member, showContact = true, isLeaderView = false)
         }
     }
 }
 
-// ── LEADER VIEW
 @Composable
 fun LeaderUnitView(group: OrientationGroup, db: FirebaseFirestore) {
     if (group.members.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(32.dp)
+            ) {
                 Text("👥", fontSize = 48.sp)
                 Spacer(Modifier.height(12.dp))
-                Text("No members assigned yet.", fontSize = 16.sp, color = Color.Gray, textAlign = TextAlign.Center)
+                Text(
+                    "No members assigned yet.",
+                    fontSize = 16.sp, color = Color.Gray, textAlign = TextAlign.Center
+                )
             }
         }
         return
     }
 
     Column(Modifier.fillMaxSize().background(Color(0xFFF5F5F5))) {
-        Box(Modifier.fillMaxWidth().background(MetuRed).padding(16.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.fillMaxWidth().background(MetuRed).padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
             Text(group.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
         LazyColumn(
@@ -299,20 +410,25 @@ fun LeaderUnitView(group: OrientationGroup, db: FirebaseFirestore) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
-                Text("${group.members.size} members", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
+                Text(
+                    "${group.members.size} members",
+                    fontSize = 13.sp, color = Color.Gray,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
             }
             items(group.members) { member ->
-                MemberCard(member = member, showContact = true)
+                MemberCard(member = member, showContact = true, isLeaderView = true)
             }
         }
     }
 }
 
-// ── SHARED COMPONENTS
 @Composable
-fun MemberCard(member: GroupMember, showContact: Boolean) {
+fun MemberCard(member: GroupMember, showContact: Boolean, isLeaderView: Boolean = false) {
     val context = LocalContext.current
     val fullName = "${member.firstName} ${member.lastName}".trim()
+    val showPhone = showContact && member.phone.isNotEmpty() && (isLeaderView || member.sharePhone)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -334,15 +450,23 @@ fun MemberCard(member: GroupMember, showContact: Boolean) {
                 Text(fullName.ifEmpty { "—" }, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                 if (showContact) {
                     Text(member.email, fontSize = 12.sp, color = Color.Gray)
-                    if (member.phone.isNotEmpty())
+                    if (showPhone) {
                         Text(member.phone, fontSize = 12.sp, color = MetuRed)
+                    }
                 }
             }
             if (showContact && member.email.isNotEmpty()) {
                 IconButton(onClick = {
-                    context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${member.email}")))
+                    context.startActivity(
+                        Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${member.email}"))
+                    )
                 }) {
-                    Icon(Icons.Default.Email, contentDescription = null, tint = MetuRed, modifier = Modifier.size(20.dp))
+                    Icon(
+                        Icons.Default.Email,
+                        contentDescription = null,
+                        tint = MetuRed,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }
@@ -355,7 +479,8 @@ fun ContactRow(icon: ImageVector, label: String, value: String, onClick: () -> U
     Card(
         modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFFEEEEEE), RoundedCornerShape(12.dp)),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFF9F9F9)),
-        onClick = onClick, shape = RoundedCornerShape(12.dp)
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = MetuRed, modifier = Modifier.size(22.dp))
@@ -364,11 +489,12 @@ fun ContactRow(icon: ImageVector, label: String, value: String, onClick: () -> U
                 Text(label, fontSize = 11.sp, color = Color.Gray)
                 Text(value, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
-            Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(16.dp))
+            Icon(
+                Icons.Default.ArrowForward,
+                contentDescription = null,
+                tint = Color.LightGray,
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }
-
-@Suppress("UNUSED_PARAMETER")
-fun tabIndicatorOffset(tabPosition: androidx.compose.material3.TabPosition): androidx.compose.ui.Modifier =
-    androidx.compose.ui.Modifier
