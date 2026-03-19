@@ -165,6 +165,37 @@ fun SocietiesScreen(userRole: String = "student") {
     }
 }
 
+private fun fetchSocieties(
+    onSuccess: (List<SocietyUiModel>) -> Unit,
+    onError: (String) -> Unit
+) {
+    FirebaseFirestore.getInstance()
+        .collection("student_societies")
+        .get()
+        .addOnSuccessListener { result ->
+            val societies = result.documents.map { doc ->
+                val details = doc.get("details") as? Map<*, *>
+                val name =
+                    details?.get("student association name")?.toString()
+                        ?: doc.getString("name")
+                        ?: "Unnamed Society"
+
+                val description = doc.getString("description").orEmpty()
+
+                SocietyUiModel(
+                    id = doc.id,
+                    name = name,
+                    description = description
+                )
+            }.sortedBy { it.name.lowercase() }
+
+            onSuccess(societies)
+        }
+        .addOnFailureListener { exception ->
+            onError(exception.localizedMessage ?: "Failed to load societies.")
+        }
+}
+
 @Composable
 fun SocietyCard(society: SocietyUiModel, tint: Color, accent: Color, onClick: () -> Unit) {
     Card(
@@ -233,6 +264,7 @@ fun SocietiesBottomBar(userRole: String = "student") {
             },
             colors = NavigationBarItemDefaults.colors(unselectedIconColor = Color.Gray, indicatorColor = Color.Transparent)
         )
+
         if (!isGuest) {
             NavigationBarItem(
                 icon = { Text("📋", fontSize = 24.sp) }, label = { Text("My Unit", fontSize = 11.sp) },
@@ -246,6 +278,7 @@ fun SocietiesBottomBar(userRole: String = "student") {
                 colors = NavigationBarItemDefaults.colors(unselectedIconColor = Color.Gray, indicatorColor = Color.Transparent)
             )
         }
+
         NavigationBarItem(
             icon = { Text("👤", fontSize = 24.sp) }, label = { Text("Profile", fontSize = 11.sp) },
             selected = false,

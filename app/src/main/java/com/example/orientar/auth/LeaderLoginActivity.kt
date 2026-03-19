@@ -127,7 +127,10 @@ fun LeaderLoginForm(
 
         auth.signInWithEmailAndPassword(email.trim(), password)
             .addOnSuccessListener { result ->
-                val uid = result.user?.uid ?: run { isLoading = false; return@addOnSuccessListener }
+                val uid = result.user?.uid ?: run {
+                    isLoading = false
+                    return@addOnSuccessListener
+                }
 
                 db.collection("users")
                     .whereEqualTo("authUid", uid)
