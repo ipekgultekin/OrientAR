@@ -473,7 +473,9 @@ fun MemberCard(member: GroupMember, showContact: Boolean, isLeaderView: Boolean 
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
+
 @Composable
 fun ContactRow(icon: ImageVector, label: String, value: String, onClick: () -> Unit) {
     Card(
