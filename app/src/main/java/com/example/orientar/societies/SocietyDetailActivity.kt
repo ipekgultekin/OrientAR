@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orientar.home.SharedBottomBar
 import com.google.firebase.firestore.FirebaseFirestore
 
 private val MetuRed     = Color(0xFF8B0000)
@@ -40,7 +41,8 @@ data class SocietyDetailUiModel(
     val description: String,
     val chairman: String = "",
     val chairmanEmail: String = "",
-    val academicAdvisor: String = ""
+    val academicAdvisor: String = "",
+    val contactEmail: String = ""
 )
 
 class SocietyDetailActivity : ComponentActivity() {
@@ -71,7 +73,7 @@ fun SocietyDetailScreen(societyId: String, userRole: String = "student") {
     }
 
     Scaffold(
-        bottomBar      = { SocietiesBottomBar(userRole = userRole) },
+        bottomBar      = { SharedBottomBar(userRole = userRole) },
         containerColor = Color(0xFFF7F4F4)
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -118,11 +120,10 @@ fun SocietyDetailScreen(societyId: String, userRole: String = "student") {
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
 
-                        // President & Advisor card
+                        // President card
                         val hasChairman = s.chairman.isNotBlank()
-                        val hasAdvisor  = s.academicAdvisor.isNotBlank()
 
-                        if (hasChairman || hasAdvisor) {
+                        if (hasChairman) {
                             Card(
                                 modifier  = Modifier.fillMaxWidth(),
                                 shape     = RoundedCornerShape(20.dp),
@@ -135,32 +136,14 @@ fun SocietyDetailScreen(societyId: String, userRole: String = "student") {
                                     Spacer(Modifier.height(10.dp))
                                     HorizontalDivider(color = Color(0xFFEEEEEE))
                                     Spacer(Modifier.height(14.dp))
-
-                                    if (hasChairman) {
-                                        PersonRow(
-                                            icon        = Icons.Default.Person,
-                                            role        = "President",
-                                            name        = s.chairman,
-                                            email       = s.chairmanEmail,
-                                            accentColor = MetuRed,
-                                            context     = context
-                                        )
-                                    }
-                                    if (hasChairman && hasAdvisor) {
-                                        Spacer(Modifier.height(12.dp))
-                                        HorizontalDivider(color = Color(0xFFF5F5F5))
-                                        Spacer(Modifier.height(12.dp))
-                                    }
-                                    if (hasAdvisor) {
-                                        PersonRow(
-                                            icon        = Icons.Default.School,
-                                            role        = "Academic Advisor",
-                                            name        = s.academicAdvisor,
-                                            email       = "",
-                                            accentColor = Color(0xFF1A237E),
-                                            context     = context
-                                        )
-                                    }
+                                    PersonRow(
+                                        icon        = Icons.Default.Person,
+                                        role        = "President",
+                                        name        = s.chairman,
+                                        email       = s.contactEmail.ifBlank { s.chairmanEmail },
+                                        accentColor = MetuRed,
+                                        context     = context
+                                    )
                                 }
                             }
                         }
@@ -206,6 +189,19 @@ fun SocietyDetailScreen(societyId: String, userRole: String = "student") {
             }
         }
     }
+}
+
+fun splitAdvisors(raw: String): List<String> {
+    if (raw.isBlank()) return emptyList()
+    // Insert newline before known title prefixes, then split by newline
+    var text = raw
+    // Order matters: longer prefixes first to avoid partial matches
+    val prefixes = listOf("Assoc. Prof. Dr.", "Asst. Prof. Dr.", "Prof. Dr.", "Doç. Dr.", "Dr. Öğr. Üyesi", "Dr. ")
+    for (prefix in prefixes) {
+        text = text.replace(prefix, "\n$prefix")
+    }
+    val parts = text.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+    return if (parts.size > 1) parts else listOf(raw.trim())
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -254,9 +250,11 @@ private fun fetchSocietyDetail(societyId: String, onSuccess: (SocietyDetailUiMod
                     name            = name,
                     description     = doc.getString("description").orEmpty(),
                     chairman        = details?.get("chairman")?.toString() ?: "",
-                    chairmanEmail   = details?.get("chairman email")?.toString()
+                    chairmanEmail   = doc.getString("contactEmail")
+                        ?: details?.get("chairman email")?.toString()
                         ?: details?.get("email")?.toString() ?: "",
-                    academicAdvisor = details?.get("academic advisor")?.toString() ?: ""
+                    academicAdvisor = details?.get("academic advisor")?.toString() ?: "",
+                    contactEmail    = doc.getString("contactEmail") ?: ""
                 )
             )
         }

@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orientar.home.MainActivity
+import com.example.orientar.home.SharedBottomBar
 import com.google.firebase.firestore.FirebaseFirestore
 
 private val MetuRed     = Color(0xFF8B0000)
@@ -79,7 +80,7 @@ fun SocietiesScreen(userRole: String = "student") {
     val filtered = societies.filter { it.name.contains(searchQuery, ignoreCase = true) }
 
     Scaffold(
-        bottomBar = { SocietiesBottomBar(userRole = userRole) },
+        bottomBar = { SharedBottomBar(userRole = userRole) },
         containerColor = Surface
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -215,47 +216,4 @@ private fun fetchSocieties(onSuccess: (List<SocietyUiModel>) -> Unit, onError: (
             onSuccess(list)
         }
         .addOnFailureListener { onError(it.localizedMessage ?: "Failed to load.") }
-}
-
-@Composable
-fun SocietiesBottomBar(userRole: String = "student") {
-    val context = LocalContext.current
-    val isGuest = userRole == "guest"
-    NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
-        NavigationBarItem(
-            icon = { Text("🏠", fontSize = 24.sp) }, label = { Text("Home", fontSize = 11.sp) },
-            selected = false,
-            onClick = {
-                context.startActivity(Intent(context, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    putExtra("USER_ROLE", userRole)
-                })
-            },
-            colors = NavigationBarItemDefaults.colors(unselectedIconColor = Color.Gray, indicatorColor = Color.Transparent)
-        )
-        if (!isGuest) {
-            NavigationBarItem(
-                icon = { Text("📋", fontSize = 24.sp) }, label = { Text("My Unit", fontSize = 11.sp) },
-                selected = false,
-                onClick = {
-                    context.startActivity(Intent(context, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        putExtra("USER_ROLE", userRole); putExtra("OPEN_TAB", 1)
-                    })
-                },
-                colors = NavigationBarItemDefaults.colors(unselectedIconColor = Color.Gray, indicatorColor = Color.Transparent)
-            )
-        }
-        NavigationBarItem(
-            icon = { Text("👤", fontSize = 24.sp) }, label = { Text("Profile", fontSize = 11.sp) },
-            selected = false,
-            onClick = {
-                context.startActivity(Intent(context, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    putExtra("USER_ROLE", userRole); putExtra("OPEN_TAB", if (isGuest) 1 else 2)
-                })
-            },
-            colors = NavigationBarItemDefaults.colors(unselectedIconColor = Color.Gray, indicatorColor = Color.Transparent)
-        )
-    }
 }

@@ -157,8 +157,10 @@ public class AnnouncementsFragment extends Fragment {
 
         if ("leader".equals(userRole) && !leaderDocId.isEmpty()) {
             loadLeaderGroupAndRefresh();
-        } else {
+        } else if (!"guest".equals(userRole)) {
             loadStudentGroupAndRefresh();
+        } else {
+            vm.refresh("");
         }
     }
 
@@ -173,7 +175,6 @@ public class AnnouncementsFragment extends Fragment {
                     } else {
                         leaderGroupId = "";
                     }
-
                     updateAddButtonVisibility();
                     vm.refresh(leaderGroupId);
                 })
@@ -212,7 +213,6 @@ public class AnnouncementsFragment extends Fragment {
                     } else {
                         studentGroupId = "";
                     }
-
                     vm.refresh(studentGroupId);
                 })
                 .addOnFailureListener(e -> {
@@ -225,14 +225,21 @@ public class AnnouncementsFragment extends Fragment {
         tabLayoutAnnouncements.removeAllTabs();
 
         tabLayoutAnnouncements.addTab(
-                tabLayoutAnnouncements.newTab().setText("This Week")
+                tabLayoutAnnouncements.newTab().setText("Thıs Week")
         );
         tabLayoutAnnouncements.addTab(
                 tabLayoutAnnouncements.newTab().setText("Formal")
         );
-        tabLayoutAnnouncements.addTab(
-                tabLayoutAnnouncements.newTab().setText("Group")
-        );
+
+        // Group tab only for logged-in users (not guests)
+        if (!"guest".equals(userRole)) {
+            tabLayoutAnnouncements.addTab(
+                    tabLayoutAnnouncements.newTab().setText("Group")
+            );
+        } else {
+            // Hide group RecyclerView for guests
+            if (rvGroup != null) rvGroup.setVisibility(View.GONE);
+        }
 
         showTab(0);
 
@@ -255,7 +262,11 @@ public class AnnouncementsFragment extends Fragment {
 
         rvThisWeek.setVisibility(position == 0 ? View.VISIBLE : View.GONE);
         rvFormal.setVisibility(position == 1 ? View.VISIBLE : View.GONE);
-        rvGroup.setVisibility(position == 2 ? View.VISIBLE : View.GONE);
+
+        // Tab 2 = Group (only exists for non-guests)
+        if (!"guest".equals(userRole) && rvGroup != null) {
+            rvGroup.setVisibility(position == 2 ? View.VISIBLE : View.GONE);
+        }
 
         updateAddButtonVisibility();
     }
