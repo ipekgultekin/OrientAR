@@ -2,17 +2,18 @@ package com.example.orientar.home
 
 import android.content.Intent
 import android.os.Bundle
-
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -38,21 +40,21 @@ import com.example.orientar.societies.SocietiesActivity
 import com.example.orientar.treasure.ScoreboardActivity
 import com.google.firebase.FirebaseApp
 
-class MainActivity : ComponentActivity() {
+private val MetuRed = Color(0xFF8B0000)
 
+class MainActivity : ComponentActivity() {
     private var currentTab = mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         FirebaseApp.initializeApp(this)
-        val userRole = intent.getStringExtra("USER_ROLE") ?: "student"
+        val userRole    = intent.getStringExtra("USER_ROLE") ?: "student"
         val leaderDocId = intent.getStringExtra("LEADER_DOC_ID") ?: ""
         currentTab.intValue = intent.getIntExtra("OPEN_TAB", 0)
-
         setContent {
             MaterialTheme {
                 OrientationScreen(
-                    userRole = userRole,
+                    userRole    = userRole,
                     leaderDocId = leaderDocId,
                     selectedTab = currentTab.intValue,
                     onTabChange = { currentTab.intValue = it }
@@ -75,8 +77,7 @@ fun OrientationScreen(
     selectedTab: Int = 0,
     onTabChange: (Int) -> Unit = {}
 ) {
-    val isGuest  = userRole == "guest"
-
+    val isGuest = userRole == "guest"
     Scaffold(
         bottomBar = {
             MainBottomBar(
@@ -103,328 +104,231 @@ fun OrientationScreen(
     }
 }
 
-// ── Guest profile screen
 @Composable
 fun GuestProfileScreen() {
     val context = LocalContext.current
-
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF5F5F5))
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize().background(Color(0xFFF5F5F5)).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("👤", fontSize = 56.sp)
+        Icon(Icons.Outlined.Person, null, modifier = Modifier.size(64.dp), tint = MetuRed.copy(0.4f))
         Spacer(Modifier.height(16.dp))
-        Text(
-            "You're browsing as a guest",
-            fontSize   = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color      = Color(0xFF333333),
-            textAlign  = TextAlign.Center
-        )
+        Text("You're browsing as a guest", fontSize = 20.sp, fontWeight = FontWeight.Bold,
+            color = Color(0xFF333333), textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
-        Text(
-            "Sign in or register to access your orientation group, treasure hunt, and full profile.",
-            fontSize   = 14.sp,
-            color      = Color(0xFF888888),
-            textAlign  = TextAlign.Center,
-            lineHeight = 20.sp
-        )
+        Text("Sign in or register to access your orientation group, treasure hunt, and full profile.",
+            fontSize = 14.sp, color = Color(0xFF888888), textAlign = TextAlign.Center, lineHeight = 20.sp)
         Spacer(Modifier.height(28.dp))
         Button(
             onClick = {
-                context.startActivity(
-                    Intent(context, WelcomeActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                    }
-                )
+                context.startActivity(Intent(context, WelcomeActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                })
             },
             modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape    = RoundedCornerShape(14.dp),
-            colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B0000))
-        ) {
-            Text("Sign In / Register", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        }
+            shape  = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MetuRed)
+        ) { Text("Sign In / Register", fontWeight = FontWeight.Bold, fontSize = 16.sp) }
     }
 }
 
-// ── Home content
 @Composable
-fun HomeContent(
-    userRole: String = "student",
-    leaderDocId: String = ""
-) {
+fun HomeContent(userRole: String = "student", leaderDocId: String = "") {
     val context  = LocalContext.current
     val isLeader = userRole == "leader"
     val isGuest  = userRole == "guest"
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.White)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 80.dp)
+        modifier = Modifier.fillMaxSize().background(Color(0xFFF7F4F4))
+            .verticalScroll(rememberScrollState()).padding(bottom = 80.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(230.dp)
-        ) {
+        // Hero banner
+        Box(modifier = Modifier.fillMaxWidth().height(230.dp)) {
             Image(
-                painter            = painterResource(id = R.drawable.campus_banner),
+                painter = painterResource(id = R.drawable.campus_banner),
                 contentDescription = "METU NCC Campus",
-                modifier           = Modifier.fillMaxSize(),
-                contentScale       = ContentScale.Crop
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
             )
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color(0xBB000000), Color.Transparent)
-                        )
-                    )
+                modifier = Modifier.fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Color(0xCC000000), Color.Transparent)))
                     .padding(horizontal = 20.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Image(
-                    painter            = painterResource(id = R.drawable.metu_logo),
+                    painter = painterResource(id = R.drawable.metu_logo),
                     contentDescription = "METU Logo",
-                    modifier           = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape),
-                    contentScale       = ContentScale.Fit
+                    modifier = Modifier.size(30.dp).clip(CircleShape),
+                    contentScale = ContentScale.Fit
                 )
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(Modifier.width(10.dp))
                 Column {
-                    Text(
-                        text          = "Orientation",
-                        fontSize      = 10.sp,
-                        color         = Color(0xAAFFFFFF),
-                        letterSpacing = 0.06.sp
-                    )
-                    Text(
-                        text          = "METU NCC ",
-                        fontSize      = 15.sp,
-                        fontWeight    = FontWeight.Bold,
-                        color         = Color.White,
-                        letterSpacing = (-0.2).sp
-                    )
+                    Text("Orientation", fontSize = 10.sp, color = Color(0xAAFFFFFF), letterSpacing = 1.sp)
+                    Text("METU NCC", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color(0xDD000000))
-                        )
-                    )
+                modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xEE000000))))
                     .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {
-                Text(
-                    text          = "Welcome to your new campus life.",
-                    fontSize      = 20.sp,
-                    fontWeight    = FontWeight.Bold,
-                    color         = Color.White,
-                    letterSpacing = (-0.3).sp,
-                    lineHeight    = 26.sp
-                )
+                Text("Welcome to your new campus life.", fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold, color = Color.White, lineHeight = 25.sp)
             }
         }
 
-        // Leader badge
+        // Status badges
         if (isLeader) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                shape    = RoundedCornerShape(12.dp),
-                colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                    .background(Color(0xFFFFF3E0), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("🏅", fontSize = 20.sp)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        "You are signed in as an Orientation Leader.",
-                        fontSize   = 13.sp,
-                        color      = Color(0xFF795548),
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+                Icon(Icons.Outlined.Star, null, tint = Color(0xFFBF6900), modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Signed in as Orientation Leader", fontSize = 13.sp,
+                    color = Color(0xFF795548), fontWeight = FontWeight.Medium)
             }
         }
-
-        // Guest notice
         if (isGuest) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                shape    = RoundedCornerShape(12.dp),
-                colors   = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                    .background(Color(0xFFE3F2FD), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("ℹ️", fontSize = 18.sp)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        "You're browsing as a guest. Sign in for full access.",
-                        fontSize = 13.sp,
-                        color    = Color(0xFF1565C0)
-                    )
-                }
+                Icon(Icons.Outlined.Info, null, tint = Color(0xFF1565C0), modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Browsing as guest. Sign in for full access.", fontSize = 13.sp, color = Color(0xFF1565C0))
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
+        Text("Quick Access", modifier = Modifier.padding(horizontal = 16.dp),
+            fontSize = 11.sp, fontWeight = FontWeight.Bold,
+            color = Color(0xFF999999), letterSpacing = 1.2.sp)
+        Spacer(Modifier.height(12.dp))
 
-        // Menu cards
+        // ── 2x2 grid for everyone ──────────────────────────────────────────────
         Column(
-            modifier            = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (isGuest) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    MenuCard("Campus Tour", "🔍", Modifier.weight(1f)) {
-                        context.startActivity(Intent(context, CampusTourActivity::class.java))
-                    }
-                    MenuCard("Chatbot", "💬", Modifier.weight(1f)) {
-                        context.startActivity(Intent(context, ChatbotActivity::class.java).apply {
-                            putExtra("USER_ROLE", userRole)
-                        })
-                    }
+            // Row 1
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                MenuCard("Campus Tour", Icons.Outlined.Map, Modifier.weight(1f)) {
+                    context.startActivity(Intent(context, CampusTourActivity::class.java))
                 }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    MenuCard("Student Societies", "👥", Modifier.weight(1f)) {
-                        context.startActivity(Intent(context, SocietiesActivity::class.java).apply {
-                            putExtra("USER_ROLE", userRole)
-                        })
-                    }
-                    MenuCard("Announcements", "🔔", Modifier.weight(1f)) {
-                        context.startActivity(Intent(context, AnnouncementsActivity::class.java))
-                    }
+                MenuCard("Chatbot", Icons.Outlined.Chat, Modifier.weight(1f)) {
+                    context.startActivity(Intent(context, ChatbotActivity::class.java).apply {
+                        putExtra("USER_ROLE", userRole)
+                    })
                 }
-            } else {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    MenuCard("Campus Tour", "🔍", Modifier.weight(1f)) {
-                        context.startActivity(Intent(context, CampusTourActivity::class.java))
-                    }
-                    MenuCard("Chatbot", "💬", Modifier.weight(1f)) {
-                        context.startActivity(Intent(context, ChatbotActivity::class.java).apply {
-                            putExtra("USER_ROLE", userRole)
-                        })
-                    }
-                    MenuCard("Treasure Hunt", "🎁", Modifier.weight(1f)) {
+            }
+            // Row 2
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                MenuCard("Societies", Icons.Outlined.Groups, Modifier.weight(1f)) {
+                    context.startActivity(Intent(context, SocietiesActivity::class.java).apply {
+                        putExtra("USER_ROLE", userRole)
+                    })
+                }
+                MenuCard("Announcements", Icons.Outlined.Notifications, Modifier.weight(1f)) {
+                    context.startActivity(Intent(context, AnnouncementsActivity::class.java).apply {
+                        putExtra("USER_ROLE", userRole)
+                        if (isLeader) putExtra("LEADER_DOC_ID", leaderDocId)
+                    })
+                }
+            }
+            // Row 3 — only for students and leaders (not guests)
+            if (!isGuest) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    MenuCard("Treasure Hunt", Icons.Outlined.TravelExplore, Modifier.weight(1f)) {
                         context.startActivity(Intent(context, ScoreboardActivity::class.java))
                     }
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    MenuCard("Student Societies", "👥", Modifier.weight(1f)) {
-                        context.startActivity(Intent(context, SocietiesActivity::class.java).apply {
-                            putExtra("USER_ROLE", userRole)
-                        })
-                    }
-                    MenuCard(
-                        title    = if (isLeader) "Post Announcement" else "Announcements",
-                        icon     = "🔔",
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        if (isLeader) {
-                            context.startActivity(
-                                Intent(context, AnnouncementsActivity::class.java).apply {
-                                    putExtra("USER_ROLE", userRole)
-                                    putExtra("LEADER_DOC_ID", leaderDocId)
-                                }
-                            )
-                        } else {
-                            context.startActivity(
-                                Intent(context, AnnouncementsActivity::class.java).apply {
-                                    putExtra("USER_ROLE", userRole)
-                                }
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
+                    Spacer(Modifier.weight(1f))
                 }
             }
         }
     }
 }
 
-// ── Bottom navigation bar
 @Composable
-fun MainBottomBar(
-    selectedTab  : Int,
-    onTabSelected: (Int) -> Unit,
-    showMyUnit   : Boolean = true
-) {
+fun MenuCard(title: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Card(
+        modifier  = modifier.height(112.dp).clickable { onClick() },
+        shape     = RoundedCornerShape(16.dp),
+        colors    = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Column(
+            modifier            = Modifier.fillMaxSize().padding(14.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(
+                modifier = Modifier.size(40.dp).background(MetuRed.copy(alpha = 0.09f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, tint = MetuRed, modifier = Modifier.size(22.dp))
+            }
+            Text(
+                text       = title,
+                fontSize   = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color      = Color(0xFF1A1A1A),
+                lineHeight = 16.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun MainBottomBar(selectedTab: Int, onTabSelected: (Int) -> Unit, showMyUnit: Boolean = true) {
     NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
         NavigationBarItem(
-            icon     = { Text("🏠", fontSize = 24.sp) },
+            icon     = { Icon(Icons.Outlined.Home, null, modifier = Modifier.size(24.dp)) },
             label    = { Text("Home", fontSize = 11.sp) },
             selected = selectedTab == 0,
             onClick  = { onTabSelected(0) },
             colors   = NavigationBarItemDefaults.colors(
-                selectedTextColor   = Color(0xFF8B0000),
+                selectedTextColor   = MetuRed,
+                selectedIconColor   = MetuRed,
                 unselectedIconColor = Color.Gray,
-                indicatorColor      = Color.Transparent
+                unselectedTextColor = Color.Gray,
+                indicatorColor      = MetuRed.copy(alpha = 0.1f)
             )
         )
         if (showMyUnit) {
             NavigationBarItem(
-                icon     = { Text("📋", fontSize = 24.sp) },
+                icon     = { Icon(Icons.Outlined.Groups, null, modifier = Modifier.size(24.dp)) },
                 label    = { Text("My Unit", fontSize = 11.sp) },
                 selected = selectedTab == 1,
                 onClick  = { onTabSelected(1) },
                 colors   = NavigationBarItemDefaults.colors(
-                    selectedTextColor   = Color(0xFF8B0000),
+                    selectedTextColor   = MetuRed,
+                    selectedIconColor   = MetuRed,
                     unselectedIconColor = Color.Gray,
-                    indicatorColor      = Color.Transparent
+                    unselectedTextColor = Color.Gray,
+                    indicatorColor      = MetuRed.copy(alpha = 0.1f)
                 )
             )
         }
         NavigationBarItem(
-            icon     = { Text("👤", fontSize = 24.sp) },
+            icon     = { Icon(Icons.Outlined.Person, null, modifier = Modifier.size(24.dp)) },
             label    = { Text("Profile", fontSize = 11.sp) },
             selected = if (showMyUnit) selectedTab == 2 else selectedTab == 1,
             onClick  = { onTabSelected(if (showMyUnit) 2 else 1) },
             colors   = NavigationBarItemDefaults.colors(
-                selectedTextColor   = Color(0xFF8B0000),
+                selectedTextColor   = MetuRed,
+                selectedIconColor   = MetuRed,
                 unselectedIconColor = Color.Gray,
-                indicatorColor      = Color.Transparent
+                unselectedTextColor = Color.Gray,
+                indicatorColor      = MetuRed.copy(alpha = 0.1f)
             )
         )
-    }
-}
-
-// ── Reusable menu card
-@Composable
-fun MenuCard(title: String, icon: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Card(
-        onClick   = onClick,
-        modifier  = modifier
-            .height(100.dp)
-            .border(1.dp, Color(0xFFEEEEEE), RoundedCornerShape(12.dp)),
-        shape     = RoundedCornerShape(12.dp),
-        colors    = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(2.dp)
-    ) {
-        Column(
-            modifier            = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(text = icon, fontSize = 32.sp)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text       = title,
-                fontSize   = 13.sp,
-                fontWeight = FontWeight.Medium,
-                textAlign  = TextAlign.Center,
-                lineHeight = 14.sp
-            )
-        }
     }
 }

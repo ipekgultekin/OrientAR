@@ -2,16 +2,18 @@ package com.example.orientar.treasure
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.lifecycle.lifecycleScope
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Replay
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,39 +21,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.orientar.R
 import com.example.orientar.home.MainActivity
+import com.example.orientar.home.SharedBottomBar
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import java.util.Locale
 
-private val MetuRed = Color(0xFF8B0000)
+private val MetuRed     = Color(0xFF8B0000)
+private val MetuRedDark = Color(0xFF5C0000)
 
 class ScoreboardActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val forcedSolved = intent.getIntExtra("forcedSolved", -1)
-        val forcedTotal = intent.getIntExtra("forcedTotal", -1)
-
-        // If not coming from game session, wipe stale local progress entirely
-        // SharedPreferences may have old solved data from previous sessions
+        val forcedTotal  = intent.getIntExtra("forcedTotal", -1)
         if (forcedSolved < 0) {
             GameState.clearMemory()
             GameState.resetProgress(this)
         }
         GameState.loadQuestionsFromFirestore {}
-
         setContent {
             MaterialTheme {
-                TreasureHuntLandingScreen(
-                    forcedSolved = forcedSolved,
-                    forcedTotal = forcedTotal
-                )
+                TreasureHuntLandingScreen(forcedSolved = forcedSolved, forcedTotal = forcedTotal)
             }
         }
     }
@@ -61,338 +56,213 @@ class ScoreboardActivity : ComponentActivity() {
 @Composable
 fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
     val context = LocalContext.current
-    var questionCount by remember { mutableStateOf(
-        if (forcedTotal >= 0) forcedTotal else GameState.totalQuestions()
-    )}
-    var solvedCount by remember { mutableStateOf(
-        if (forcedSolved >= 0) forcedSolved else GameState.totalSolved
-    )}
-    // Only true if user actually has a Firebase leaderboard entry
-    var isOnLeaderboard by remember { mutableStateOf(false) }
+    var questionCount    by remember { mutableStateOf(if (forcedTotal >= 0) forcedTotal else GameState.totalQuestions()) }
+    var solvedCount      by remember { mutableStateOf(if (forcedSolved >= 0) forcedSolved else GameState.totalSolved) }
+    var isOnLeaderboard  by remember { mutableStateOf(false) }
     var leaderboardTimeMs by remember { mutableStateOf(0L) }
 
     LaunchedEffect(Unit) {
-        // Load questions if needed
         while (questionCount == 0) {
             kotlinx.coroutines.delay(200)
             questionCount = GameState.totalQuestions()
-            solvedCount = GameState.totalSolved
+            solvedCount   = GameState.totalSolved
         }
-        if (forcedSolved < 0) solvedCount = GameState.totalSolved
-        if (forcedTotal < 0) questionCount = GameState.totalQuestions()
+        if (forcedSolved < 0) solvedCount   = GameState.totalSolved
+        if (forcedTotal  < 0) questionCount = GameState.totalQuestions()
 
-        // Force Firebase Auth token refresh to ensure currentUser is up to date
-        val firebaseUser = FirebaseAuth.getInstance().currentUser
-        firebaseUser?.reload()?.addOnCompleteListener {
-            val uid = FirebaseAuth.getInstance().currentUser?.uid
-            if (uid != null) {
-                FirebaseFirestore.getInstance()
-                    .collection("leaderboard")
-                    .document(uid)
-                    .get()
-                    .addOnSuccessListener { doc ->
-                        if (doc.exists()) {
-                            isOnLeaderboard = true
-                            leaderboardTimeMs = doc.getLong("totalTimeMs") ?: 0L
-                        } else {
-                            isOnLeaderboard = false
-                            leaderboardTimeMs = 0L
-                        }
-                    }
-                    .addOnFailureListener {
-                        isOnLeaderboard = false
-                    }
-            }
+        FirebaseAuth.getInstance().currentUser?.reload()?.addOnCompleteListener {
+            val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@addOnCompleteListener
+            FirebaseFirestore.getInstance().collection("leaderboard").document(uid).get()
+                .addOnSuccessListener { doc ->
+                    isOnLeaderboard   = doc.exists()
+                    leaderboardTimeMs = if (doc.exists()) doc.getLong("totalTimeMs") ?: 0L else 0L
+                }
+                .addOnFailureListener { isOnLeaderboard = false }
         }
     }
 
-    val solved = solvedCount
-    val total = questionCount
-    val hasPartialProgress = total > 0 && solved > 0 && solved < total && !isOnLeaderboard
-    // allCompleted = only shown to users with a Firebase leaderboard entry
+    val solved       = solvedCount
+    val total        = questionCount
     val allCompleted = isOnLeaderboard
+    val hasPartial   = total > 0 && solved > 0 && solved < total && !isOnLeaderboard
     val totalSeconds = leaderboardTimeMs / 1000.0
+    var showReplayConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 8.dp)
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.metu_logo),
-                            contentDescription = "METU Logo",
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "TREASURE HUNT",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MetuRed
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        context.startActivity(Intent(context, MainActivity::class.java))
-                    }) {
-                        Text("✕", fontSize = 18.sp, color = Color.Gray)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-            )
-        },
-        bottomBar = { TreasureBottomBar() }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color(0xFFFFF8F8), Color(0xFFF5F5F5))
-                    )
-                )
-                .padding(paddingValues),
-            contentAlignment = Alignment.Center
+        bottomBar = { SharedBottomBar(userRole = "student") },
+        containerColor = Color(0xFFF7F4F4)
+    ) { padding ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 28.dp, vertical = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+            // ── Hero header ───────────────────────────────────────────────────
+            Box(
+                modifier = Modifier.fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(MetuRedDark, MetuRed)))
+                    .padding(top = 8.dp, bottom = 28.dp, start = 20.dp, end = 20.dp)
             ) {
-                Text(text = "🗺️", fontSize = 72.sp)
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(onClick = { context.startActivity(Intent(context, MainActivity::class.java)) }) {
+                            Text("✕", fontSize = 18.sp, color = Color.White.copy(0.8f))
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Map, null, tint = Color.White.copy(0.9f), modifier = Modifier.size(28.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text("Treasure Hunt", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                            Text("METU NCC Campus", fontSize = 13.sp, color = Color.White.copy(0.7f))
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "Explore the campus, find the clues,\nand unlock AR treasures.",
+                        fontSize = 14.sp, color = Color.White.copy(0.8f), lineHeight = 20.sp
+                    )
+                }
+            }
 
-                Text(
-                    text = "METU NCC\nTreasure Hunt",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MetuRed,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 34.sp
-                )
-
-                Text(
-                    text = "Explore the campus, find the clues,\nand unlock AR treasures!",
-                    fontSize = 15.sp,
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 22.sp
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
+            // ── Content ───────────────────────────────────────────────────────
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Progress / completion card
                 if (allCompleted) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
-                        elevation = CardDefaults.cardElevation(2.dp)
+                        shape    = RoundedCornerShape(16.dp),
+                        colors   = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                        elevation = CardDefaults.cardElevation(0.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "🎉 You completed all questions!",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF2E7D32),
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Your time: ${String.format(Locale.US, "%.1f", totalSeconds)}s",
-                                fontSize = 13.sp,
-                                color = Color(0xFF388E3C),
-                                fontWeight = FontWeight.Medium
-                            )
+                        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.EmojiEvents, null,
+                                tint = Color(0xFF2E7D32), modifier = Modifier.size(32.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("All questions completed!", fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                                Text("Your time: ${String.format(Locale.US, "%.1f", totalSeconds)}s",
+                                    fontSize = 13.sp, color = Color(0xFF388E3C))
+                            }
                         }
                     }
-                } else if (hasPartialProgress) {
+                } else if (hasPartial) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-                        elevation = CardDefaults.cardElevation(2.dp)
+                        shape    = RoundedCornerShape(16.dp),
+                        colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                        elevation = CardDefaults.cardElevation(0.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "🔥 You've solved $solved / $total questions!",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFE65100),
-                                textAlign = TextAlign.Center
+                        Column(Modifier.padding(18.dp)) {
+                            Text("$solved of $total questions solved",
+                                fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
+                            Spacer(Modifier.height(6.dp))
+                            LinearProgressIndicator(
+                                progress = { solved.toFloat() / total.toFloat() },
+                                modifier = Modifier.fillMaxWidth().height(6.dp),
+                                color    = Color(0xFFE65100),
+                                trackColor = Color(0xFFFFE0B2)
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Complete all $total questions and claim your spot on the leaderboard!",
-                                fontSize = 13.sp,
-                                color = Color(0xFFBF360C),
-                                textAlign = TextAlign.Center,
-                                lineHeight = 18.sp
-                            )
-                            if (totalSeconds > 0) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "⏱ Time so far: ${String.format(Locale.US, "%.1f", totalSeconds)}s",
-                                    fontSize = 13.sp,
-                                    color = Color(0xFF795548),
-                                    fontWeight = FontWeight.Medium
-                                )
+                            Spacer(Modifier.height(8.dp))
+                            Text("Complete all questions to appear on the leaderboard.",
+                                fontSize = 12.sp, color = Color(0xFFBF360C), lineHeight = 17.sp)
+                        }
+                    }
+                } else if (total > 0) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = RoundedCornerShape(16.dp),
+                        colors   = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(0.dp)
+                    ) {
+                        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("📍", fontSize = 24.sp)
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("$total clues hidden around campus",
+                                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1A1A1A))
+                                Text("Use AR to find and unlock each one.",
+                                    fontSize = 12.sp, color = Color.Gray)
                             }
                         }
                     }
                 }
 
-                var showReplayConfirm by remember { mutableStateOf(false) }
+                Spacer(Modifier.height(4.dp))
 
-                if (showReplayConfirm) {
-                    AlertDialog(
-                        onDismissRequest = { showReplayConfirm = false },
-                        title = { Text("Play Again?", fontWeight = FontWeight.Bold) },
-                        text = {
-                            Text(
-                                "You've already completed the game! Playing again will remove your current leaderboard score. Are you sure?",
-                                lineHeight = 20.sp
-                            )
-                        },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                showReplayConfirm = false
-                                val intent = Intent(context, TreasureHuntGameActivity::class.java)
-                                intent.putExtra("isNewGame", true)
-                                context.startActivity(intent)
-                            }) {
-                                Text("Yes, Play Again", color = MetuRed, fontWeight = FontWeight.Bold)
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showReplayConfirm = false }) {
-                                Text("Cancel", color = Color.Gray)
-                            }
-                        }
-                    )
-                }
-
+                // Primary action button
                 Button(
                     onClick = {
                         when {
                             allCompleted -> showReplayConfirm = true
                             else -> {
-                                val intent = Intent(context, TreasureHuntGameActivity::class.java)
-                                intent.putExtra("isNewGame", false)
-                                context.startActivity(intent)
+                                context.startActivity(Intent(context, TreasureHuntGameActivity::class.java).apply {
+                                    putExtra("isNewGame", false)
+                                })
                             }
                         }
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape  = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MetuRed),
-                    elevation = ButtonDefaults.buttonElevation(6.dp)
+                    elevation = ButtonDefaults.buttonElevation(0.dp)
                 ) {
+                    Icon(
+                        if (allCompleted) Icons.Outlined.Replay else Icons.Outlined.PlayArrow,
+                        null, modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        text = when {
-                            allCompleted -> "🔄  PLAY AGAIN"
-                            hasPartialProgress -> "▶  CONTINUE GAME"
-                            else -> "▶  START GAME"
+                        when {
+                            allCompleted -> "Play Again"
+                            hasPartial   -> "Continue Game"
+                            else         -> "Start Game"
                         },
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 16.sp, fontWeight = FontWeight.Bold
                     )
                 }
 
-                // Show hint text when game is incomplete
-                if (hasPartialProgress) {
-                    Text(
-                        text = "⚠️ You need to find all answers to appear on the leaderboard. No worries, you can play again anytime!",
-                        fontSize = 12.sp,
-                        color = Color(0xFFBF360C),
-                        textAlign = TextAlign.Center,
-                        lineHeight = 17.sp,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-                }
-
+                // Leaderboard button
                 OutlinedButton(
-                    onClick = {
-                        context.startActivity(Intent(context, LeaderboardActivity::class.java))
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(2.dp, MetuRed),
+                    onClick = { context.startActivity(Intent(context, LeaderboardActivity::class.java)) },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape  = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, MetuRed),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MetuRed)
                 ) {
-                    Text(
-                        text = "🏆  LEADERBOARD",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Icon(Icons.Outlined.EmojiEvents, null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Leaderboard", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
-}
 
-@Composable
-fun TreasureBottomBar() {
-    val context = LocalContext.current
-
-    fun goToMain(tab: Int) {
-        context.startActivity(
-            Intent(context, MainActivity::class.java).apply {
-                putExtra("OPEN_TAB", tab)
-                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+    if (showReplayConfirm) {
+        AlertDialog(
+            onDismissRequest = { showReplayConfirm = false },
+            title = { Text("Play Again?", fontWeight = FontWeight.Bold) },
+            text  = { Text("Playing again will remove your current leaderboard score. Are you sure?", lineHeight = 20.sp) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showReplayConfirm = false
+                    context.startActivity(Intent(context, TreasureHuntGameActivity::class.java).apply {
+                        putExtra("isNewGame", true)
+                    })
+                }) { Text("Yes, Play Again", color = MetuRed, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReplayConfirm = false }) { Text("Cancel", color = Color.Gray) }
             }
-        )
-    }
-
-    NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
-        NavigationBarItem(
-            icon = { Text("🏠", fontSize = 24.sp) },
-            label = { Text("Home", fontSize = 11.sp) },
-            selected = false,
-            onClick = { goToMain(0) },
-            colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color.Gray,
-                unselectedTextColor = Color.Gray
-            )
-        )
-        NavigationBarItem(
-            icon = { Text("📋", fontSize = 24.sp) },
-            label = { Text("My Unit", fontSize = 11.sp) },
-            selected = false,
-            onClick = { goToMain(1) },
-            colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color.Gray,
-                unselectedTextColor = Color.Gray
-            )
-        )
-        NavigationBarItem(
-            icon = { Text("👤", fontSize = 24.sp) },
-            label = { Text("Profile", fontSize = 11.sp) },
-            selected = false,
-            onClick = { goToMain(2) },
-            colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color.Gray,
-                unselectedTextColor = Color.Gray
-            )
         )
     }
 }
