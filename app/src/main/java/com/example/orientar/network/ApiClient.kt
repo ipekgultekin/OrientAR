@@ -7,7 +7,7 @@ import java.util.concurrent.TimeUnit
 
 object ApiClient {
 
-    private const val BASE_URL = "http://35.187.172.64:8000/"
+    private const val BASE_URL = "https://api.orientarai.site/"
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
