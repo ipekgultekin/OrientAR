@@ -2,7 +2,6 @@ package com.example.orientar.navigation.ar
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import com.google.ar.core.*
 import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.ar.arcore.createAnchorOrNull
@@ -107,7 +106,7 @@ class OutdoorAnchorManager(
     private var sessionStartTime: Long = 0L
     private var isSessionStarted: Boolean = false
     private var lastCreatedAnchor: AnchorNode? = null
-
+    private var firstAnchorAttemptTime: Long = 0L
     // Depth API availability (checked once per session)
     private var isDepthSupported: Boolean? = null
 
@@ -162,7 +161,7 @@ class OutdoorAnchorManager(
         isSessionStarted = true
         isDepthSupported = null  // Will be checked on first frame
 
-        Log.d(TAG, "Session started, stabilization timer reset")
+        FileLogger.d(TAG, "Session started, stabilization timer reset")
     }
 
     /**
@@ -170,7 +169,7 @@ class OutdoorAnchorManager(
      */
     fun onSessionPaused() {
         isSessionStarted = false
-        Log.d(TAG, "Session paused")
+        FileLogger.d(TAG, "Session paused")
     }
 
     /**
@@ -229,7 +228,7 @@ class OutdoorAnchorManager(
         val isReady = hasMinTime || (hasPlanes && timeSinceStart >= 1500L)
 
         if (!isReady && timeSinceStart % 1000 < 100) {  // Log once per second
-            Log.d(TAG, "Stabilizing: ${timeSinceStart}ms, planes=$trackingPlaneCount, ready=$isReady")
+            FileLogger.d(TAG, "Stabilizing: ${timeSinceStart}ms, planes=$trackingPlaneCount, ready=$isReady")
         }
 
         return isReady
@@ -265,54 +264,41 @@ class OutdoorAnchorManager(
      */
     fun createBestAnchor(session: Session, frame: Frame): AnchorNode? {
         if (frame.camera.trackingState != TrackingState.TRACKING) {
-            Log.w(TAG, "Cannot create anchor - camera not tracking")
+            FileLogger.w(TAG, "Cannot create anchor - camera not tracking")
             FileLogger.anchor("BLOCKED: camera not tracking")
             return null
         }
 
-        // Check Depth API support (once per session)
+        // Check Depth API support (once per session, for diagnostics only)
         if (isDepthSupported == null) {
             isDepthSupported = session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)
-            Log.d(TAG, "Depth API supported: $isDepthSupported")
+            FileLogger.d(TAG, "Depth API supported: $isDepthSupported")
         }
 
-        // Strategy 1: Try DepthPoint anchor (best for outdoor)
-        if (isDepthSupported == true) {
-            val depthAnchor = tryCreateDepthPointAnchor(session, frame)
-            if (depthAnchor != null) {
-                depthAnchorCount++
-                lastUsedAnchorType = "Depth"  // Track actual last used type
-                Log.d(TAG, "✅ Created DepthPoint anchor (#$depthAnchorCount)")
-                FileLogger.anchor("Created: DepthPoint #$depthAnchorCount, groundY=${String.format("%.2f", lastGroundY)}")
-                lastCreatedAnchor = depthAnchor
-                return depthAnchor
-            }
-        }
-
-        // Strategy 2: Try Plane anchor
-        val planeAnchor = tryCreatePlaneAnchor(session, frame)
-        if (planeAnchor != null) {
-            planeAnchorCount++
-            lastUsedAnchorType = "Plane"  // Track actual last used type
-            Log.d(TAG, "✅ Created Plane anchor (#$planeAnchorCount)")
-            FileLogger.anchor("Created: Plane #$planeAnchorCount, groundY=${String.format("%.2f", lastGroundY)}")
-            lastCreatedAnchor = planeAnchor
-            return planeAnchor
-        }
-
-        // Strategy 3: Camera-relative estimation (fallback)
+        // ====================================================================
+        // DIRECT CAMERA-RELATIVE ANCHOR
+        // ====================================================================
+        // With camera-relative Y rendering for spheres, the anchor only needs
+        // to provide a stable X/Z origin in AR space. Depth and plane detection
+        // are skipped because:
+        // 1. Sphere Y is set per-frame relative to camera (not anchor)
+        // 2. Heading comes from dual-delta (not compass/anchor orientation)
+        // 3. ARCore VIO provides identical X/Z tracking for all anchor types
+        // 4. Depth/plane detection fails outdoors (GroundValidator too strict)
+        //    causing 3-13 second delays
+        // ====================================================================
         val cameraAnchor = tryCreateCameraRelativeAnchor(session, frame)
         if (cameraAnchor != null) {
             cameraRelativeAnchorCount++
-            lastUsedAnchorType = "Camera"  // Track actual last used type
-            Log.d(TAG, "✅ Created camera-relative anchor (#$cameraRelativeAnchorCount)")
+            lastUsedAnchorType = "Camera"
+            FileLogger.d(TAG, "✅ Created camera-relative anchor (#$cameraRelativeAnchorCount)")
             FileLogger.anchor("Created: CameraRelative #$cameraRelativeAnchorCount")
             lastCreatedAnchor = cameraAnchor
             return cameraAnchor
         }
 
-        Log.w(TAG, "All anchor creation strategies failed")
-        FileLogger.e("ANCHOR", "All strategies FAILED")
+        FileLogger.w(TAG, "Camera-relative anchor creation failed (camera not tracking?)")
+        FileLogger.anchor("FAILED: camera-relative anchor")
         return null
     }
 
@@ -367,7 +353,7 @@ class OutdoorAnchorManager(
                             lastGroundConfidence = validation.confidence
 
                             val pose = anchor.pose
-                            Log.d(TAG, "DepthPoint anchor at point #${index + 1}: " +
+                            FileLogger.d(TAG, "DepthPoint anchor at point #${index + 1}: " +
                                     "pos=(${pose.tx()}, ${pose.ty()}, ${pose.tz()}), " +
                                     "distance=${depthHit.distance}m, " +
                                     "confidence=${validation.confidence}")
@@ -377,13 +363,13 @@ class OutdoorAnchorManager(
                             anchor?.detach()
                         }
                     } else {
-                        Log.d(TAG, "DepthPoint rejected at point #${index + 1}: " +
+                        FileLogger.d(TAG, "DepthPoint rejected at point #${index + 1}: " +
                                 "confidence=${validation.confidence}, reasons=${validation.failureReasons}")
                         FileLogger.anchor("DepthPoint rejected #${index + 1}: confidence too low")
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "DepthPoint hit test failed at point #${index + 1}: ${e.message}")
+                FileLogger.w(TAG, "DepthPoint hit test failed at point #${index + 1}: ${e.message}")
             }
         }
 
@@ -414,13 +400,13 @@ class OutdoorAnchorManager(
 
         // Test points in priority order (center first, then lower screen)
         val testPoints = listOf(
-            Pair(width * 0.5f, height * 0.5f),   // Center
-            Pair(width * 0.5f, height * 0.70f),  // Lower center
-            Pair(width * 0.3f, height * 0.5f),   // Left
-            Pair(width * 0.7f, height * 0.5f),   // Right
-            Pair(width * 0.5f, height * 0.85f),  // Very low
+            Pair(width * 0.5f, height * 0.70f),  // Lower center - most likely ground
+            Pair(width * 0.5f, height * 0.85f),  // Very low - close ground
+            Pair(width * 0.5f, height * 0.55f),  // Mid-low
             Pair(width * 0.3f, height * 0.70f),  // Lower left
-            Pair(width * 0.7f, height * 0.70f)   // Lower right
+            Pair(width * 0.7f, height * 0.70f),  // Lower right
+            Pair(width * 0.3f, height * 0.85f),  // Very low left
+            Pair(width * 0.7f, height * 0.85f)   // Very low right
         )
 
         for ((index, point) in testPoints.withIndex()) {
@@ -439,7 +425,7 @@ class OutdoorAnchorManager(
                             trackable.trackingState == TrackingState.TRACKING
                 }
 
-                // Find best validated ground hit
+                // Find the best validated ground hit
                 val bestHit = GroundValidator.findBestGroundHit(planeHits, frame)
 
                 if (bestHit != null) {
@@ -456,7 +442,7 @@ class OutdoorAnchorManager(
                         lastGroundConfidence = validation.confidence
 
                         val pose = anchor.pose
-                        Log.d(TAG, "Plane anchor at point #${index + 1}: " +
+                        FileLogger.d(TAG, "Plane anchor at point #${index + 1}: " +
                                 "pos=(${pose.tx()}, ${pose.ty()}, ${pose.tz()}), " +
                                 "confidence=${validation.confidence}")
 
@@ -466,7 +452,7 @@ class OutdoorAnchorManager(
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Plane hit test failed at point #${index + 1}: ${e.message}")
+                FileLogger.w(TAG, "Plane hit test failed at point #${index + 1}: ${e.message}")
             }
         }
 
@@ -525,17 +511,17 @@ class OutdoorAnchorManager(
                 val anchorNode = AnchorNode(arSceneView.engine, anchor)
                 arSceneView.addChildNode(anchorNode)
 
-                Log.d(TAG, "Camera-relative anchor created: " +
+                FileLogger.d(TAG, "Camera-relative anchor created: " +
                         "cameraY=$cameraY, phoneHeight=$phoneHeightFromGround, " +
                         "groundY=$groundY, pos=($anchorX, $groundY, $anchorZ)")
 
                 return anchorNode
             } else {
                 anchor.detach()
-                Log.w(TAG, "Camera-relative anchor created but not tracking")
+                FileLogger.w(TAG, "Camera-relative anchor created but not tracking")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Camera-relative anchor creation failed: ${e.message}")
+            FileLogger.e(TAG, "Camera-relative anchor creation failed: ${e.message}")
         }
 
         return null
@@ -560,7 +546,7 @@ class OutdoorAnchorManager(
         // Save to preferences
         prefs.edit().putFloat(KEY_PHONE_HEIGHT, phoneHeightFromGround).apply()
 
-        Log.d(TAG, "Phone height adjusted: $oldHeight -> $phoneHeightFromGround")
+        FileLogger.d(TAG, "Phone height adjusted: $oldHeight -> $phoneHeightFromGround")
         FileLogger.anchor("Height calibration: ${String.format("%.2f", oldHeight)} → ${String.format("%.2f", phoneHeightFromGround)}m")
     }
 
@@ -575,7 +561,7 @@ class OutdoorAnchorManager(
     fun resetPhoneHeight() {
         phoneHeightFromGround = DEFAULT_PHONE_HEIGHT
         prefs.edit().putFloat(KEY_PHONE_HEIGHT, DEFAULT_PHONE_HEIGHT).apply()
-        Log.d(TAG, "Phone height reset to default: $DEFAULT_PHONE_HEIGHT")
+        FileLogger.d(TAG, "Phone height reset to default: $DEFAULT_PHONE_HEIGHT")
     }
 
     // ========================================================================================
@@ -643,7 +629,8 @@ class OutdoorAnchorManager(
      * OutdoorAnchorManager will NOT attempt to destroy the anchor in its destroy() method.
      */
     fun clearAnchorReference() {
-        Log.d(TAG, "Anchor reference cleared - ownership transferred to ARRenderer")
+        FileLogger.d(TAG, "Anchor reference cleared - ownership transferred to ARRenderer")
+        firstAnchorAttemptTime = 0L
         lastCreatedAnchor = null
     }
 
@@ -662,12 +649,12 @@ class OutdoorAnchorManager(
     fun destroy() {
         // Only destroy if we still own the anchor (wasn't transferred to ARRenderer)
         lastCreatedAnchor?.let { node ->
-            Log.d(TAG, "Destroying owned anchor (ownership was NOT transferred)")
+            FileLogger.d(TAG, "Destroying owned anchor (ownership was NOT transferred)")
             try {
                 node.anchor?.detach()
                 node.destroy()
             } catch (e: Exception) {
-                Log.w(TAG, "Error destroying anchor: ${e.message}")
+                FileLogger.w(TAG, "Error destroying anchor: ${e.message}")
             }
         }
         lastCreatedAnchor = null
@@ -675,13 +662,14 @@ class OutdoorAnchorManager(
         // Reset all state for potential reuse
         isSessionStarted = false
         sessionStartTime = 0L
+        firstAnchorAttemptTime = 0L
         isDepthSupported = null
         depthAnchorCount = 0
         planeAnchorCount = 0
         cameraRelativeAnchorCount = 0
         lastUsedAnchorType = "None"
 
-        Log.d(TAG, "OutdoorAnchorManager destroyed (state reset)")
+        FileLogger.d(TAG, "OutdoorAnchorManager destroyed (state reset)")
         FileLogger.anchor("Manager destroyed")
     }
 }

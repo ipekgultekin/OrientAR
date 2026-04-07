@@ -1,7 +1,6 @@
 package com.example.orientar.navigation.rendering
 
 import android.location.Location
-import android.util.Log
 import com.example.orientar.navigation.logic.ArUtils
 import com.example.orientar.navigation.logic.Coordinate
 import com.example.orientar.navigation.logic.Node
@@ -139,7 +138,7 @@ class ARRenderer(
             }
         }
 
-        Log.d(TAG, "Phase 3 components initialized")
+        FileLogger.d(TAG, "Phase 3 components initialized")
     }
 
 
@@ -165,12 +164,12 @@ class ARRenderer(
         }
 
         if (!hasAnchor()) {
-            Log.w(TAG, "Cannot apply positions: No anchor")
+            FileLogger.w(TAG, "Cannot apply positions: No anchor")
             FileLogger.w("AR", "Phase3 FAILED: No anchor")
             return
         }
 
-        Log.d(TAG, "Applying ${result.positions.size} calculated positions (took ${result.calculationTimeMs}ms)")
+        FileLogger.d(TAG, "Applying ${result.positions.size} calculated positions (took ${result.calculationTimeMs}ms)")
 
         // Clear existing spheres
         clearRoute()
@@ -184,7 +183,7 @@ class ARRenderer(
         for (pos in result.positions) {
             // Check if we're spending too much time on main thread
             if (System.currentTimeMillis() - startTime > ARPerformanceConfig.MAX_MAIN_THREAD_TIME_MS * 2) {
-                Log.w(TAG, "Main thread time exceeded, stopping at $sphereCount spheres")
+                FileLogger.w(TAG, "Main thread time exceeded, stopping at $sphereCount spheres")
                 break
             }
 
@@ -208,12 +207,12 @@ class ARRenderer(
                     parent.addChildNode(sphereNode)
                     sphereCount++
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to create sphere at index ${pos.index}: ${e.message}")
+                    FileLogger.e(TAG, "Failed to create sphere at index ${pos.index}: ${e.message}")
                 }
             }
         }
 
-        Log.d(TAG, "Applied $sphereCount spheres in ${System.currentTimeMillis() - startTime}ms")
+        FileLogger.d(TAG, "Applied $sphereCount spheres in ${System.currentTimeMillis() - startTime}ms")
         FileLogger.ar("Phase3 COMPLETE: $sphereCount spheres")
         FileLogger.perf("Phase3 apply", System.currentTimeMillis() - startTime, 100L)
 
@@ -230,14 +229,14 @@ class ARRenderer(
         anchorType: String
     ) {
         if (!isPhase3Enabled()) {
-            Log.d(TAG, "Phase 3 not enabled, skipping background calculation")
+            FileLogger.d(TAG, "Phase 3 not enabled, skipping background calculation")
             return
         }
 
         // Throttle render requests
         val now = System.currentTimeMillis()
         if (now - lastRenderTime < minRenderIntervalMs) {
-            Log.d(TAG, "Throttling render request (${now - lastRenderTime}ms since last)")
+            FileLogger.d(TAG, "Throttling render request (${now - lastRenderTime}ms since last)")
             return
         }
         lastRenderTime = now
@@ -271,7 +270,7 @@ class ARRenderer(
                         }
                     }
 
-                    Log.d(TAG, "Incremental update applied to ${sphereNodes.size} spheres")
+                    FileLogger.d(TAG, "Incremental update applied to ${sphereNodes.size} spheres")
                 }
             }
         }
@@ -284,7 +283,7 @@ class ARRenderer(
     private var anchor: Anchor? = null
 
     fun setAnchor(newAnchor: Anchor) {
-        Log.d(TAG, "Setting new anchor")
+        FileLogger.d(TAG, "Setting new anchor")
         FileLogger.anchor("Setting new anchor")
 
         clearAnchor()
@@ -292,8 +291,8 @@ class ARRenderer(
         anchor = newAnchor
         anchorNode = AnchorNode(arView.engine, newAnchor).also { node ->
             arView.addChildNode(node)
-            Log.d(TAG, "✅ Anchor node added to scene")
-            Log.d(TAG, "   Anchor world position: ${node.worldPosition}")
+            FileLogger.d(TAG, "✅ Anchor node added to scene")
+            FileLogger.d(TAG, "   Anchor world position: ${node.worldPosition}")
             FileLogger.anchor("Anchor added: pos=(${String.format("%.2f", node.worldPosition.x)}, ${String.format("%.2f", node.worldPosition.y)}, ${String.format("%.2f", node.worldPosition.z)})")
         }
     }
@@ -317,7 +316,7 @@ class ARRenderer(
      */
     fun enableSegmentation() {
         segmentationEnabled = true
-        Log.d(TAG, "Segmentation mode ENABLED - ARRenderer route rendering disabled")
+        FileLogger.d(TAG, "Segmentation mode ENABLED - ARRenderer route rendering disabled")
     }
 
     /**
@@ -326,7 +325,7 @@ class ARRenderer(
      */
     fun disableSegmentation() {
         segmentationEnabled = false
-        Log.d(TAG, "Segmentation mode DISABLED - ARRenderer route rendering enabled")
+        FileLogger.d(TAG, "Segmentation mode DISABLED - ARRenderer route rendering enabled")
     }
 
     /**
@@ -348,7 +347,7 @@ class ARRenderer(
      * @param externalAnchorNode An AnchorNode created by an external manager
      */
     fun setAnchorNode(externalAnchorNode: AnchorNode) {
-        Log.d(TAG, "Setting external anchor node (taking ownership)")
+        FileLogger.d(TAG, "Setting external anchor node (taking ownership)")
 
         // Clear any existing anchor first
         clearAnchor()
@@ -365,17 +364,17 @@ class ARRenderer(
         val anchorTracking = anchor?.trackingState?.name ?: "NULL"
         val worldPos = externalAnchorNode.worldPosition
 
-        Log.d(TAG, "✅ External anchor node set (ownership transferred to ARRenderer)")
-        Log.d(TAG, "   Node already in scene: $nodeInScene")
-        Log.d(TAG, "   Anchor tracking state: $anchorTracking")
-        Log.d(TAG, "   World position: (${String.format("%.2f", worldPos.x)}, ${String.format("%.2f", worldPos.y)}, ${String.format("%.2f", worldPos.z)})")
+        FileLogger.d(TAG, "✅ External anchor node set (ownership transferred to ARRenderer)")
+        FileLogger.d(TAG, "   Node already in scene: $nodeInScene")
+        FileLogger.d(TAG, "   Anchor tracking state: $anchorTracking")
+        FileLogger.d(TAG, "   World position: (${String.format("%.2f", worldPos.x)}, ${String.format("%.2f", worldPos.y)}, ${String.format("%.2f", worldPos.z)})")
 
         if (!nodeInScene) {
-            Log.w(TAG, "⚠️ WARNING: AnchorNode is not in scene! Spheres may not render correctly.")
+            FileLogger.w(TAG, "⚠️ WARNING: AnchorNode is not in scene! Spheres may not render correctly.")
         }
 
         if (anchorTracking != "TRACKING") {
-            Log.w(TAG, "⚠️ WARNING: Anchor is not tracking! State: $anchorTracking")
+            FileLogger.w(TAG, "⚠️ WARNING: Anchor is not tracking! State: $anchorTracking")
         }
     }
 
@@ -391,7 +390,7 @@ class ARRenderer(
             "instant" -> AnchorType.INSTANT
             else -> AnchorType.UNKNOWN
         }
-        Log.d(TAG, "Anchor type set from string '$strategy' to: $currentAnchorType")
+        FileLogger.d(TAG, "Anchor type set from string '$strategy' to: $currentAnchorType")
     }
 
     /**
@@ -409,10 +408,10 @@ class ARRenderer(
         hasAnchorOffset = true
 
         val distance = kotlin.math.sqrt(offsetX * offsetX + offsetZ * offsetZ)
-        Log.d(TAG, "Anchor-camera offset set:")
-        Log.d(TAG, "   X offset: ${"%.2f".format(offsetX)}m (${if (offsetX >= 0) "right" else "left"})")
-        Log.d(TAG, "   Z offset: ${"%.2f".format(offsetZ)}m (${if (offsetZ >= 0) "forward" else "back"})")
-        Log.d(TAG, "   Total distance: ${"%.2f".format(distance)}m")
+        FileLogger.d(TAG, "Anchor-camera offset set:")
+        FileLogger.d(TAG, "   X offset: ${"%.2f".format(offsetX)}m (${if (offsetX >= 0) "right" else "left"})")
+        FileLogger.d(TAG, "   Z offset: ${"%.2f".format(offsetZ)}m (${if (offsetZ >= 0) "forward" else "back"})")
+        FileLogger.d(TAG, "   Total distance: ${"%.2f".format(distance)}m")
     }
 
     /**
@@ -423,7 +422,7 @@ class ARRenderer(
         anchorCameraOffsetX = 0f
         anchorCameraOffsetZ = 0f
         hasAnchorOffset = false
-        Log.d(TAG, "Anchor-camera offset cleared")
+        FileLogger.d(TAG, "Anchor-camera offset cleared")
     }
 
     // ========================================================================================
@@ -447,9 +446,9 @@ class ARRenderer(
             matGrey = arView.materialLoader.createColorInstance(Color(1f, 1f, 1f, 0.6f))
             matGone = arView.materialLoader.createColorInstance(Color(0.5f, 0.5f, 0.5f, 0.3f))
 
-            Log.d(TAG, "Materials initialized successfully")
+            FileLogger.d(TAG, "Materials initialized successfully")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create materials", e)
+            FileLogger.e(TAG, "Failed to create materials", e)
         }
     }
 
@@ -463,40 +462,40 @@ class ARRenderer(
                 try {
                     arView.engine.destroyMaterialInstance(it)
                 } catch (e: Exception) {
-                    Log.w(TAG, "Error destroying matRed: ${e.message}")
+                    FileLogger.w(TAG, "Error destroying matRed: ${e.message}")
                 }
             }
             matBlue?.let {
                 try {
                     arView.engine.destroyMaterialInstance(it)
                 } catch (e: Exception) {
-                    Log.w(TAG, "Error destroying matBlue: ${e.message}")
+                    FileLogger.w(TAG, "Error destroying matBlue: ${e.message}")
                 }
             }
             matGreen?.let {
                 try {
                     arView.engine.destroyMaterialInstance(it)
                 } catch (e: Exception) {
-                    Log.w(TAG, "Error destroying matGreen: ${e.message}")
+                    FileLogger.w(TAG, "Error destroying matGreen: ${e.message}")
                 }
             }
             matGrey?.let {
                 try {
                     arView.engine.destroyMaterialInstance(it)
                 } catch (e: Exception) {
-                    Log.w(TAG, "Error destroying matGrey: ${e.message}")
+                    FileLogger.w(TAG, "Error destroying matGrey: ${e.message}")
                 }
             }
             matGone?.let {
                 try {
                     arView.engine.destroyMaterialInstance(it)
                 } catch (e: Exception) {
-                    Log.w(TAG, "Error destroying matGone: ${e.message}")
+                    FileLogger.w(TAG, "Error destroying matGone: ${e.message}")
                 }
             }
-            Log.d(TAG, "Materials destroyed successfully")
+            FileLogger.d(TAG, "Materials destroyed successfully")
         } catch (e: Exception) {
-            Log.e(TAG, "Error in destroyMaterials: ${e.message}")
+            FileLogger.e(TAG, "Error in destroyMaterials: ${e.message}")
         } finally {
             matRed = null
             matBlue = null
@@ -545,28 +544,28 @@ class ARRenderer(
         val renderStartTime = System.currentTimeMillis()  // ADD THIS
         // Skip if segmentation is handling route rendering
         if (segmentationEnabled) {
-            Log.d(TAG, "renderRoute() skipped - segmentation mode active")
+            FileLogger.d(TAG, "renderRoute() skipped - segmentation mode active")
             return
         }
         // Validate prerequisites
         if (!hasAnchor()) {
-            Log.w(TAG, "❌ Cannot render: No anchor available")
+            FileLogger.w(TAG, "❌ Cannot render: No anchor available")
             return
         }
 
         if (routeCoords.isEmpty()) {
-            Log.w(TAG, "❌ Cannot render: No route coordinates")
+            FileLogger.w(TAG, "❌ Cannot render: No route coordinates")
             return
         }
 
-        Log.d(TAG, "╔════════════════════════════════════════════════════════════")
-        Log.d(TAG, "║ STARTING ROUTE RENDERING")
-        Log.d(TAG, "╠════════════════════════════════════════════════════════════")
-        Log.d(TAG, "║ Anchor: (${anchorLocation.latitude}, ${anchorLocation.longitude})")
-        Log.d(TAG, "║ Route: ${routeCoords.size} coordinates, ${routeNodePath.size} nodes")
-        Log.d(TAG, "║ Yaw offset: ${"%.1f".format(yawOffsetProvider())}°")
-        Log.d(TAG, "║ Visited nodes: ${visitedNodeIds.size}")
-        Log.d(TAG, "╚════════════════════════════════════════════════════════════")
+        FileLogger.d(TAG, "╔════════════════════════════════════════════════════════════")
+        FileLogger.d(TAG, "║ STARTING ROUTE RENDERING")
+        FileLogger.d(TAG, "╠════════════════════════════════════════════════════════════")
+        FileLogger.d(TAG, "║ Anchor: (${anchorLocation.latitude}, ${anchorLocation.longitude})")
+        FileLogger.d(TAG, "║ Route: ${routeCoords.size} coordinates, ${routeNodePath.size} nodes")
+        FileLogger.d(TAG, "║ Yaw offset: ${"%.1f".format(yawOffsetProvider())}°")
+        FileLogger.d(TAG, "║ Visited nodes: ${visitedNodeIds.size}")
+        FileLogger.d(TAG, "╚════════════════════════════════════════════════════════════")
         FileLogger.ar("Render START: ${routeCoords.size} coords, ${routeNodePath.size} nodes, yaw=${String.format("%.1f", yawOffsetProvider())}°")
 
         // Ensure materials are ready
@@ -580,7 +579,7 @@ class ARRenderer(
         // ====================================================================
         // PHASE 1: Render path line (small breadcrumb spheres)
         // ====================================================================
-        Log.d(TAG, "Phase 1: Rendering path line...")
+        FileLogger.d(TAG, "Phase 1: Rendering path line...")
 
         for (i in 0 until routeCoords.size - 1) {
             val p1 = routeCoords[i]
@@ -592,7 +591,7 @@ class ARRenderer(
                 // Skip if no materials available
                 val safeMat = matGrey ?: matRed
                 if (safeMat == null) {
-                    Log.e(TAG, "No materials available - skipping path sphere")
+                    FileLogger.e(TAG, "No materials available - skipping path sphere")
                     continue
                 }
 
@@ -626,12 +625,12 @@ class ARRenderer(
             sphereCount++
         }
 
-        Log.d(TAG, "Phase 1 complete: $sphereCount path spheres")
+        FileLogger.d(TAG, "Phase 1 complete: $sphereCount path spheres")
 
         // ====================================================================
         // PHASE 2: Render milestone nodes (larger colored spheres)
         // ====================================================================
-        Log.d(TAG, "Phase 2: Rendering milestone nodes...")
+        FileLogger.d(TAG, "Phase 2: Rendering milestone nodes...")
 
         for (node in routeNodePath) {
             val (x, z) = ArUtils.convertGpsToArPosition(
@@ -658,14 +657,14 @@ class ARRenderer(
                     visitedNodeIds.contains(node.id) -> "VISITED"
                     else -> "WAYPOINT"
                 }
-                Log.d(TAG, "  Node ${node.id} [$nodeType]: ${node.name ?: "unnamed"} at (${"%.1f".format(x)}, ${"%.1f".format(z)})")
+                FileLogger.d(TAG, "  Node ${node.id} [$nodeType]: ${node.name ?: "unnamed"} at (${"%.1f".format(x)}, ${"%.1f".format(z)})")
             }
         }
 
-        Log.d(TAG, "╔════════════════════════════════════════════════════════════")
-        Log.d(TAG, "║ ROUTE RENDERING COMPLETE")
-        Log.d(TAG, "║ Total: $sphereCount path spheres + ${routeNodePath.size} node spheres")
-        Log.d(TAG, "╚════════════════════════════════════════════════════════════")
+        FileLogger.d(TAG, "╔════════════════════════════════════════════════════════════")
+        FileLogger.d(TAG, "║ ROUTE RENDERING COMPLETE")
+        FileLogger.d(TAG, "║ Total: $sphereCount path spheres + ${routeNodePath.size} node spheres")
+        FileLogger.d(TAG, "╚════════════════════════════════════════════════════════════")
         val renderTimeMs = System.currentTimeMillis() - renderStartTime
         FileLogger.ar("Render COMPLETE: $sphereCount path + ${routeNodePath.size} nodes")
         FileLogger.perf("Route rendering", renderTimeMs, 100L)
@@ -703,7 +702,7 @@ class ARRenderer(
         isMilestone: Boolean = false
     ) {
         val parent = anchorNode ?: run {
-            Log.w(TAG, "Cannot place sphere: No anchor node exists")
+            FileLogger.w(TAG, "Cannot place sphere: No anchor node exists")
             return
         }
 
@@ -718,9 +717,9 @@ class ARRenderer(
             val compensatedZ = if (hasAnchorOffset) z - anchorCameraOffsetZ else z
 
             if (hasAnchorOffset && anchorNode?.childNodes?.size ?: 0 < 3) {
-                Log.d(TAG, "Offset compensation applied:")
-                Log.d(TAG, "   Original: (${"%.2f".format(x)}, ${"%.2f".format(z)})")
-                Log.d(TAG, "   Compensated: (${"%.2f".format(compensatedX)}, ${"%.2f".format(compensatedZ)})")
+                FileLogger.d(TAG, "Offset compensation applied:")
+                FileLogger.d(TAG, "   Original: (${"%.2f".format(x)}, ${"%.2f".format(z)})")
+                FileLogger.d(TAG, "   Compensated: (${"%.2f".format(compensatedX)}, ${"%.2f".format(compensatedZ)})")
             }
 
             // Calculate distance from anchor for dynamic height boost (use compensated values)
@@ -762,7 +761,7 @@ class ARRenderer(
 
             // Log anchor type influence on first few spheres
             if (anchorNode?.childNodes?.size ?: 0 < 3) {
-                Log.d(TAG, "Y calculation for ${currentAnchorType}: baseY=${"%.2f".format(baseY)}m (standard=${ROUTE_Y_OFFSET}m)")
+                FileLogger.d(TAG, "Y calculation for ${currentAnchorType}: baseY=${"%.2f".format(baseY)}m (standard=${ROUTE_Y_OFFSET}m)")
             }
 
             // ============================================================================
@@ -787,17 +786,17 @@ class ARRenderer(
 
                 // Debug logging for first few spheres to verify positioning
                 if (parent.childNodes.size < 5) {
-                    Log.d(TAG, "Sphere #${parent.childNodes.size + 1} placed:")
-                    Log.d(TAG, "  Local position: (${"%.2f".format(x)}, ${"%.2f".format(finalY)}, ${"%.2f".format(z)})")
-                    Log.d(TAG, "  Radius: ${"%.2f".format(radius)}m, Distance: ${"%.1f".format(distanceFromAnchor)}m")
-                    Log.d(TAG, "  Type: ${if (isMilestone) "MILESTONE" else "PATH"}")
+                    FileLogger.d(TAG, "Sphere #${parent.childNodes.size + 1} placed:")
+                    FileLogger.d(TAG, "  Local position: (${"%.2f".format(x)}, ${"%.2f".format(finalY)}, ${"%.2f".format(z)})")
+                    FileLogger.d(TAG, "  Radius: ${"%.2f".format(radius)}m, Distance: ${"%.1f".format(distanceFromAnchor)}m")
+                    FileLogger.d(TAG, "  Type: ${if (isMilestone) "MILESTONE" else "PATH"}")
                 }
             }
 
             parent.addChildNode(sphereNode)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create sphere at ($x, $z): ${e.message}")
+            FileLogger.e(TAG, "Failed to create sphere at ($x, $z): ${e.message}")
         }
     }
 
@@ -825,12 +824,12 @@ class ARRenderer(
                     try {
                         node.destroy()
                     } catch (e: Exception) {
-                        Log.w(TAG, "Failed to destroy child node: ${e.message}")
+                        FileLogger.w(TAG, "Failed to destroy child node: ${e.message}")
                     }
                 }
-                Log.d(TAG, "Route cleared: $count nodes removed")
+                FileLogger.d(TAG, "Route cleared: $count nodes removed")
             } catch (e: Exception) {
-                Log.e(TAG, "Error clearing route: ${e.message}")
+                FileLogger.e(TAG, "Error clearing route: ${e.message}")
             }
         } else {
             // Fallback: clear any orphaned spheres from the root scene
@@ -840,9 +839,9 @@ class ARRenderer(
                         node.destroy()
                     }
                 }
-                Log.w(TAG, "Cleared orphaned spheres from root scene")
+                FileLogger.w(TAG, "Cleared orphaned spheres from root scene")
             } catch (e: Exception) {
-                Log.e(TAG, "Error clearing orphaned spheres: ${e.message}")
+                FileLogger.e(TAG, "Error clearing orphaned spheres: ${e.message}")
             }
         }
     }
@@ -852,7 +851,7 @@ class ARRenderer(
      * Used during re-anchoring or when leaving AR navigation.
      */
     fun clearAnchor() {
-        Log.d(TAG, "Clearing anchor and all resources...")
+        FileLogger.d(TAG, "Clearing anchor and all resources...")
 
         // Reset anchor type
         currentAnchorType = AnchorType.UNKNOWN
@@ -860,8 +859,9 @@ class ARRenderer(
         // Clear anchor-camera offset
         clearAnchorCameraOffset()
 
-        // Reset segmentation mode
-        segmentationEnabled = false
+        // NOTE: Do NOT reset segmentationEnabled here!
+        // Segmentation mode should persist across re-anchoring.
+        // Only explicit enableSegmentation()/disableSegmentation() calls should change it.
 
         // First clear all route nodes
         clearRoute()
@@ -874,12 +874,12 @@ class ARRenderer(
                 // Destroy the SceneView node
                 node.destroy()
             } catch (e: Exception) {
-                Log.e(TAG, "Error destroying anchor node: ${e.message}")
+                FileLogger.e(TAG, "Error destroying anchor node: ${e.message}")
             }
         }
         anchorNode = null
 
-        Log.d(TAG, "✅ Anchor cleared")
+        FileLogger.d(TAG, "✅ Anchor cleared")
     }
 
     /**
@@ -887,7 +887,7 @@ class ARRenderer(
      * MUST be called when the Activity is destroyed to prevent memory leaks.
      */
     fun destroy() {
-        Log.d(TAG, "Destroying ARRenderer...")
+        FileLogger.d(TAG, "Destroying ARRenderer...")
 
         // Clear all scene nodes
         clearAnchor()
@@ -899,7 +899,7 @@ class ARRenderer(
         spherePositionCalculator = null
         terrainProfiler?.reset()
         terrainProfiler = null
-        Log.d(TAG, "✅ ARRenderer destroyed")
+        FileLogger.d(TAG, "✅ ARRenderer destroyed")
     }
 
     // ========================================================================================
@@ -1009,13 +1009,13 @@ class ARRenderer(
     fun analyzeBehindCamera(): BehindCameraResult {
         val anchor = anchorNode
         if (anchor == null) {
-            Log.w(TAG, "Cannot analyze: no anchor")
+            FileLogger.w(TAG, "Cannot analyze: no anchor")
             return BehindCameraResult(0, 0, 0, 0f, false, false)
         }
 
         val spheres = anchor.childNodes.filterIsInstance<SphereNode>()
         if (spheres.isEmpty()) {
-            Log.w(TAG, "Cannot analyze: no spheres")
+            FileLogger.w(TAG, "Cannot analyze: no spheres")
             return BehindCameraResult(0, 0, 0, 0f, false, false)
         }
 
@@ -1055,11 +1055,11 @@ class ARRenderer(
         val isMostlyBehind = percentBehind > 70f
         val needsRecalibration = percentBehind > 80f  // Strong indicator of yaw error
 
-        Log.d(TAG, "Behind-camera analysis:")
-        Log.d(TAG, "  Total checked: $total")
-        Log.d(TAG, "  Behind: $behindCount (${String.format("%.1f", percentBehind)}%)")
-        Log.d(TAG, "  In front: $frontCount")
-        Log.d(TAG, "  Needs recalibration: $needsRecalibration")
+        FileLogger.d(TAG, "Behind-camera analysis:")
+        FileLogger.d(TAG, "  Total checked: $total")
+        FileLogger.d(TAG, "  Behind: $behindCount (${String.format("%.1f", percentBehind)}%)")
+        FileLogger.d(TAG, "  In front: $frontCount")
+        FileLogger.d(TAG, "  Needs recalibration: $needsRecalibration")
 
         return BehindCameraResult(
             totalSpheres = total,

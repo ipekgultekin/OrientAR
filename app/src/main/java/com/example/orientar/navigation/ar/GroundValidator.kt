@@ -1,6 +1,5 @@
 package com.example.orientar.navigation.ar
 
-import android.util.Log
 import com.google.ar.core.*
 import kotlin.math.abs
 import com.example.orientar.navigation.util.FileLogger
@@ -83,16 +82,7 @@ object GroundValidator {
                 confidence *= 0.3f
             }
         }
-        // ========================================================================
-        // FIX 3.2: DepthPoint-specific validation
-        // ========================================================================
-        // PROBLEM: DepthPoints don't have surface normals or area like Planes,
-        //          but we were using Plane validation logic for them.
-        //
-        // SOLUTION: Add DepthPoint-specific validation based on:
-        //   - Distance from camera (closer is more reliable)
-        //   - Height below camera (should be reasonable ground distance)
-        // ========================================================================
+        // DepthPoint-specific validation (no surface normals/area like Planes)
         if (trackable is DepthPoint) {
             val depthDistance = hitResult.distance
 
@@ -112,8 +102,7 @@ object GroundValidator {
                 confidence *= 1.1f  // Ideal ground height range
             }
 
-            Log.d(TAG, "DepthPoint validation: distance=${String.format("%.1f", depthDistance)}m, " +
-                    "heightBelow=${String.format("%.1f", heightBelowCameraDP)}m, confidence=${String.format("%.2f", confidence)}")
+            FileLogger.anchor("DepthPoint: dist=${String.format("%.1f", depthDistance)}m, heightBelow=${String.format("%.1f", heightBelowCameraDP)}m, conf=${String.format("%.2f", confidence)}")
         }
 
         // ========================================================================
@@ -198,8 +187,7 @@ object GroundValidator {
         }
 
         if (failureReasons.isNotEmpty()) {
-            Log.d(TAG, "Validation: valid=$isValid, conf=${"%.2f".format(confidence)}, reasons=$failureReasons")
-            FileLogger.anchor("Validation: valid=$isValid, conf=${"%.2f".format(confidence)}")
+            FileLogger.anchor("Ground validation: valid=$isValid, conf=${"%.2f".format(confidence)}, reasons=$failureReasons")
         }
 
         return ValidationResult(

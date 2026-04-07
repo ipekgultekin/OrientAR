@@ -1,7 +1,6 @@
 package com.example.orientar.navigation.logic
 
 import android.content.Context
-import android.util.Log
 import org.json.JSONObject
 import java.util.PriorityQueue
 import kotlin.math.*
@@ -133,7 +132,7 @@ class CampusGraph(private val context: Context) {
             }
 
         } catch (e: Exception) {
-            Log.e("GraphTest", "ERROR: ${e.message}")
+            FileLogger.e("GraphTest", "ERROR: ${e.message}")
         }
     }
 
@@ -389,7 +388,7 @@ class CampusGraph(private val context: Context) {
             }
         }
 
-        Log.d(
+        FileLogger.d(
             "GraphReport",
             """
             ===== GRAPH HEALTH REPORT =====

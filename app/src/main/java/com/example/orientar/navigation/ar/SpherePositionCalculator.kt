@@ -1,7 +1,6 @@
 package com.example.orientar.navigation.ar
 
 import android.location.Location
-import android.util.Log
 import com.example.orientar.navigation.logic.ArUtils
 import com.example.orientar.navigation.logic.Coordinate
 import java.util.concurrent.ConcurrentHashMap
@@ -29,12 +28,7 @@ class SpherePositionCalculator(
     companion object {
         private const val TAG = "SphereCalc"
 
-        // ============================================================================
-        // BUG-006 FIX: Use centralized constant from ARPerformanceConfig
-        // ============================================================================
-        // REMOVED: private const val MAX_RENDER_DISTANCE = 100f
-        // Now using ARPerformanceConfig.MAX_RENDER_DISTANCE instead
-        // ============================================================================
+        // Render distance cutoff from ARPerformanceConfig.MAX_RENDER_DISTANCE
     }
 
     // ========================================================================================
@@ -76,7 +70,7 @@ class SpherePositionCalculator(
 
     // Callback for when calculation completes
     private var onCalculationComplete: ((CalculationResult) -> Unit)? = null
-    // FIX 3.3: Error callback for Phase 3 failures
+    // Error callback for calculation failures
     private var onCalculationError: ((String) -> Unit)? = null
 
     /**
@@ -111,7 +105,7 @@ class SpherePositionCalculator(
         anchorType: String
     ) {
         if (isCalculating.get()) {
-            Log.d(TAG, "Calculation already in progress, skipping")
+            FileLogger.d(TAG, "Calculation already in progress, skipping")
             FileLogger.ar("Position calc skipped: already in progress")
             return
         }
@@ -138,13 +132,13 @@ class SpherePositionCalculator(
                 lastYawOffset = yawOffset
                 lastAnchorLocation = anchorLocation
 
-                Log.d(TAG, "Calculated ${positions.size} positions in ${elapsed}ms")
+                FileLogger.d(TAG, "Calculated ${positions.size} positions in ${elapsed}ms")
                 FileLogger.perf("Position calculation", elapsed, 50L)  // Warn if > 50ms
 
                 onCalculationComplete?.invoke(result)
 
             } catch (e: Exception) {
-                Log.e(TAG, "Calculation failed: ${e.message}")
+                FileLogger.e(TAG, "Calculation failed: ${e.message}")
                 FileLogger.e("AR", "Position calculation FAILED: ${e.message}")
                 onCalculationError?.invoke(e.message ?: "Unknown error")  // ADD THIS
             } finally {
@@ -170,7 +164,7 @@ class SpherePositionCalculator(
 
         // If change is too large, need full recalculation
         if (abs(yawDelta) > 30.0) {
-            Log.d(TAG, "Yaw change too large ($yawDelta°), need full recalc")
+            FileLogger.d(TAG, "Yaw change too large ($yawDelta°), need full recalc")
             FileLogger.ar("Yaw change ${String.format("%.1f", yawDelta)}° - full recalc needed")
             return
         }
@@ -197,7 +191,7 @@ class SpherePositionCalculator(
                 callback(updatedPositions)
 
             } catch (e: Exception) {
-                Log.e(TAG, "Incremental update failed: ${e.message}")
+                FileLogger.e(TAG, "Incremental update failed: ${e.message}")
             }
         }
     }

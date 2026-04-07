@@ -1,7 +1,6 @@
 package com.example.orientar.navigation.ar
 
 import android.location.Location
-import android.util.Log
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -79,7 +78,7 @@ class TerrainProfiler {
         // Add anchor as first sample (highest confidence)
         addSample(anchorLocation, groundY, 1.0f, "Anchor")
 
-        Log.d(TAG, "Initialized at (${anchorLat}, ${anchorLng}), groundY=$groundY")
+        FileLogger.d(TAG, "Initialized at (${anchorLat}, ${anchorLng}), groundY=$groundY")
         FileLogger.terrain("Initialized: groundY=${String.format("%.2f", groundY)}")
     }
 
@@ -104,7 +103,7 @@ class TerrainProfiler {
             samples.poll()
         }
 
-        Log.d(TAG, "Added sample: groundY=$groundY, confidence=$confidence, type=$anchorType")
+        FileLogger.d(TAG, "Added sample: groundY=$groundY, confidence=$confidence, type=$anchorType")
         // Only log high-confidence samples to reduce noise
         if (confidence > 0.7f) {
             FileLogger.terrain("Sample: groundY=${String.format("%.2f", groundY)}, conf=${String.format("%.1f", confidence)}")
@@ -141,7 +140,7 @@ class TerrainProfiler {
         // CALLERS SHOULD: Check confidence > 0 before trusting heightAdjustment
         // ============================================================================
         if (!isInitialized) {
-            Log.w(TAG, "estimateTerrain called before initialize() - returning safe defaults")
+            FileLogger.w(TAG, "estimateTerrain called before initialize() - returning safe defaults")
             FileLogger.w("TERRAIN", "estimateTerrain called before init!")
             return TerrainEstimate(
                 expectedGroundY = 0f,
@@ -161,10 +160,11 @@ class TerrainProfiler {
             )
         }
 
-        // Remove old samples
+        // Remove expired samples (thread-safe: iterate snapshot, then remove individually)
         val now = System.currentTimeMillis()
         val validityMs = ARPerformanceConfig.TERRAIN_SAMPLE_VALIDITY_MS
-        samples.removeIf { now - it.timestamp > validityMs }
+        val expired = samples.filter { now - it.timestamp > validityMs }
+        samples.removeAll(expired.toSet())
 
         // Find nearby samples and interpolate
         val nearbySamples = findNearbySamples(targetLat, targetLng, maxDistance = 30.0)
@@ -190,7 +190,7 @@ class TerrainProfiler {
         samples.clear()
         latestEstimate.set(null)
         isInitialized = false
-        Log.d(TAG, "Reset")
+        FileLogger.d(TAG, "Reset")
         FileLogger.terrain("RESET")
     }
 
