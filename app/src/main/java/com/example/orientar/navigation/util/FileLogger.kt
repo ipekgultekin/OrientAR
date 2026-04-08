@@ -39,7 +39,7 @@ object FileLogger {
     private var appContext: Context? = null
 
     private val logBuffer = ConcurrentLinkedQueue<String>()
-    private val executor = Executors.newSingleThreadExecutor()
+    private var executor = Executors.newSingleThreadExecutor()
 
     private val fileNameFormat = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US)
     private val logTimeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
@@ -56,6 +56,11 @@ object FileLogger {
      */
     fun init(context: Context) {
         if (isInitialized) return
+
+        // Recreate executor if it was shutdown from a previous session
+        if (executor.isShutdown) {
+            executor = Executors.newSingleThreadExecutor()
+        }
 
         appContext = context.applicationContext
         sessionStartTime = System.currentTimeMillis()
@@ -453,11 +458,15 @@ object FileLogger {
             printWriter?.print(summary)
             printWriter?.flush()
             printWriter?.close()
-            executor.shutdown()
+            if (!executor.isShutdown) {
+                executor.shutdown()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error shutting down: ${e.message}")
         }
 
+        printWriter = null
+        logFile = null
         isInitialized = false
     }
 }

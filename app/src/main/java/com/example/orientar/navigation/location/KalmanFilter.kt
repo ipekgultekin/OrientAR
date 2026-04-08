@@ -1,45 +1,15 @@
 package com.example.orientar.navigation.location
 
 import android.location.Location
-import android.util.Log
 import kotlin.math.sqrt
+import com.example.orientar.navigation.util.FileLogger
 
 /**
- * KalmanFilter - GPS Position Smoothing using Kalman Filter Algorithm
+ * GPS position smoothing using a Kalman filter.
  *
- * ================================================================================================
- * PHASE 2: SENSOR FUSION - GPS KALMAN FILTER
- * ================================================================================================
- *
- * PROBLEM:
- * Raw GPS positions have inherent noise causing:
- * - Jump points (sudden position changes)
- * - Jitter (small random variations)
- * - Outliers (completely wrong positions)
- *
- * SOLUTION:
- * Kalman filter predicts the next position based on movement model,
- * then corrects using actual GPS measurement. This produces:
- * - Smooth trajectory
- * - Reduced jitter
- * - Outlier rejection
- *
- * EXPECTED IMPROVEMENT: 4-10m better accuracy, smooth path without jumps
- *
- * ================================================================================================
- * KALMAN FILTER THEORY (Simplified for GPS)
- * ================================================================================================
- *
- * STATE VECTOR: [latitude, longitude, velocity_lat, velocity_lng]
- *
- * PREDICT STEP:
- *   x_predicted = x_previous + velocity * dt
- *   P_predicted = P_previous + Q  (increase uncertainty)
- *
- * UPDATE STEP:
- *   K = P_predicted / (P_predicted + R)  (Kalman gain)
- *   x_updated = x_predicted + K * (measurement - x_predicted)
- *   P_updated = (1 - K) * P_predicted  (decrease uncertainty)
+ * State: [lat, lng, vel_lat, vel_lng]
+ * Predict: x' = x + v*dt,  P' = P + Q
+ * Update:  K = P'/(P'+R),   x = x' + K*(z-x'),  P = (1-K)*P'
  *
  * WHERE:
  *   P = Process covariance (our uncertainty about the state)
@@ -63,12 +33,12 @@ class KalmanFilter {
         // Higher = more responsive to changes, but more noise passes through
         // Lower = smoother, but slower to respond to real movement
         // Unit: degrees² per second
-        private const val PROCESS_NOISE_LAT = 0.00001   // ~1m movement per second
-        private const val PROCESS_NOISE_LNG = 0.00001
-        private const val PROCESS_NOISE_VEL = 0.0001    // Velocity can change faster
-
+        //private const val PROCESS_NOISE_LAT = 0.00001   // ~1m movement per second
+        //private const val PROCESS_NOISE_LNG = 0.00001
+        //private const val PROCESS_NOISE_VEL = 0.0001    // Velocity can change faster
+//
         // Minimum variance (prevents filter from becoming too confident)
-        private const val MIN_VARIANCE = 0.0000001
+        private const val MIN_VARIANCE = 1e-11
 
         // Maximum allowed jump distance (meters) before rejecting as outlier
         private const val MAX_JUMP_DISTANCE = 50.0
@@ -133,7 +103,7 @@ class KalmanFilter {
 
         // Check for time gap (GPS was off for a while)
         if (timeDeltaSec > MAX_TIME_GAP) {
-            Log.w(TAG, "Large time gap (${timeDeltaSec}s) - resetting filter")
+            FileLogger.gps("Kalman: large time gap (${timeDeltaSec}s) - resetting")
             initialize(location)
             return location.copy()
         }
@@ -151,7 +121,7 @@ class KalmanFilter {
 
         if (jumpDistance > MAX_JUMP_DISTANCE) {
             outlierRejections++
-            Log.w(TAG, "Outlier rejected: ${jumpDistance.toInt()}m jump (max: ${MAX_JUMP_DISTANCE}m)")
+            FileLogger.gps("Kalman: outlier rejected (${jumpDistance.toInt()}m jump)")
 
             // Return previous filtered position instead of the outlier
             return createFilteredLocation(location)
@@ -164,11 +134,26 @@ class KalmanFilter {
         val predictedLat = filteredLat + velocityLat * timeDeltaSec
         val predictedLng = filteredLng + velocityLng * timeDeltaSec
 
-        // Increase uncertainty (we're less sure after prediction)
-        val predictedVarianceLat = varianceLat + PROCESS_NOISE_LAT * timeDeltaSec
-        val predictedVarianceLng = varianceLng + PROCESS_NOISE_LNG * timeDeltaSec
-        val predictedVarianceVelLat = varianceVelLat + PROCESS_NOISE_VEL * timeDeltaSec
-        val predictedVarianceVelLng = varianceVelLng + PROCESS_NOISE_VEL * timeDeltaSec
+        // Increase uncertainty — ADAPTIVE based on movement speed
+        // Standing still: very low noise (trust filter prediction, reject GPS jitter)
+        // Walking: moderate noise (position changes predictably)
+        // Running: higher noise (more unpredictable movement)
+        val speedMs = if (location.hasSpeed()) location.speed.toDouble() else 0.0
+        val baseProcessNoise = when {
+            speedMs < 0.3  -> 1e-12   // Standing still
+            speedMs < 2.0  -> 1e-10   // Walking
+            speedMs < 5.0  -> 1e-9    // Fast walking / jogging
+            else           -> 1e-8    // Running
+        }
+        val processNoiseLat = baseProcessNoise * timeDeltaSec
+        val processNoiseLng = baseProcessNoise * timeDeltaSec
+        val processNoiseVel = baseProcessNoise * 10.0 * timeDeltaSec
+
+        val predictedVarianceLat = varianceLat + processNoiseLat
+        val predictedVarianceLng = varianceLng + processNoiseLng
+        val predictedVarianceVelLat = varianceVelLat + processNoiseVel
+        val predictedVarianceVelLng = varianceVelLng + processNoiseVel
+
 
         // ============================================================================
         // UPDATE STEP
@@ -186,15 +171,18 @@ class KalmanFilter {
         val kalmanGainLng = predictedVarianceLng / (predictedVarianceLng + measurementNoise)
 
         // Update position: x = x_predicted + K * (measurement - x_predicted)
+        val previousFilteredLat = filteredLat
+        val previousFilteredLng = filteredLng
         filteredLat = predictedLat + kalmanGainLat * (location.latitude - predictedLat)
         filteredLng = predictedLng + kalmanGainLng * (location.longitude - predictedLng)
 
-        // Update velocity estimate based on position change
+        // Update velocity estimate based on actual position change
+        // Uses the difference between current and previous filtered positions
         if (timeDeltaSec > 0) {
-            val newVelLat = (filteredLat - (filteredLat - kalmanGainLat * (location.latitude - predictedLat))) / timeDeltaSec
-            val newVelLng = (filteredLng - (filteredLng - kalmanGainLng * (location.longitude - predictedLng))) / timeDeltaSec
+            val newVelLat = (filteredLat - previousFilteredLat) / timeDeltaSec
+            val newVelLng = (filteredLng - previousFilteredLng) / timeDeltaSec
 
-            // Smooth velocity update
+            // Smooth velocity update via Kalman gain
             val velGainLat = predictedVarianceVelLat / (predictedVarianceVelLat + measurementNoise)
             val velGainLng = predictedVarianceVelLng / (predictedVarianceVelLng + measurementNoise)
 
@@ -214,7 +202,7 @@ class KalmanFilter {
 
         // Log occasionally for debugging
         if (totalUpdates % 10 == 0) {
-            Log.d(TAG, "Filter update #$totalUpdates: K=(${String.format("%.3f", kalmanGainLat)}, ${String.format("%.3f", kalmanGainLng)})")
+            FileLogger.gps("Kalman #$totalUpdates: K=(${String.format("%.3f", kalmanGainLat)}, ${String.format("%.3f", kalmanGainLng)})")
         }
 
         return createFilteredLocation(location)
@@ -240,7 +228,7 @@ class KalmanFilter {
         isInitialized = true
         totalUpdates = 1
 
-        Log.d(TAG, "Filter initialized at (${location.latitude}, ${location.longitude})")
+        FileLogger.gps("Kalman initialized at (${location.latitude}, ${location.longitude})")
     }
 
     /**
@@ -334,7 +322,7 @@ class KalmanFilter {
         totalUpdates = 0
         outlierRejections = 0
 
-        Log.d(TAG, "Filter reset")
+        FileLogger.gps("Kalman filter reset")
     }
 
     /**

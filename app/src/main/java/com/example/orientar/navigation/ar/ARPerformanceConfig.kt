@@ -39,25 +39,7 @@ object ARPerformanceConfig {
     // DISTANCE-BASED SCALING (Cutoff Prevention)
     // ========================================================================================
 
-    // ========================================================================================
-    // DISTANCE-BASED SCALING (Cutoff Prevention)
-    // ========================================================================================
-
-    // ============================================================================
-    // BUG-006 FIX: Centralized MAX_RENDER_DISTANCE constant
-    // ============================================================================
-    // PROBLEM: SpherePositionCalculator used 100f while ArUtils used 500.0
-    //          This inconsistency caused spheres to appear/disappear unexpectedly.
-    //
-    // SOLUTION: Single source of truth for render distance limit.
-    //           All files should reference this constant instead of local values.
-    //
-    // VALUE RATIONALE:
-    //   - 100m is practical limit for AR visibility (objects beyond blur together)
-    //   - Performance: fewer spheres = smoother rendering
-    //   - Segmentation handles long routes by creating nearby anchors
-    // ============================================================================
-    /** Maximum distance to render spheres from anchor (meters) */
+    /** Maximum distance to render spheres from anchor (meters).\r\n     * All files should reference this constant — not hardcoded local values.\r\n     * 100m is the practical AR visibility limit. */
     const val MAX_RENDER_DISTANCE = 100.0f
 
     /** Maximum reasonable distance for AR calculations (meters) - for validation */
@@ -122,15 +104,18 @@ object ARPerformanceConfig {
     // SEGMENTATION
     // ========================================================================================
 
-    /** Segment length (meters) */
+    // NOTE: RouteSegmentManager uses its own SEGMENT_LENGTH_METERS = 12.0f
+    @Deprecated("Not used by RouteSegmentManager — use RouteSegmentManager constants directly")
     const val SEGMENT_LENGTH = 15.0f
 
     /** Overlap between segments (meters) */
     const val SEGMENT_OVERLAP = 3.0f
 
-    /** Maximum active segments */
+    // NOTE: RouteSegmentManager uses its own MAX_ACTIVE_SEGMENTS = 4
+    @Deprecated("Not used by RouteSegmentManager — use RouteSegmentManager constants directly")
     const val MAX_ACTIVE_SEGMENTS = 5
 
-    /** Segments to create ahead of user */
+    // NOTE: RouteSegmentManager uses distance-based activation, not lookahead
+    @Deprecated("Not used by RouteSegmentManager — use RouteSegmentManager constants directly")
     const val SEGMENT_LOOKAHEAD = 3
 }

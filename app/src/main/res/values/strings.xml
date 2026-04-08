@@ -64,7 +64,7 @@
     <string name="ar_config_failed">⚠️ AR configuration failed</string>
 
     <!-- AR NAVIGATION — Instructions -->
-    <string name="compass_instruction">Wave phone in figure-8 pattern\nWaiting for accuracy…</string>
+    <string name="compass_instruction">Hold phone flat and rotate slowly\nCalibrating compass…</string>
     <string name="gps_instruction">Acquiring GPS signal…\nStand in open area.</string>
 
 </resources>

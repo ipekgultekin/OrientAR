@@ -1,7 +1,6 @@
 package com.example.orientar.navigation.ar
 
 import android.location.Location
-import android.util.Log
 import com.example.orientar.navigation.logic.ArUtils
 import com.example.orientar.navigation.logic.Coordinate
 import com.example.orientar.navigation.logic.Node
@@ -59,19 +58,19 @@ class RouteSegmentManager(
         private const val MAX_ACTIVE_SEGMENTS = 4            // Keep max 4 segments active (was 4 )
         private const val SEGMENT_LOOKAHEAD = 2              // Create 2 segments ahead
         private const val SEGMENT_LOOKBEHIND = 1             // Keep 1 segment behind
-        private const val OFF_ROUTE_THRESHOLD = 15.0  // User is off-route if > 15m from nearest route point
+        private const val OFF_ROUTE_THRESHOLD = 30.0  // User is off-route if > 30m from nearest route point (GeoJSON ~17m offset from real GPS)
 
         // Sphere rendering settings (matching ARRenderer)
         private const val PATH_SPHERE_RADIUS = 0.20f
-        private const val NODE_SPHERE_RADIUS = 0.45f
+        private const val NODE_SPHERE_RADIUS = 0.30f
         private const val ROUTE_Y_OFFSET = 1.2f
 
         // Anchor creation settings
         private const val ANCHOR_DISTANCE_FROM_CAMERA = 2.0f // Place anchor 2m in front
 
         // Distance-based segment activation (replaces lookahead)
-        private const val SEGMENT_ACTIVATION_DISTANCE = 8.0f  // Create segment when user is within 8m of its center
-        private const val SEGMENT_DEACTIVATION_DISTANCE = 25.0f  // Remove segment when user is > 25m from its center
+        private const val SEGMENT_ACTIVATION_DISTANCE = 25.0f  // Create segment when user is within 25m of its center (accounts for ~17m GeoJSON offset)
+        private const val SEGMENT_DEACTIVATION_DISTANCE = 50.0f  // Remove segment when user is > 50m from its center
     }
 
     // ========================================================================================
@@ -88,6 +87,8 @@ class RouteSegmentManager(
         val startRouteIndex: Int,              // First route coordinate index (inclusive)
         val endRouteIndex: Int,                // Last route coordinate index (exclusive)
         val sphereNodes: MutableList<SphereNode> = mutableListOf(),
+        val sphereGpsCoords: MutableList<Pair<Double, Double>> = mutableListOf(),  // (lat, lng) per sphere for X/Z repositioning
+        var renderedYawOffset: Float = 0f,     // yaw offset at last render/update
         var isRendered: Boolean = false,
         val creationTime: Long = System.currentTimeMillis()
     )
@@ -145,12 +146,12 @@ class RouteSegmentManager(
         endNode: Node?,
         visitedNodeIds: Set<Int> = emptySet()
     ) {
-        Log.d(TAG, "╔════════════════════════════════════════════════════════════")
-        Log.d(TAG, "║ INITIALIZING SEGMENT MANAGER")
-        Log.d(TAG, "╠════════════════════════════════════════════════════════════")
-        Log.d(TAG, "║ Route points: ${routeCoords.size}")
-        Log.d(TAG, "║ Route nodes: ${routeNodePath.size}")
-        Log.d(TAG, "╚════════════════════════════════════════════════════════════")
+        FileLogger.d(TAG, "╔════════════════════════════════════════════════════════════")
+        FileLogger.d(TAG, "║ INITIALIZING SEGMENT MANAGER")
+        FileLogger.d(TAG, "╠════════════════════════════════════════════════════════════")
+        FileLogger.d(TAG, "║ Route points: ${routeCoords.size}")
+        FileLogger.d(TAG, "║ Route nodes: ${routeNodePath.size}")
+        FileLogger.d(TAG, "╚════════════════════════════════════════════════════════════")
 
         this.routeCoords = routeCoords
         this.routeNodePath = routeNodePath
@@ -166,7 +167,7 @@ class RouteSegmentManager(
 
         isInitialized = true
 
-        Log.d(TAG, "Initialization complete: ${segmentBoundaries.size} segments planned")
+        FileLogger.d(TAG, "Initialization complete: ${segmentBoundaries.size} segments planned")
     }
 
     /**
@@ -175,6 +176,7 @@ class RouteSegmentManager(
     fun updateVisitedNodes(visitedIds: Set<Int>) {
         this.visitedNodeIds = visitedIds
     }
+
 
     // ========================================================================================
     // SEGMENT BOUNDARY CALCULATION
@@ -188,7 +190,7 @@ class RouteSegmentManager(
         segmentBoundaries.clear()
 
         if (routeCoords.size < 2) {
-            Log.w(TAG, "Route too short for segmentation")
+            FileLogger.w(TAG, "Route too short for segmentation")
             return
         }
 
@@ -233,7 +235,7 @@ class RouteSegmentManager(
 
                 segmentBoundaries.add(boundary)
 
-                Log.d(TAG, "Segment $segmentId: points $segmentStartIndex-${endIndex - 1}, " +
+                FileLogger.d(TAG, "Segment $segmentId: points $segmentStartIndex-${endIndex - 1}, " +
                         "distance: ${"%.1f".format(accumulatedDistance)}m, overlap: ${if (isLastPoint) "no" else "yes"}")
                 FileLogger.segment("Created segment $segmentId: points $segmentStartIndex-${endIndex-1}, ${String.format("%.1f", accumulatedDistance)}m")
 
@@ -256,7 +258,7 @@ class RouteSegmentManager(
         }
 
         totalSegmentCount = segmentBoundaries.size
-        Log.d(TAG, "Route divided into $totalSegmentCount segments (with overlap for continuity)")
+        FileLogger.d(TAG, "Route divided into $totalSegmentCount segments (with overlap for continuity)")
     }
 
     // ========================================================================================
@@ -283,10 +285,10 @@ class RouteSegmentManager(
             )
 
             materialsReady = true
-            Log.d(TAG, "Materials initialized")
+            FileLogger.d(TAG, "Materials initialized")
 
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize materials: ${e.message}")
+            FileLogger.e(TAG, "Failed to initialize materials: ${e.message}")
             materialsReady = false
         }
     }
@@ -318,7 +320,7 @@ class RouteSegmentManager(
         val newSegmentId = findUserSegment(userLocation)
 
         if (newSegmentId < 0) {
-            Log.w(TAG, "User not on route")
+            FileLogger.w(TAG, "User not on route")
             FileLogger.segment("User off-route: ${findMinDistanceToRoute(userLocation).toInt()}m from route")
             return false
         }
@@ -327,7 +329,7 @@ class RouteSegmentManager(
         currentSegmentId = newSegmentId
 
         if (segmentChanged) {
-            Log.d(TAG, "User entered segment $currentSegmentId")
+            FileLogger.d(TAG, "User entered segment $currentSegmentId")
         }
 
         // Ensure required segments are active
@@ -355,13 +357,13 @@ class RouteSegmentManager(
         frame: Frame
     ): Boolean {
         if (!isInitialized || segmentBoundaries.isEmpty()) {
-            Log.w(TAG, "Cannot force create segment - not initialized")
+            FileLogger.w(TAG, "Cannot force create segment - not initialized")
             FileLogger.e("SEGMENT", "forceCreate failed: not initialized")
             return false
         }
 
         if (frame.camera.trackingState != TrackingState.TRACKING) {
-            Log.w(TAG, "Cannot force create segment - camera not tracking")
+            FileLogger.w(TAG, "Cannot force create segment - camera not tracking")
             FileLogger.w("SEGMENT", "forceCreate delayed: camera not tracking")
             return false
         }
@@ -386,7 +388,7 @@ class RouteSegmentManager(
 
         currentSegmentId = closestSegmentId
 
-        Log.d(TAG, "Force creating initial segment $currentSegmentId (user ${closestDistance.toInt()}m from center)")
+        FileLogger.d(TAG, "Force creating initial segment $currentSegmentId (user ${closestDistance.toInt()}m from center)")
         FileLogger.segment("Force creating segment $currentSegmentId at ${closestDistance.toInt()}m distance")
 
         // Create segments around the user's position
@@ -402,7 +404,7 @@ class RouteSegmentManager(
         val minDistanceToRoute = findMinDistanceToRoute(userLocation)
 
         if (minDistanceToRoute > OFF_ROUTE_THRESHOLD) {
-            Log.w(TAG, "User is off-route: ${minDistanceToRoute.toInt()}m from nearest route point")
+            FileLogger.w(TAG, "User is off-route: ${minDistanceToRoute.toInt()}m from nearest route point")
             return -1  // Off-route
         }
 
@@ -449,7 +451,7 @@ class RouteSegmentManager(
         userLocation: Location
     ): Boolean {
         if (frame.camera.trackingState != TrackingState.TRACKING) {
-            Log.d(TAG, "Skipping segment update - camera not tracking")
+            FileLogger.d(TAG, "Skipping segment update - camera not tracking")
             FileLogger.segment("Update skipped: camera not tracking")
             return false
         }
@@ -542,15 +544,15 @@ class RouteSegmentManager(
         userLocation: Location
     ): Boolean {
         val boundary = segmentBoundaries.getOrNull(segmentId) ?: run {
-            Log.e(TAG, "Invalid segment ID: $segmentId")
+            FileLogger.e(TAG, "Invalid segment ID: $segmentId")
             return false
         }
 
-        Log.d(TAG, "Creating segment $segmentId (points ${boundary.startIndex}-${boundary.endIndex})")
+        FileLogger.d(TAG, "Creating segment $segmentId (points ${boundary.startIndex}-${boundary.endIndex})")
 
         // Create anchor for this segment
         val anchor = createAnchorForSegment(session, frame, boundary) ?: run {
-            Log.w(TAG, "Failed to create anchor for segment $segmentId")
+            FileLogger.w(TAG, "Failed to create anchor for segment $segmentId")
             return false
         }
 
@@ -561,8 +563,10 @@ class RouteSegmentManager(
         }
 
         // Create segment object
-        // CRITICAL: Use userLocation (GPS at anchor creation time), NOT boundary.centerGps
-        // This ensures AR anchor position corresponds to GPS origin for correct mapping
+        // Use userLocation (where the anchor physically IS in AR space).
+        // The anchor is created at the camera's current position, which corresponds
+        // to the user's GPS. Using boundary.centerGps would offset all spheres by
+        // the distance between the user and the segment center.
         val segment = RouteSegment(
             segmentId = segmentId,
             anchorNode = anchorNode,
@@ -577,7 +581,7 @@ class RouteSegmentManager(
         // Store segment
         activeSegments[segmentId] = segment
 
-        Log.d(TAG, "✅ Segment $segmentId created with ${segment.sphereNodes.size} spheres")
+        FileLogger.d(TAG, "✅ Segment $segmentId created with ${segment.sphereNodes.size} spheres")
         FileLogger.segment("Activated segment $segmentId: ${segment.sphereNodes.size} spheres")
 
         return true
@@ -596,7 +600,7 @@ class RouteSegmentManager(
             val anchor = tryHitTestAnchor(frame)
 
             if (anchor != null) {
-                Log.d(TAG, "Segment anchor created via hit-test")
+                FileLogger.d(TAG, "Segment anchor created via hit-test")
                 return anchor
             }
 
@@ -613,11 +617,11 @@ class RouteSegmentManager(
                 cameraPose.rotationQuaternion
             )
 
-            Log.d(TAG, "Segment anchor created via camera fallback")
+            FileLogger.d(TAG, "Segment anchor created via camera fallback")
             session.createAnchor(anchorPose)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error creating anchor: ${e.message}")
+            FileLogger.e(TAG, "Error creating anchor: ${e.message}")
             null
         }
     }
@@ -656,7 +660,7 @@ class RouteSegmentManager(
             null  // No suitable hit found
 
         } catch (e: Exception) {
-            Log.w(TAG, "Hit-test failed: ${e.message}")
+            FileLogger.w(TAG, "Hit-test failed: ${e.message}")
             null
         }
     }
@@ -666,7 +670,7 @@ class RouteSegmentManager(
      */
     private fun renderSegmentSpheres(segment: RouteSegment) {
         if (!materialsReady) {
-            Log.e(TAG, "Materials not ready - cannot render spheres")
+            FileLogger.e(TAG, "Materials not ready - cannot render spheres")
             return
         }
 
@@ -679,7 +683,7 @@ class RouteSegmentManager(
         )
 
         if (segmentCoords.isEmpty()) {
-            Log.w(TAG, "No coordinates for segment ${segment.segmentId}")
+            FileLogger.w(TAG, "No coordinates for segment ${segment.segmentId}")
             return
         }
 
@@ -720,8 +724,8 @@ class RouteSegmentManager(
 
                 val radius = if (isMilestone) NODE_SPHERE_RADIUS else PATH_SPHERE_RADIUS
 
-                // Place sphere
-                placeSphereInSegment(segment, x, z, material, radius, segment.startRouteIndex + i)
+                // Place sphere (store GPS coords for X/Z repositioning when heading changes)
+                placeSphereInSegment(segment, x, z, material, radius, segment.startRouteIndex + i, point.first, point.second)
             }
         }
 
@@ -751,11 +755,26 @@ class RouteSegmentManager(
 
         if (lastMaterial != null) {
             val lastRadius = if (isLastMilestone) NODE_SPHERE_RADIUS else PATH_SPHERE_RADIUS
-            placeSphereInSegment(segment, lastX, lastZ, lastMaterial, lastRadius, segment.endRouteIndex - 1)
+            placeSphereInSegment(segment, lastX, lastZ, lastMaterial, lastRadius, segment.endRouteIndex - 1, lastCoord.lat, lastCoord.lng)
         }
 
+        segment.renderedYawOffset = yawOffset.toFloat()
         segment.isRendered = true
-        Log.d(TAG, "Segment ${segment.segmentId} rendered with ${segment.sphereNodes.size} spheres (interpolated)")
+
+        // Diagnostic: log first, last, and every 5th sphere position
+        val totalSpheres = segment.sphereNodes.size
+        for (idx in segment.sphereNodes.indices) {
+            if (idx == 0 || idx == totalSpheres - 1 || idx % 5 == 0) {
+                val pos = segment.sphereNodes[idx].position
+                val gps = if (idx < segment.sphereGpsCoords.size) segment.sphereGpsCoords[idx] else null
+                FileLogger.d("SPHERE_POS", "Seg${segment.segmentId} sphere[$idx/$totalSpheres]: " +
+                    "arX=${String.format("%.2f", pos.x)}, arZ=${String.format("%.2f", pos.z)}, arY=${String.format("%.2f", pos.y)}, " +
+                    "gps=(${gps?.first?.let { String.format("%.6f", it) }}, ${gps?.second?.let { String.format("%.6f", it) }}), " +
+                    "yawOffset=${String.format("%.1f", yawOffset)}°")
+            }
+        }
+
+        FileLogger.d(TAG, "Segment ${segment.segmentId} rendered with ${segment.sphereNodes.size} spheres (interpolated)")
     }
 
     /**
@@ -767,13 +786,15 @@ class RouteSegmentManager(
         z: Float,
         material: com.google.android.filament.MaterialInstance,
         radius: Float,
-        globalIndex: Int
+        globalIndex: Int,
+        gpsLat: Double,
+        gpsLng: Double
     ) {
         try {
-            // Calculate Y with distance-based boost
-            val distanceFromAnchor = kotlin.math.sqrt(x * x + z * z)
-            val distanceBoost = (distanceFromAnchor / 20.0f).coerceIn(0f, 0.5f)
-            val finalY = ROUTE_Y_OFFSET + distanceBoost
+            // Y position will be updated per-frame by updateSphereYPositions()
+            // to compensate for ARCore vertical drift outdoors.
+            // Initial Y is just a placeholder — camera-relative Y overrides it.
+            val finalY = ROUTE_Y_OFFSET
 
             val sphereNode = SphereNode(
                 engine = arView.engine,
@@ -785,9 +806,10 @@ class RouteSegmentManager(
 
             segment.anchorNode.addChildNode(sphereNode)
             segment.sphereNodes.add(sphereNode)
+            segment.sphereGpsCoords.add(Pair(gpsLat, gpsLng))
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error placing sphere: ${e.message}")
+            FileLogger.e(TAG, "Error placing sphere: ${e.message}")
         }
     }
 
@@ -801,7 +823,7 @@ class RouteSegmentManager(
     private fun removeSegment(segmentId: Int) {
         val segment = activeSegments.remove(segmentId) ?: return
 
-        Log.d(TAG, "Removing segment $segmentId")
+        FileLogger.d(TAG, "Removing segment $segmentId")
 
         try {
             // Destroy all sphere nodes
@@ -809,24 +831,25 @@ class RouteSegmentManager(
                 try {
                     sphereNode.destroy()
                 } catch (e: Exception) {
-                    Log.w(TAG, "Error destroying sphere: ${e.message}")
+                    FileLogger.w(TAG, "Error destroying sphere: ${e.message}")
                 }
             }
             segment.sphereNodes.clear()
+            segment.sphereGpsCoords.clear()
 
             // Detach and destroy anchor
             try {
                 segment.anchorNode.anchor?.detach()
                 segment.anchorNode.destroy()
             } catch (e: Exception) {
-                Log.w(TAG, "Error destroying anchor: ${e.message}")
+                FileLogger.w(TAG, "Error destroying anchor: ${e.message}")
             }
 
-            Log.d(TAG, "✅ Segment $segmentId removed")
+            FileLogger.d(TAG, "✅ Segment $segmentId removed")
             FileLogger.segment("Removed segment $segmentId")
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error removing segment $segmentId: ${e.message}")
+            FileLogger.e(TAG, "Error removing segment $segmentId: ${e.message}")
             FileLogger.segment("Error removing segment $segmentId: ${e.message}")
         }
     }
@@ -834,6 +857,74 @@ class RouteSegmentManager(
     // ========================================================================================
     // PUBLIC QUERIES
     // ========================================================================================
+
+    /**
+     * Updates all active sphere X/Z positions when the yaw offset has changed.
+     * This compensates for heading refinement during navigation — as the yaw offset
+     * improves via motion updates, spheres smoothly reposition to match the corrected heading.
+     *
+     * @param currentYawOffset The current yaw offset from CoordinateAligner
+     */
+    fun updateSphereXZPositions(currentYawOffset: Float) {
+        for ((_, segment) in activeSegments) {
+            // Only update if yaw offset changed by more than 1 degree
+            if (Math.abs(currentYawOffset - segment.renderedYawOffset) < 1.0f) continue
+
+            val anchorGps = segment.anchorGpsLocation
+
+            for (i in segment.sphereNodes.indices) {
+                if (i >= segment.sphereGpsCoords.size) break
+
+                val (lat, lng) = segment.sphereGpsCoords[i]
+                val (newX, newZ) = ArUtils.convertGpsToArPosition(
+                    userLoc = anchorGps,
+                    targetLat = lat,
+                    targetLng = lng,
+                    yawOffsetDeg = currentYawOffset.toDouble()
+                )
+
+                val currentPos = segment.sphereNodes[i].position
+                segment.sphereNodes[i].position = io.github.sceneview.math.Position(
+                    newX,           // new X
+                    currentPos.y,   // keep current Y (managed by updateSphereYPositions)
+                    newZ            // new Z
+                )
+            }
+
+            val prevOffset = segment.renderedYawOffset
+            segment.renderedYawOffset = currentYawOffset
+            FileLogger.d("SPHERE_XZ", "Updated ${segment.sphereNodes.size} spheres in segment ${segment.segmentId}: yaw ${String.format("%.1f", prevOffset)}° → ${String.format("%.1f", currentYawOffset)}°")
+        }
+    }
+
+    /**
+     * Updates all active sphere Y positions to maintain a fixed height relative to the camera.
+     * This compensates for ARCore's vertical drift outdoors where the camera Y
+     * drifts over time but spheres are anchored at a fixed world Y.
+     *
+     * @param cameraWorldY The current camera world Y position from ARCore
+     * @param targetHeightBelowCamera How far below the camera spheres should appear (meters).
+     *        1.5f = roughly ground level when phone is held at chest height.
+     */
+    fun updateSphereYPositions(cameraWorldY: Float, targetHeightBelowCamera: Float = 1.5f) {
+        val targetWorldY = cameraWorldY - targetHeightBelowCamera
+
+        for ((_, segment) in activeSegments) {
+            val anchorWorldY = segment.anchorNode.worldPosition.y
+            val localY = targetWorldY - anchorWorldY
+
+            for (sphereNode in segment.sphereNodes) {
+                val currentPos = sphereNode.position
+                if (currentPos.y != localY) {
+                    sphereNode.position = io.github.sceneview.math.Position(
+                        currentPos.x,
+                        localY,
+                        currentPos.z
+                    )
+                }
+            }
+        }
+    }
 
     /**
      * Get total number of active segments.
@@ -888,7 +979,7 @@ class RouteSegmentManager(
      * Clear all segments without destroying the manager.
      */
     fun clearAllSegments() {
-        Log.d(TAG, "Clearing all segments")
+        FileLogger.d(TAG, "Clearing all segments")
 
         for (segmentId in activeSegments.keys.toList()) {
             removeSegment(segmentId)
@@ -901,28 +992,25 @@ class RouteSegmentManager(
      * Full cleanup - call when navigation ends.
      */
     fun destroy() {
-        Log.d(TAG, "╔════════════════════════════════════════════════════════════")
-        Log.d(TAG, "║ DESTROYING SEGMENT MANAGER")
-        Log.d(TAG, "╚════════════════════════════════════════════════════════════")
+        FileLogger.d(TAG, "╔════════════════════════════════════════════════════════════")
+        FileLogger.d(TAG, "║ DESTROYING SEGMENT MANAGER")
+        FileLogger.d(TAG, "╚════════════════════════════════════════════════════════════")
 
-        // Clear all segments
+        // Clear all segments first (destroys sphere nodes)
         clearAllSegments()
 
-            try {
+        // Destroy materials after all spheres are gone
+        try {
             pathMaterial?.let { arView.engine.destroyMaterialInstance(it) }
             milestoneMaterial?.let { arView.engine.destroyMaterialInstance(it) }
             visitedMaterial?.let { arView.engine.destroyMaterialInstance(it) }
         } catch (e: Exception) {
-            Log.w(TAG, "Error destroying materials: ${e.message}")
-        }
-        // Destroy materials
-        try {
+            FileLogger.w(TAG, "Error destroying materials: ${e.message}")
+        } finally {
             pathMaterial = null
             milestoneMaterial = null
             visitedMaterial = null
             materialsReady = false
-        } catch (e: Exception) {
-            Log.w(TAG, "Error destroying materials: ${e.message}")
         }
 
         // Clear route data
@@ -932,6 +1020,6 @@ class RouteSegmentManager(
 
         isInitialized = false
 
-        Log.d(TAG, "Segment manager destroyed")
+        FileLogger.d(TAG, "Segment manager destroyed")
     }
 }

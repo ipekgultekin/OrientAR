@@ -1,6 +1,5 @@
 package com.example.orientar.navigation.location
 
-import android.util.Log
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
@@ -59,10 +58,6 @@ import com.example.orientar.navigation.util.FileLogger
 class HeadingFusionFilter {
     companion object {
 
-        // Adaptive smoothing parameters
-        private const val SMOOTHING_ALPHA_MIN = 0.1f   // Heavy smoothing when still
-        private const val SMOOTHING_ALPHA_MAX = 0.5f   // Light smoothing when rotating fast
-        private const val ROTATION_RATE_THRESHOLD = 30f // Degrees per second for max alpha
         private const val TAG = "HeadingFusion"
 
         // ========================================================================================
@@ -99,11 +94,13 @@ class HeadingFusionFilter {
     // STATE VARIABLES
     // ========================================================================================
 
-    // Fused heading (output)
+    // Fused heading (output) - @Volatile for thread-safety between sensor callbacks
+    @Volatile
     private var fusedHeading: Float = 0f
 
     // Last sensor values
     private var lastGyroTimestamp: Long = 0
+    @Volatile
     private var lastCompassHeading: Float = 0f
 
     // Gyro bias estimation (to compensate for sensor drift)
@@ -127,16 +124,6 @@ class HeadingFusionFilter {
     // ========================================================================================
     // PUBLIC API
     // ========================================================================================
-
-    /**
-     * Calculate adaptive smoothing factor based on rotation rate.
-     * Fast rotation = less smoothing (faster response)
-     * Slow/no rotation = more smoothing (more stable)
-     */
-    private fun calculateAdaptiveAlpha(rotationRateDegPerSec: Float): Float {
-        val normalizedRate = (abs(rotationRateDegPerSec) / ROTATION_RATE_THRESHOLD).coerceIn(0f, 1f)
-        return SMOOTHING_ALPHA_MIN + normalizedRate * (SMOOTHING_ALPHA_MAX - SMOOTHING_ALPHA_MIN)
-    }
 
     /**
      * Update the filter with new gyroscope data.
@@ -210,7 +197,7 @@ class HeadingFusionFilter {
             fusedHeading = normalizedCompass
             lastCompassHeading = normalizedCompass
             isInitialized = true
-            Log.d(TAG, "Filter initialized with compass: ${normalizedCompass.toInt()}°")
+            FileLogger.d(TAG, "Filter initialized with compass: ${normalizedCompass.toInt()}°")
             FileLogger.sensor("Heading filter initialized: ${normalizedCompass.toInt()}°")
             return
         }
@@ -224,11 +211,17 @@ class HeadingFusionFilter {
         if (diff > 180) diff -= 360
         if (diff < -180) diff += 360
 
-        // Check for large divergence (gyro may have drifted too much)
+        // Check for large divergence
         if (abs(diff) > MAX_DIVERGENCE_DEG) {
-            Log.w(TAG, "Large divergence detected: ${abs(diff).toInt()}° - trusting compass")
-            FileLogger.w("SENSOR", "Heading divergence: ${abs(diff).toInt()}° - compass override")
-            fusedHeading = normalizedCompass
+            // DON'T blindly trust compass — it might be the source of the problem
+            // (magnetic interference near buildings, metal structures, etc.)
+            // Instead of snapping, apply a stronger but still gradual correction
+            FileLogger.w(TAG, "Large divergence: ${abs(diff).toInt()}° - applying strong correction (not snapping)")
+            FileLogger.w("SENSOR", "Heading divergence: ${abs(diff).toInt()}° - gradual correction")
+
+            // Use a stronger alpha temporarily (50% compass) instead of instant snap
+            val strongCorrection = 0.5f * diff
+            fusedHeading = normalizeAngle(fusedHeading + strongCorrection)
             compassCorrections++
             return
         }
@@ -247,7 +240,7 @@ class HeadingFusionFilter {
             if (abs(diff) > 15) {
                 FileLogger.sensor("Large correction: ${diff.toInt()}°, fused=${fusedHeading.toInt()}°")
             }
-            Log.d(TAG, "Compass correction: diff=${diff.toInt()}°, α=${String.format("%.2f", currentAlpha)}, fused=${fusedHeading.toInt()}°")
+            FileLogger.d(TAG, "Compass correction: diff=${diff.toInt()}°, α=${String.format("%.2f", currentAlpha)}, fused=${fusedHeading.toInt()}°")
         }
     }
 
@@ -304,7 +297,7 @@ class HeadingFusionFilter {
         isMoving = false
         stationaryCount = 0
 
-        Log.d(TAG, "Filter reset")
+        FileLogger.d(TAG, "Filter reset")
         FileLogger.sensor("Heading filter RESET")
     }
 
@@ -314,7 +307,7 @@ class HeadingFusionFilter {
     fun setHeading(heading: Float) {
         fusedHeading = normalizeAngle(heading)
         lastCompassHeading = fusedHeading
-        Log.d(TAG, "Heading set to: ${fusedHeading.toInt()}°")
+        FileLogger.d(TAG, "Heading set to: ${fusedHeading.toInt()}°")
     }
 
     // ========================================================================================
