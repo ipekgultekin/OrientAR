@@ -192,6 +192,8 @@ class SphereRefresher(
                 val newAnchor = session.createAnchor(anchorPose)
                 val newAnchorNode = AnchorNode(arView.engine, newAnchor).also { node ->
                     node.isEditable = false
+                    node.visibleCameraTrackingStates = setOf(TrackingState.TRACKING, TrackingState.PAUSED)
+                    node.visibleTrackingStates = setOf(TrackingState.TRACKING, TrackingState.PAUSED)
                     arView.addChildNode(node)
                 }
                 // Anchor created — destroy old anchor + spheres

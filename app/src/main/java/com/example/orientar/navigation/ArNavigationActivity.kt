@@ -596,16 +596,16 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             trackingStateChangeTime = System.currentTimeMillis()
         }
 
-        // LOG 4: FPS counter (every 10 seconds)
-        frameCount++
-        val fpsNow = System.currentTimeMillis()
-        if (fpsNow - lastFpsLogTime > 10000) {
-            val elapsed = fpsNow - lastFpsLogTime
-            val fps = if (elapsed > 0) frameCount * 1000f / elapsed else 0f
-            FileLogger.d("AR_FPS", "fps=${String.format("%.1f", fps)} frames=$frameCount in ${elapsed}ms")
-            frameCount = 0
-            lastFpsLogTime = fpsNow
-        }
+        // LOG 4: FPS counter — DISABLED (confirmed stable 60fps in log28-30)
+        // frameCount++
+        // val fpsNow = System.currentTimeMillis()
+        // if (fpsNow - lastFpsLogTime > 10000) {
+        //     val elapsed = fpsNow - lastFpsLogTime
+        //     val fps = if (elapsed > 0) frameCount * 1000f / elapsed else 0f
+        //     FileLogger.d("AR_FPS", "fps=${String.format("%.1f", fps)} frames=$frameCount in ${elapsed}ms")
+        //     frameCount = 0
+        //     lastFpsLogTime = fpsNow
+        // }
 
         when (camera.trackingState) {
             TrackingState.TRACKING -> {
@@ -618,8 +618,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 handleTrackingFailure(reason)
             }
             TrackingState.STOPPED -> {
-                FileLogger.w("AR_TRACKING", "Tracking stopped")
-                FileLogger.w("AR_TRACKING", "Tracking stopped!")
+                // FileLogger.w("AR_TRACKING", "Tracking stopped")
             }
         }
     }
@@ -745,12 +744,12 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private var lastTrackingLogTime = 0L
 
     private fun handleTrackingFailure(reason: TrackingFailureReason?) {
-        // Log FIRST — before any early returns (NONE was blocking this)
-        val now = System.currentTimeMillis()
-        if (now - lastTrackingLogTime > 3000) {
-            lastTrackingLogTime = now
-            FileLogger.d("AR_TRACKING", "PAUSED: reason=${reason?.name ?: "UNKNOWN"}")
-        }
+        // AR_TRACKING log — DISABLED (confirmed all NONE in log30)
+        // val now = System.currentTimeMillis()
+        // if (now - lastTrackingLogTime > 3000) {
+        //     lastTrackingLogTime = now
+        //     FileLogger.d("AR_TRACKING", "PAUSED: reason=${reason?.name ?: "UNKNOWN"}")
+        // }
 
         val message = when (reason) {
             TrackingFailureReason.NONE -> return
@@ -2264,16 +2263,13 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     headingFusionFilter.updateCompass(currentTrueBearing)
                     smoothedAzimuth = headingFusionFilter.getFusedHeading()
 
-                    // LOG 2: Compare raw compass vs fused heading (every 5 seconds)
-                    val fusionNow = System.currentTimeMillis()
-                    if (fusionNow - lastFusionLogTime > 5000) {
-                        lastFusionLogTime = fusionNow
-                        val fusedDiff = ((smoothedAzimuth - currentTrueBearing + 540) % 360) - 180
-                        FileLogger.d("HEADING_COMPARE",
-                            "raw=${currentTrueBearing.toInt()}° fused=${smoothedAzimuth.toInt()}° " +
-                            "diff=${fusedDiff.toInt()}° " +
-                            "yawOffset=${coordinateAligner.getYawOffset().toInt()}°")
-                    }
+                    // HEADING_COMPARE log — DISABLED (confirmed fused ≈ raw in log28-30)
+                    // val fusionNow = System.currentTimeMillis()
+                    // if (fusionNow - lastFusionLogTime > 5000) {
+                    //     lastFusionLogTime = fusionNow
+                    //     val fusedDiff = ((smoothedAzimuth - currentTrueBearing + 540) % 360) - 180
+                    //     FileLogger.d("HEADING_COMPARE", ...)
+                    // }
                 } else {
                     // Fallback to original smoothing
                     smoothedAzimuth = (smoothedAzimuth * 0.90f) + (trueAzimuth * 0.10f)
