@@ -222,6 +222,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private var smoothedCameraY: Float = Float.NaN
     private val CAMERA_Y_SMOOTHING = 0.15f  // Lower = smoother, higher = more responsive
     private var dualDeltaStartTime = 0L
+    private var lastHeadingInitLogTime = 0L
     private val DUAL_DELTA_TIMEOUT_SECONDS = 30  // Compass fallback after 30s
     private var lastCompassLogTime = 0L  // Diagnostic: throttle compass logging in STEP_1
     private var previousGpsForBearing: Location? = null  // For computing own GPS bearing
@@ -524,12 +525,14 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             // Recovery refresh: when tracking resumes after a gap, trigger immediate sphere refresh
             if (currentTrackingState == TrackingState.TRACKING && lastTrackingState == TrackingState.PAUSED) {
                 val lastSuccess = sphereRefresher?.lastSuccessfulRefreshTime ?: 0L
-                val gap = System.currentTimeMillis() - lastSuccess
                 val loc = currentUserLocation
-                if (gap > 1500 && loc != null && sphereRefresher?.isCurrentlyRefreshing != true
-                    && coordinateAligner.isInitialized() && !isRecalibrating) {
-                    FileLogger.d("RECOVERY_REFRESH", "Tracking recovered, gap=${gap}ms — triggering refresh")
-                    sphereRefresher?.refresh(loc, frame, session)
+                if (lastSuccess > 0L) {
+                    val gap = System.currentTimeMillis() - lastSuccess
+                    if (gap > 1500 && loc != null && sphereRefresher?.isCurrentlyRefreshing != true
+                        && coordinateAligner.isInitialized() && !isRecalibrating) {
+                        FileLogger.d("RECOVERY_REFRESH", "Tracking recovered, gap=${gap}ms — triggering refresh")
+                        sphereRefresher?.refresh(loc, frame, session)
+                    }
                 }
             }
 
@@ -575,9 +578,71 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
      */
     private fun handlePlaneDetectionAndAnchor(session: Session, frame: Frame) {
         // ====================================================================
-        // DEFERRED COMPASS INIT: Wait for phone to be upright
+        // DUAL-DELTA HEADING INIT: Compass shortcut + timeout
         // ====================================================================
-        if (pendingCompassInit) {
+        if (waitingForDualDelta && !coordinateAligner.isInitialized()) {
+            val pose = frame.camera.displayOrientedPose
+            val zAxis = pose.zAxis
+            val xzMagnitude = kotlin.math.sqrt(zAxis[0] * zAxis[0] + zAxis[2] * zAxis[2])
+
+            if (xzMagnitude > 0.7) {
+                val arYaw = getArYaw()
+
+                // Compute route bearing (same logic as COMPASS_SANITY)
+                val userLoc = currentUserLocation
+                if (userLoc != null && routeCoords.size > 1) {
+                    var routeTargetIdx = 1
+                    for (i in 1 until minOf(routeCoords.size, 10)) {
+                        val dist = ArUtils.distanceMeters(
+                            userLoc.latitude, userLoc.longitude,
+                            routeCoords[i].lat, routeCoords[i].lng
+                        )
+                        if (dist > 10.0) { routeTargetIdx = i; break }
+                    }
+                    val routeBearing = ArUtils.bearingDeg(
+                        userLoc.latitude, userLoc.longitude,
+                        routeCoords[routeTargetIdx].lat, routeCoords[routeTargetIdx].lng
+                    )
+                    val compassVsRoute = ArUtils.normalizeAngleDeg(currentTrueBearing.toDouble() - routeBearing)
+                    val compassDiff = Math.abs(compassVsRoute)
+
+                    // SHORTCUT: Compass agrees with route within 15° — trust it immediately
+                    if (compassDiff < 15.0) {
+                        FileLogger.d("HEADING_INIT", "Compass shortcut: compass=${currentTrueBearing.toInt()}° " +
+                            "agrees with route=${routeBearing.toInt()}° (diff=${compassDiff.toInt()}°) — using compass immediately")
+                        coordinateAligner.initialize(currentTrueBearing.toDouble(), arYaw)
+                        waitingForDualDelta = false
+                        pendingCompassInit = false
+                        isRecalibrating = false
+                        if (sphereRefresher == null) initializeSphereRefresher()
+                        runOnUiThread {
+                            Toast.makeText(this, "🧭 Heading ready — navigation starting", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        val now = System.currentTimeMillis()
+                        if (now - lastHeadingInitLogTime > 1000L) {
+                            lastHeadingInitLogTime = now
+                            FileLogger.d("HEADING_INIT", "Compass disagrees with route: compass=${currentTrueBearing.toInt()}° " +
+                                "vs route=${routeBearing.toInt()}° (diff=${compassDiff.toInt()}°) — waiting for walk calibration")
+                        }
+                    }
+                }
+
+                // TIMEOUT: Fall back to compass via pendingCompassInit after 30s
+                val elapsed = System.currentTimeMillis() - dualDeltaStartTime
+                if (waitingForDualDelta && elapsed > DUAL_DELTA_TIMEOUT_SECONDS * 1000L) {
+                    FileLogger.w("HEADING_INIT", "Dual-delta timeout (${elapsed / 1000}s) — falling back to compass init")
+                    waitingForDualDelta = false
+                    // pendingCompassInit is already true — let the existing compass init flow handle it
+                    // The existing COMPASS_SANITY check will apply route bearing fallback if compass is bad
+                }
+            }
+        }
+
+        // ====================================================================
+        // DEFERRED COMPASS INIT: Wait for phone to be upright (fallback path)
+        // ====================================================================
+        if (pendingCompassInit && !waitingForDualDelta) {
             val pose = frame.camera.displayOrientedPose
             val zAxis = pose.zAxis
             val xzMagnitude = kotlin.math.sqrt(zAxis[0] * zAxis[0] + zAxis[2] * zAxis[2])
@@ -1220,6 +1285,34 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private fun handleNavigationUpdate(location: Location) {
         currentUserLocation = location
 
+        // Feed dual-delta samples while waiting for walk calibration
+        if (waitingForDualDelta && !coordinateAligner.isInitialized()) {
+            val frame = arView.frame
+            if (frame != null) {
+                val pose = frame.camera.pose
+                val aligned = coordinateAligner.addAlignmentSample(
+                    location.latitude, location.longitude, location.accuracy,
+                    pose.tx(), pose.tz()
+                )
+                if (aligned) {
+                    waitingForDualDelta = false
+                    pendingCompassInit = false
+                    isRecalibrating = false
+                    FileLogger.d("HEADING_INIT", "Dual-delta alignment succeeded: " +
+                        "yawOffset=${coordinateAligner.getYawOffset().toInt()}°")
+                    if (sphereRefresher == null) initializeSphereRefresher()
+                    runOnUiThread {
+                        Toast.makeText(this, "🧭 Heading calibrated — navigation starting", Toast.LENGTH_SHORT).show()
+                    }
+                    // Fall through — let the rest of handleNavigationUpdate run for the first time
+                } else {
+                    return  // Still waiting for enough displacement
+                }
+            } else {
+                return  // No AR frame available yet
+            }
+        }
+
         // Skip navigation updates until aligner is initialized
         if (!coordinateAligner.isInitialized()) return
 
@@ -1327,13 +1420,16 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             // (STEP_1) to upright (AR view). Defer to handlePlaneDetectionAndAnchor()
             // which checks pose xzMagnitude > 0.7 before initializing.
             // ====================================================================
-            pendingCompassInit = true
+            pendingCompassInit = true  // Fallback: compass init if dual-delta times out
             pendingCompassInitLocation = location
-            waitingForDualDelta = false
+            waitingForDualDelta = true
+            dualDeltaStartTime = System.currentTimeMillis()
+            lastHeadingInitLogTime = 0L
+            coordinateAligner.resetDualDelta()
 
-            FileLogger.d("AR_SYNC", "Compass init deferred — waiting for upright phone")
+            FileLogger.d("HEADING_INIT", "Dual-delta wait started — walk to calibrate, compass fallback in ${DUAL_DELTA_TIMEOUT_SECONDS}s")
             runOnUiThread {
-                Toast.makeText(this, "🧭 Hold phone upright to start...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "🧭 Hold phone upright, then walk forward to calibrate", Toast.LENGTH_LONG).show()
             }
         }
 
@@ -1534,14 +1630,24 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
                 if (raXzMag > 0.7) {
                     val arYaw = getArYaw()
+                    // Re-anchor uses compass immediately (user is mid-walk, drift detected)
+                    // Dual-delta will refine heading if user keeps walking
                     coordinateAligner.forceReinitialize(currentTrueBearing.toDouble(), arYaw)
                     FileLogger.align("Re-anchor compass reinit: bearing=${currentTrueBearing.toInt()}°, offset=${coordinateAligner.getYawOffset().toInt()}°")
+                    waitingForDualDelta = true
+                    dualDeltaStartTime = System.currentTimeMillis()
+                    lastHeadingInitLogTime = 0L
+                    coordinateAligner.resetDualDelta()
+                    pendingCompassInit = true  // Fallback
+                    FileLogger.d("HEADING_INIT", "Re-anchor: compass used as initial, dual-delta wait for refinement")
                 } else {
                     pendingCompassInit = true
-                    FileLogger.align("Re-anchor compass deferred: xzMag=${String.format("%.2f", raXzMag)}")
+                    waitingForDualDelta = true
+                    dualDeltaStartTime = System.currentTimeMillis()
+                    lastHeadingInitLogTime = 0L
+                    coordinateAligner.resetDualDelta()
+                    FileLogger.d("HEADING_INIT", "Re-anchor deferred (phone flat): dual-delta wait started")
                 }
-
-                waitingForDualDelta = false
 
                 // 3. Reset anchor location (will be set when new anchor is created)
                 // Keep old location as fallback in case GPS fails during re-anchor
@@ -1759,36 +1865,58 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         val xzMag = if (zAxis != null) kotlin.math.sqrt(zAxis[0] * zAxis[0] + zAxis[2] * zAxis[2]) else 0f
 
         if (xzMag > 0.7) {
-            // Phone is upright — init immediately with route sanity check
+            // Phone is upright — check compass agreement with route
             val arYaw = getArYaw()
-            var recalibBearing = currentTrueBearing.toDouble()
             val userLoc = currentUserLocation
+            var compassDiff = 999.0
+            var routeBearing = 0.0
             if (userLoc != null && routeCoords.size > 1) {
                 var routeTargetIdx = 1
                 for (i in 1 until minOf(routeCoords.size, 10)) {
                     val dist = ArUtils.distanceMeters(userLoc.latitude, userLoc.longitude, routeCoords[i].lat, routeCoords[i].lng)
                     if (dist > 10.0) { routeTargetIdx = i; break }
                 }
-                val routeBearing = ArUtils.bearingDeg(userLoc.latitude, userLoc.longitude, routeCoords[routeTargetIdx].lat, routeCoords[routeTargetIdx].lng)
-                val compassVsRoute = ArUtils.normalizeAngleDeg(currentTrueBearing.toDouble() - routeBearing)
-                if (Math.abs(compassVsRoute) > 40.0) {
-                    FileLogger.w("COMPASS_SANITY", "Recalib: compass ${currentTrueBearing.toInt()}° vs route ${routeBearing.toInt()}° diff=${compassVsRoute.toInt()}° — USING ROUTE")
+                routeBearing = ArUtils.bearingDeg(userLoc.latitude, userLoc.longitude, routeCoords[routeTargetIdx].lat, routeCoords[routeTargetIdx].lng)
+                compassDiff = Math.abs(ArUtils.normalizeAngleDeg(currentTrueBearing.toDouble() - routeBearing))
+            }
+
+            if (compassDiff < 15.0) {
+                // Compass agrees with route — trust it immediately
+                coordinateAligner.forceReinitialize(currentTrueBearing.toDouble(), arYaw)
+                isRecalibrating = false
+                waitingForDualDelta = false
+                pendingCompassInit = false
+                FileLogger.d("HEADING_INIT", "Recalib compass shortcut: compass=${currentTrueBearing.toInt()}° " +
+                    "agrees with route=${routeBearing.toInt()}° (diff=${compassDiff.toInt()}°)")
+            } else {
+                // Compass disagrees — enter dual-delta wait for walk calibration
+                // Use compass+COMPASS_SANITY as initial estimate, then dual-delta will refine
+                var recalibBearing = currentTrueBearing.toDouble()
+                if (compassDiff > 40.0) {
+                    FileLogger.w("COMPASS_SANITY", "Recalib: compass ${currentTrueBearing.toInt()}° vs route ${routeBearing.toInt()}° diff=${compassDiff.toInt()}° — USING ROUTE")
                     recalibBearing = routeBearing
                 }
+                coordinateAligner.forceReinitialize(recalibBearing, arYaw)
+                isRecalibrating = false
+                // Enter dual-delta for refinement — will override if user walks
+                waitingForDualDelta = true
+                dualDeltaStartTime = System.currentTimeMillis()
+                lastHeadingInitLogTime = 0L
+                coordinateAligner.resetDualDelta()
+                pendingCompassInit = true  // Fallback if dual-delta times out
+                FileLogger.d("HEADING_INIT", "Recalib: compass disagrees (diff=${compassDiff.toInt()}°) — " +
+                    "using ${recalibBearing.toInt()}° as initial, waiting for walk refinement")
             }
-            coordinateAligner.forceReinitialize(recalibBearing, arYaw)
-            isRecalibrating = false  // Compass init done — allow refresh
-            FileLogger.d("COMPASS_INIT_DETAIL", "Recalib immediate init: " +
-                "bearing=${recalibBearing.toInt()}°, arYaw=${arYaw.toInt()}°, " +
-                "offset=${coordinateAligner.getYawOffset().toInt()}°, xzMag=${String.format("%.2f", xzMag)}")
         } else {
-            // Rare: phone is flat during recalib — defer
-            pendingCompassInit = true
+            // Rare: phone is flat during recalib — defer via dual-delta
+            waitingForDualDelta = true
+            dualDeltaStartTime = System.currentTimeMillis()
+            lastHeadingInitLogTime = 0L
+            coordinateAligner.resetDualDelta()
+            pendingCompassInit = true  // Fallback
             pendingCompassInitLocation = currentUserLocation ?: currentGps
-            FileLogger.d("COMPASS_INIT_DETAIL", "Recalib deferred: xzMag=${String.format("%.2f", xzMag)}")
+            FileLogger.d("HEADING_INIT", "Recalib deferred (phone flat, xzMag=${String.format("%.2f", xzMag)}) — dual-delta wait started")
         }
-
-        waitingForDualDelta = false
 
         // ============================================================================
         // 3b. Keep terrain profiler — recalibration is in the same physical area

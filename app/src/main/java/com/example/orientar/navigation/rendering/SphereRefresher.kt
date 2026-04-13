@@ -285,7 +285,7 @@ class SphereRefresher(
 
             FileLogger.d("SPHERE_SWAP", "Swapped: ${previousSpheres.size} old → ${newSpheres.size} new")
             FileLogger.d("REFRESH", "Complete: ${newSpheres.size} spheres ($milestoneCount milestones), " +
-                "anchorDist=${anchorDist.toInt()}m, nearest=$nearestRouteIndex/${interpolatedRoute.size}, " +
+                "anchorDist=${if (anchorDist > 100000) "new" else "${anchorDist.toInt()}m"}, nearest=$nearestRouteIndex/${interpolatedRoute.size}, " +
                 "yaw=${yawOffset.toInt()}°, renderDist=${String.format("%.0f", currentRenderDistance)}m")
 
             // Diagnostic: capture context for low-sphere cases
