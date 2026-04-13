@@ -24,7 +24,6 @@ import com.example.orientar.navigation.logic.ArUtils
 import com.example.orientar.navigation.logic.CampusGraph
 import com.example.orientar.navigation.logic.Node
 import com.example.orientar.navigation.logic.Coordinate
-import com.example.orientar.navigation.rendering.ARRenderer
 import com.example.orientar.navigation.rendering.CoordinateAligner
 import com.example.orientar.navigation.rendering.SphereRefresher
 import com.example.orientar.navigation.location.GPSBufferManager
@@ -37,11 +36,8 @@ import kotlinx.coroutines.delay
 import kotlin.math.abs
 import com.example.orientar.navigation.location.KalmanFilter
 import com.example.orientar.navigation.location.HeadingFusionFilter
-import com.example.orientar.navigation.ar.OutdoorAnchorManager
-import com.example.orientar.navigation.ar.RouteSegmentManager
 import com.example.orientar.navigation.util.FileLogger
 import com.example.orientar.R
-// Phase 3: Performance optimized rendering
 
 enum class AppState {
     STEP_0_ROUTE_SELECTION,
@@ -121,7 +117,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     // ========================================================================================
     // CORE SYSTEMS
     // ========================================================================================
-    private lateinit var arRenderer: ARRenderer
     private lateinit var coordinateAligner: CoordinateAligner
     private lateinit var gpsBufferManager: GPSBufferManager
     private lateinit var campusGraph: CampusGraph
@@ -211,21 +206,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private var anchorCreationAttempts = 0       // Track retry attempts
 
     private var lastPlaneLogTime: Long = 0
-    // ========================================================================================
-    // OUTDOOR ANCHOR MANAGEMENT
-    // ========================================================================================
-    // The OutdoorAnchorManager provides improved anchor creation for outdoor environments
-    // using a priority-based strategy: DepthPoint > Plane > Camera-relative estimation
-    private lateinit var outdoorAnchorManager: OutdoorAnchorManager
-    // ========================================================================================
-    // ROUTE SEGMENTATION
-    // ========================================================================================
-    // RouteSegmentManager handles multi-anchor route rendering for long routes.
-    // This prevents drift issues when spheres are far from a single anchor.
-    // ========================================================================================
-    private var routeSegmentManager: RouteSegmentManager? = null
-    private var useSegmentation = true  // Enable segmentation for routes > threshold
-    private val SEGMENTATION_ROUTE_THRESHOLD = 50.0  // Use segmentation for routes > 50m
 
     // Track which anchor strategy was used (for debugging/UI)
     private var lastAnchorStrategy: String = "None"
@@ -242,6 +222,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private var smoothedCameraY: Float = Float.NaN
     private val CAMERA_Y_SMOOTHING = 0.15f  // Lower = smoother, higher = more responsive
     private var dualDeltaStartTime = 0L
+    private var lastHeadingInitLogTime = 0L
     private val DUAL_DELTA_TIMEOUT_SECONDS = 30  // Compass fallback after 30s
     private var lastCompassLogTime = 0L  // Diagnostic: throttle compass logging in STEP_1
     private var previousGpsForBearing: Location? = null  // For computing own GPS bearing
@@ -367,99 +348,60 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
      * 5. Coordinate aligner
      */
     override fun onDestroy() {
-        // Clean up SphereRefresher FIRST (before super or FileLogger shutdown)
         try {
-            sphereRefresher?.clearAll()
-            sphereRefresher = null
-        } catch (e: Exception) {
-            // Ignore — activity is being destroyed
-        }
+            FileLogger.d("AR_LIFECYCLE", "onDestroy — cleaning up resources")
 
-        super.onDestroy()
-
-        FileLogger.d("AR_LIFECYCLE", "╔════════════════════════════════════════════════════════════")
-        FileLogger.d("AR_LIFECYCLE", "║ onDestroy - Cleaning up resources")
-        // Phase 3 cleanup
-        try {
-            FileLogger.d("AR_LIFECYCLE", "║ ✅ SphereRefresher + Phase 3 cleanup complete")
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "║ Phase 3 cleanup failed: ${e.message}")
-            FileLogger.e("LIFECYCLE", "Phase 3 cleanup failed: ${e.message}")
-        }
-        FileLogger.d("AR_LIFECYCLE", "╚════════════════════════════════════════════════════════════")
-
-        // 1. Unregister sensor listener
-        try {
-            if (::sensorManager.isInitialized) {
-                sensorManager.unregisterListener(this)
-                FileLogger.d("AR_LIFECYCLE", "✅ Sensor listener unregistered")
+            // 1. SphereRefresher cleanup (SceneView still alive)
+            try {
+                sphereRefresher?.clearAll()
+                sphereRefresher = null
+                FileLogger.d("AR_LIFECYCLE", "SphereRefresher cleared")
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "SphereRefresher cleanup failed", e)
             }
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error unregistering sensor: ${e.message}")
-            FileLogger.e("LIFECYCLE", "Sensor unregister error: ${e.message}")
-        }
 
-        // 2. Stop location updates
-        try {
-            if (::locationCallback.isInitialized) {
-                fusedLocationClient.removeLocationUpdates(locationCallback)
-                FileLogger.d("AR_LIFECYCLE", "✅ Location updates stopped")
+            // 2. Unregister sensor listener
+            try {
+                if (::sensorManager.isInitialized) {
+                    sensorManager.unregisterListener(this)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "Sensor unregister failed", e)
             }
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error stopping location updates: ${e.message}")
-            FileLogger.e("LIFECYCLE", "Location stop error: ${e.message}")
-        }
 
-        // 3. Destroy AR renderer
-        try {
-            if (::arRenderer.isInitialized) {
-                arRenderer.destroy()
-                FileLogger.d("AR_LIFECYCLE", "✅ AR renderer destroyed")
+            // 3. Stop location updates
+            try {
+                if (::locationCallback.isInitialized) {
+                    fusedLocationClient.removeLocationUpdates(locationCallback)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "Location stop failed", e)
             }
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error destroying AR renderer: ${e.message}")
-            FileLogger.e("LIFECYCLE", "AR destroy error: ${e.message}")
-        }
 
-        // 4. Destroy outdoor anchor manager
-        try {
-            if (::outdoorAnchorManager.isInitialized) {
-                outdoorAnchorManager.destroy()
-                FileLogger.d("AR_LIFECYCLE", "✅ Outdoor anchor manager destroyed")
+            // 4. Reset coordinate aligner
+            try {
+                if (::coordinateAligner.isInitialized) {
+                    coordinateAligner.reset()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "CoordinateAligner reset failed", e)
             }
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error destroying outdoor anchor manager: ${e.message}")
-            FileLogger.e("LIFECYCLE", "Anchor manager destroy error: ${e.message}")
-        }
 
-        // 5. Destroy route segment manager
-        try {
-            routeSegmentManager?.destroy()
-            routeSegmentManager = null
-            FileLogger.d("AR_LIFECYCLE", "✅ Route segment manager destroyed")
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error destroying segment manager: ${e.message}")
-            FileLogger.e("LIFECYCLE", "Segment manager destroy error: ${e.message}")
-        }
-
-        // 6. Reset coordinate aligner
-        try {
-            if (::coordinateAligner.isInitialized) {
-                coordinateAligner.reset()
-                FileLogger.d("AR_LIFECYCLE", "✅ Coordinate aligner reset")
+            // 8. Shutdown FileLogger LAST (no FileLogger calls after this)
+            try {
+                FileLogger.d("AR_LIFECYCLE", "All resources cleaned up — shutting down logger")
+                FileLogger.shutdown()
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "FileLogger shutdown failed", e)
             }
+
         } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error resetting coordinate aligner: ${e.message}")
-            FileLogger.e("LIFECYCLE", "Aligner reset error: ${e.message}")
+            // Top-level catch — prevent any exception from crashing the process
+            android.util.Log.e("AR_LIFECYCLE", "onDestroy cleanup failed", e)
+        } finally {
+            // super.onDestroy() LAST — destroys view hierarchy (SceneView, ARCore session)
+            super.onDestroy()
         }
-        // Shutdown file logger
-        try {
-            FileLogger.shutdown()
-            FileLogger.d("AR_LIFECYCLE", "✅ FileLogger shutdown")
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error shutting down FileLogger: ${e.message}")
-        }
-        FileLogger.d("AR_LIFECYCLE", "✅ All resources cleaned up")
     }
 
     // ========================================================================================
@@ -583,12 +525,14 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             // Recovery refresh: when tracking resumes after a gap, trigger immediate sphere refresh
             if (currentTrackingState == TrackingState.TRACKING && lastTrackingState == TrackingState.PAUSED) {
                 val lastSuccess = sphereRefresher?.lastSuccessfulRefreshTime ?: 0L
-                val gap = System.currentTimeMillis() - lastSuccess
                 val loc = currentUserLocation
-                if (gap > 1500 && loc != null && sphereRefresher?.isCurrentlyRefreshing != true
-                    && coordinateAligner.isInitialized() && !isRecalibrating) {
-                    FileLogger.d("RECOVERY_REFRESH", "Tracking recovered, gap=${gap}ms — triggering refresh")
-                    sphereRefresher?.refresh(loc, frame, session)
+                if (lastSuccess > 0L) {
+                    val gap = System.currentTimeMillis() - lastSuccess
+                    if (gap > 1500 && loc != null && sphereRefresher?.isCurrentlyRefreshing != true
+                        && coordinateAligner.isInitialized() && !isRecalibrating) {
+                        FileLogger.d("RECOVERY_REFRESH", "Tracking recovered, gap=${gap}ms — triggering refresh")
+                        sphereRefresher?.refresh(loc, frame, session)
+                    }
                 }
             }
 
@@ -628,21 +572,77 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
      */
     /**
      * Handles plane detection and anchor creation during navigation.
-     *
-     * OUTDOOR AR OPTIMIZATION:
-     * This function now uses OutdoorAnchorManager which provides:
-     * 1. DepthPoint anchoring (best for outdoor - uses depth-from-motion)
-     * 2. Stabilization delay (waits for ARCore to build world model)
-     * 3. Multi-strategy fallback (Depth > Plane > Camera-relative)
-     * 4. User-calibratable phone height for ground estimation
+     * SphereRefresher manages its own identity-rotation anchors.
      *
      * @param frame The current AR frame from ARCore
      */
     private fun handlePlaneDetectionAndAnchor(session: Session, frame: Frame) {
         // ====================================================================
-        // DEFERRED COMPASS INIT: Wait for phone to be upright
+        // DUAL-DELTA HEADING INIT: Compass shortcut + timeout
         // ====================================================================
-        if (pendingCompassInit) {
+        if (waitingForDualDelta && !coordinateAligner.isInitialized()) {
+            val pose = frame.camera.displayOrientedPose
+            val zAxis = pose.zAxis
+            val xzMagnitude = kotlin.math.sqrt(zAxis[0] * zAxis[0] + zAxis[2] * zAxis[2])
+
+            if (xzMagnitude > 0.7) {
+                val arYaw = getArYaw()
+
+                // Compute route bearing (same logic as COMPASS_SANITY)
+                val userLoc = currentUserLocation
+                if (userLoc != null && routeCoords.size > 1) {
+                    var routeTargetIdx = 1
+                    for (i in 1 until minOf(routeCoords.size, 10)) {
+                        val dist = ArUtils.distanceMeters(
+                            userLoc.latitude, userLoc.longitude,
+                            routeCoords[i].lat, routeCoords[i].lng
+                        )
+                        if (dist > 10.0) { routeTargetIdx = i; break }
+                    }
+                    val routeBearing = ArUtils.bearingDeg(
+                        userLoc.latitude, userLoc.longitude,
+                        routeCoords[routeTargetIdx].lat, routeCoords[routeTargetIdx].lng
+                    )
+                    val compassVsRoute = ArUtils.normalizeAngleDeg(currentTrueBearing.toDouble() - routeBearing)
+                    val compassDiff = Math.abs(compassVsRoute)
+
+                    // SHORTCUT: Compass agrees with route within 15° — trust it immediately
+                    if (compassDiff < 15.0) {
+                        FileLogger.d("HEADING_INIT", "Compass shortcut: compass=${currentTrueBearing.toInt()}° " +
+                            "agrees with route=${routeBearing.toInt()}° (diff=${compassDiff.toInt()}°) — using compass immediately")
+                        coordinateAligner.initialize(currentTrueBearing.toDouble(), arYaw)
+                        waitingForDualDelta = false
+                        pendingCompassInit = false
+                        isRecalibrating = false
+                        if (sphereRefresher == null) initializeSphereRefresher()
+                        runOnUiThread {
+                            Toast.makeText(this, "🧭 Heading ready — navigation starting", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        val now = System.currentTimeMillis()
+                        if (now - lastHeadingInitLogTime > 1000L) {
+                            lastHeadingInitLogTime = now
+                            FileLogger.d("HEADING_INIT", "Compass disagrees with route: compass=${currentTrueBearing.toInt()}° " +
+                                "vs route=${routeBearing.toInt()}° (diff=${compassDiff.toInt()}°) — waiting for walk calibration")
+                        }
+                    }
+                }
+
+                // TIMEOUT: Fall back to compass via pendingCompassInit after 30s
+                val elapsed = System.currentTimeMillis() - dualDeltaStartTime
+                if (waitingForDualDelta && elapsed > DUAL_DELTA_TIMEOUT_SECONDS * 1000L) {
+                    FileLogger.w("HEADING_INIT", "Dual-delta timeout (${elapsed / 1000}s) — falling back to compass init")
+                    waitingForDualDelta = false
+                    // pendingCompassInit is already true — let the existing compass init flow handle it
+                    // The existing COMPASS_SANITY check will apply route bearing fallback if compass is bad
+                }
+            }
+        }
+
+        // ====================================================================
+        // DEFERRED COMPASS INIT: Wait for phone to be upright (fallback path)
+        // ====================================================================
+        if (pendingCompassInit && !waitingForDualDelta) {
             val pose = frame.camera.displayOrientedPose
             val zAxis = pose.zAxis
             val xzMagnitude = kotlin.math.sqrt(zAxis[0] * zAxis[0] + zAxis[2] * zAxis[2])
@@ -862,26 +862,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             layoutDebugPanel.visibility = View.GONE
         }
 
-        // Phase 3 toggle button
-        btnPhase3Toggle.setOnClickListener {
-            performHapticFeedback(it)
-            usePhase3Rendering = !usePhase3Rendering
-            btnPhase3Toggle.isSelected = usePhase3Rendering
-
-            // Initialize Phase 3 if enabling
-            if (usePhase3Rendering && !arRenderer.isPhase3Enabled()) {
-                arRenderer.initializePhase3Components()
-            }
-
-            Toast.makeText(
-                this,
-                "Phase 3: ${if (usePhase3Rendering) "ON ✅" else "OFF ❌"}",
-                Toast.LENGTH_SHORT
-            ).show()
-
-            // SphereRefresher handles rendering — no explicit re-render needed
-        }
-
         // Quick recalibrate button in debug panel
         btnDebugRecalibrate.setOnClickListener {
             performHapticFeedback(it)
@@ -1076,31 +1056,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             maxAccuracyThreshold = 10.0f,
             maxScatterDistance = 5.0f
         )
-
-        arRenderer = ARRenderer(arView) { coordinateAligner.getYawOffset() }
-
-        // ============================================================================
-        // PHASE 3: Initialize performance rendering components
-        // ============================================================================
-        if (usePhase3Rendering) {
-            arRenderer.initializePhase3Components()
-            FileLogger.d("AR_INIT", "Phase 3 components initialized")
-
-            // Phase 3 calculation errors — log only, SphereRefresher handles rendering
-            arRenderer.getPositionCalculator()?.setOnCalculationError { error ->
-                runOnUiThread {
-                    FileLogger.e("AR_RENDER", "Phase 3 calculation error: $error")
-                    Toast.makeText(this, "⚠️ Render calculation failed", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-        // Initialize outdoor-optimized anchor manager
-        outdoorAnchorManager = OutdoorAnchorManager(this, arView)
-
-        // Initialize route segment manager (created but not started until navigation begins)
-        // Note: We pass arView and yawOffset provider, same as ARRenderer
-        routeSegmentManager = RouteSegmentManager(arView) { coordinateAligner.getYawOffset() }
 
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
@@ -1330,6 +1285,36 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private fun handleNavigationUpdate(location: Location) {
         currentUserLocation = location
 
+        // Feed dual-delta samples while waiting for walk calibration
+        // No !isInitialized() guard — addAlignmentSample() has its own internal guards
+        // This allows dual-delta refinement after recalibration (where isInitialized=true)
+        if (waitingForDualDelta) {
+            val frame = arView.frame
+            if (frame != null) {
+                val pose = frame.camera.pose
+                val aligned = coordinateAligner.addAlignmentSample(
+                    location.latitude, location.longitude, location.accuracy,
+                    pose.tx(), pose.tz()
+                )
+                if (aligned) {
+                    waitingForDualDelta = false
+                    pendingCompassInit = false
+                    isRecalibrating = false
+                    FileLogger.d("HEADING_INIT", "Dual-delta alignment succeeded: " +
+                        "yawOffset=${coordinateAligner.getYawOffset().toInt()}°")
+                    if (sphereRefresher == null) initializeSphereRefresher()
+                    runOnUiThread {
+                        Toast.makeText(this, "🧭 Heading calibrated — navigation starting", Toast.LENGTH_SHORT).show()
+                    }
+                    // Fall through — let the rest of handleNavigationUpdate run for the first time
+                } else {
+                    return  // Still waiting for enough displacement
+                }
+            } else {
+                return  // No AR frame available yet
+            }
+        }
+
         // Skip navigation updates until aligner is initialized
         if (!coordinateAligner.isInitialized()) return
 
@@ -1437,13 +1422,16 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             // (STEP_1) to upright (AR view). Defer to handlePlaneDetectionAndAnchor()
             // which checks pose xzMagnitude > 0.7 before initializing.
             // ====================================================================
-            pendingCompassInit = true
+            pendingCompassInit = true  // Fallback: compass init if dual-delta times out
             pendingCompassInitLocation = location
-            waitingForDualDelta = false
+            waitingForDualDelta = true
+            dualDeltaStartTime = System.currentTimeMillis()
+            lastHeadingInitLogTime = 0L
+            coordinateAligner.resetDualDelta()
 
-            FileLogger.d("AR_SYNC", "Compass init deferred — waiting for upright phone")
+            FileLogger.d("HEADING_INIT", "Dual-delta wait started — walk to calibrate, compass fallback in ${DUAL_DELTA_TIMEOUT_SECONDS}s")
             runOnUiThread {
-                Toast.makeText(this, "🧭 Hold phone upright to start...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "🧭 Hold phone upright, then walk forward to calibrate", Toast.LENGTH_LONG).show()
             }
         }
 
@@ -1544,11 +1532,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             if (distance < VISITATION_DISTANCE_THRESHOLD) {
                 visitedNodeIds.add(node.id)
 
-                // Update segment manager with new visited nodes
-                if (arRenderer.isSegmentationEnabled()) {
-                    routeSegmentManager?.updateVisitedNodes(visitedNodeIds)
-                }
-
                 // Check if this is the final destination
                 val isDestination = (node.id == selectedEndNode?.id)
 
@@ -1593,13 +1576,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         // Enforce cooldown between re-anchors
         if (now - lastReAnchorTime < REANCHOR_COOLDOWN_MS) return
 
-        // In segmentation mode, each segment has its own local anchor.
-        // Use a much higher threshold — only re-anchor on severe tracking loss.
-        val effectiveThreshold = if (arRenderer.isSegmentationEnabled()) {
-            30.0f  // Only re-anchor on severe GPS jump (tracking loss)
-        } else {
-            REANCHOR_THRESHOLD_METERS  // 8m for single-anchor mode
-        }
+        val effectiveThreshold = REANCHOR_THRESHOLD_METERS
 
         lastAnchorLocation?.let { anchor ->
             // Calculate distance from anchor to current position
@@ -1632,14 +1609,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 // CRITICAL: Reset all coordinate-related state
                 // ====================================================================
 
-                // 1. Clear the old anchor and route
-                arRenderer.clearAnchor()
-
-                // 1.5. Clear all segments if segmentation is active
-                if (arRenderer.isSegmentationEnabled()) {
-                    routeSegmentManager?.clearAllSegments()
-                    FileLogger.d("AR_REANCHOR", "Cleared all route segments")
-                }
+                // 1. SphereRefresher manages its own anchor — no legacy clearAnchor needed
 
                 // 2. DO NOT reset CoordinateAligner — the yaw offset is still valid
                 // within the same AR session. Resetting and re-initializing from
@@ -1662,21 +1632,23 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
                 if (raXzMag > 0.7) {
                     val arYaw = getArYaw()
+                    // Re-anchor uses compass immediately (user is mid-walk, drift detected)
+                    // Dual-delta will refine heading if user keeps walking
                     coordinateAligner.forceReinitialize(currentTrueBearing.toDouble(), arYaw)
                     FileLogger.align("Re-anchor compass reinit: bearing=${currentTrueBearing.toInt()}°, offset=${coordinateAligner.getYawOffset().toInt()}°")
+                    waitingForDualDelta = true
+                    dualDeltaStartTime = System.currentTimeMillis()
+                    lastHeadingInitLogTime = 0L
+                    coordinateAligner.resetDualDelta()
+                    pendingCompassInit = true  // Fallback
+                    FileLogger.d("HEADING_INIT", "Re-anchor: compass used as initial, dual-delta wait for refinement")
                 } else {
                     pendingCompassInit = true
-                    FileLogger.align("Re-anchor compass deferred: xzMag=${String.format("%.2f", raXzMag)}")
-                }
-
-                waitingForDualDelta = false
-
-                // 3. Only reset terrain profiler if drift is very large
-                if (usePhase3Rendering && distance > 30.0) {
-                    arRenderer.getTerrainProfiler()?.reset()
-                    FileLogger.d("AR_REANCHOR", "Terrain profiler reset (large drift: ${distance.toInt()}m)")
-                } else {
-                    FileLogger.d("AR_REANCHOR", "Terrain profiler kept (small drift: ${distance.toInt()}m)")
+                    waitingForDualDelta = true
+                    dualDeltaStartTime = System.currentTimeMillis()
+                    lastHeadingInitLogTime = 0L
+                    coordinateAligner.resetDualDelta()
+                    FileLogger.d("HEADING_INIT", "Re-anchor deferred (phone flat): dual-delta wait started")
                 }
 
                 // 3. Reset anchor location (will be set when new anchor is created)
@@ -1748,7 +1720,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     appendLine("🎯 Next: ${"%.1f".format(distanceToNext)}m")
                     appendLine("🧭 Align error: ${"%.1f".format(alignmentError)}°")
                     appendLine("📡 GPS: ${currentLocation.accuracy.toInt()}m")
-                    appendLine("🔵 Spheres: ${arRenderer.getSphereCount()}")
                     appendLine("═══════════════════════")
                     appendLine("🔬 SENSOR FUSION (Phase 2)")
                     if (useSensorFusion) {
@@ -1768,23 +1739,8 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                         }
                         // Show adaptive thresholds
                         appendLine("   Adaptive: ${if (adaptiveFusionEnabled) "ON" else "OFF"}")
-                        appendLine("═══════════════════════════════════════")
-                        appendLine("🎯 PHASE 3 RENDERING")
-                        appendLine("   Enabled: ${if (usePhase3Rendering) "ON" else "OFF"}")
-                        if (usePhase3Rendering && arRenderer.isPhase3Enabled()) {
-                            arRenderer.getTerrainProfiler()?.getLatestEstimate()?.let { est ->
-                                appendLine("   Terrain adj: ${"%.2f".format(est.heightAdjustment)}m")
-                                appendLine("   Terrain conf: ${"%.0f".format(est.confidence * 100)}%")
-                                appendLine("   Slope: ${"%.1f".format(est.slopeAngle)}°")
-                            }
-                        }
                     } else {
                         appendLine("   Disabled (manual)")
-                    }
-                    appendLine(arRenderer.getDebugInfo())
-                    if (arRenderer.isSegmentationEnabled()) {
-                        appendLine()
-                        appendLine(routeSegmentManager?.getDiagnostics() ?: "")
                     }
                 }
                 tvDebugInfo.text = debugText
@@ -1882,9 +1838,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         smoothedCameraY = Float.NaN
 
         // Clear rendering but preserve route progress — user is still at same position
+        // clearForRecalibration() now does partial reset (70% of current, min 10m)
+        // Do NOT call updateHeadingConfidence(0) — that would force back to 6m, undoing the partial reset
         sphereRefresher?.clearForRecalibration()
-        sphereRefresher?.updateHeadingConfidence(0)  // Reset render distance to initial
-        FileLogger.d("AR_RECALIB", "Cleared SphereRefresher (progress preserved, render distance reset)")
+        FileLogger.d("AR_RECALIB", "Cleared SphereRefresher (progress preserved, render distance partially reset)")
 
         // ============================================================================
         // 2. DO NOT reset coordinate aligner — yaw offset is still valid
@@ -1910,36 +1867,58 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         val xzMag = if (zAxis != null) kotlin.math.sqrt(zAxis[0] * zAxis[0] + zAxis[2] * zAxis[2]) else 0f
 
         if (xzMag > 0.7) {
-            // Phone is upright — init immediately with route sanity check
+            // Phone is upright — check compass agreement with route
             val arYaw = getArYaw()
-            var recalibBearing = currentTrueBearing.toDouble()
             val userLoc = currentUserLocation
+            var compassDiff = 999.0
+            var routeBearing = 0.0
             if (userLoc != null && routeCoords.size > 1) {
                 var routeTargetIdx = 1
                 for (i in 1 until minOf(routeCoords.size, 10)) {
                     val dist = ArUtils.distanceMeters(userLoc.latitude, userLoc.longitude, routeCoords[i].lat, routeCoords[i].lng)
                     if (dist > 10.0) { routeTargetIdx = i; break }
                 }
-                val routeBearing = ArUtils.bearingDeg(userLoc.latitude, userLoc.longitude, routeCoords[routeTargetIdx].lat, routeCoords[routeTargetIdx].lng)
-                val compassVsRoute = ArUtils.normalizeAngleDeg(currentTrueBearing.toDouble() - routeBearing)
-                if (Math.abs(compassVsRoute) > 40.0) {
-                    FileLogger.w("COMPASS_SANITY", "Recalib: compass ${currentTrueBearing.toInt()}° vs route ${routeBearing.toInt()}° diff=${compassVsRoute.toInt()}° — USING ROUTE")
+                routeBearing = ArUtils.bearingDeg(userLoc.latitude, userLoc.longitude, routeCoords[routeTargetIdx].lat, routeCoords[routeTargetIdx].lng)
+                compassDiff = Math.abs(ArUtils.normalizeAngleDeg(currentTrueBearing.toDouble() - routeBearing))
+            }
+
+            if (compassDiff < 15.0) {
+                // Compass agrees with route — trust it immediately
+                coordinateAligner.forceReinitialize(currentTrueBearing.toDouble(), arYaw)
+                isRecalibrating = false
+                waitingForDualDelta = false
+                pendingCompassInit = false
+                FileLogger.d("HEADING_INIT", "Recalib compass shortcut: compass=${currentTrueBearing.toInt()}° " +
+                    "agrees with route=${routeBearing.toInt()}° (diff=${compassDiff.toInt()}°)")
+            } else {
+                // Compass disagrees — enter dual-delta wait for walk calibration
+                // Use compass+COMPASS_SANITY as initial estimate, then dual-delta will refine
+                var recalibBearing = currentTrueBearing.toDouble()
+                if (compassDiff > 40.0) {
+                    FileLogger.w("COMPASS_SANITY", "Recalib: compass ${currentTrueBearing.toInt()}° vs route ${routeBearing.toInt()}° diff=${compassDiff.toInt()}° — USING ROUTE")
                     recalibBearing = routeBearing
                 }
+                coordinateAligner.forceReinitialize(recalibBearing, arYaw)
+                isRecalibrating = false
+                // Enter dual-delta for refinement — will override if user walks
+                waitingForDualDelta = true
+                dualDeltaStartTime = System.currentTimeMillis()
+                lastHeadingInitLogTime = 0L
+                coordinateAligner.resetDualDelta()
+                pendingCompassInit = true  // Fallback if dual-delta times out
+                FileLogger.d("HEADING_INIT", "Recalib: compass disagrees (diff=${compassDiff.toInt()}°) — " +
+                    "using ${recalibBearing.toInt()}° as initial, waiting for walk refinement")
             }
-            coordinateAligner.forceReinitialize(recalibBearing, arYaw)
-            isRecalibrating = false  // Compass init done — allow refresh
-            FileLogger.d("COMPASS_INIT_DETAIL", "Recalib immediate init: " +
-                "bearing=${recalibBearing.toInt()}°, arYaw=${arYaw.toInt()}°, " +
-                "offset=${coordinateAligner.getYawOffset().toInt()}°, xzMag=${String.format("%.2f", xzMag)}")
         } else {
-            // Rare: phone is flat during recalib — defer
-            pendingCompassInit = true
+            // Rare: phone is flat during recalib — defer via dual-delta
+            waitingForDualDelta = true
+            dualDeltaStartTime = System.currentTimeMillis()
+            lastHeadingInitLogTime = 0L
+            coordinateAligner.resetDualDelta()
+            pendingCompassInit = true  // Fallback
             pendingCompassInitLocation = currentUserLocation ?: currentGps
-            FileLogger.d("COMPASS_INIT_DETAIL", "Recalib deferred: xzMag=${String.format("%.2f", xzMag)}")
+            FileLogger.d("HEADING_INIT", "Recalib deferred (phone flat, xzMag=${String.format("%.2f", xzMag)}) — dual-delta wait started")
         }
-
-        waitingForDualDelta = false
 
         // ============================================================================
         // 3b. Keep terrain profiler — recalibration is in the same physical area
@@ -1967,7 +1946,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             tvInfo.text = "🔄 Recalibrating...\n👉 Point at ground"
         }
 
-        FileLogger.d("RECALIB", "State after recalib: alignerInit=${coordinateAligner.isInitialized()}, dualDeltaDone=${coordinateAligner.isDualDeltaCompleted()}, waitingDD=$waitingForDualDelta, pendingAnchor=$pendingAnchorCreation, hasAnchor=${arRenderer.hasAnchor()}")
+        FileLogger.d("RECALIB", "State after recalib: alignerInit=${coordinateAligner.isInitialized()}, dualDeltaDone=${coordinateAligner.isDualDeltaCompleted()}, waitingDD=$waitingForDualDelta, pendingAnchor=$pendingAnchorCreation")
 
         // Hide recalibrating message after timeout
         Handler(Looper.getMainLooper()).postDelayed({

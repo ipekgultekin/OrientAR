@@ -29,7 +29,7 @@ class CoordinateAligner {
         private const val ALIGNMENT_SMOOTHING_FACTOR = 0.10
 
         // Minimum time between alignment updates (prevents oscillation)
-        private const val ALIGNMENT_UPDATE_COOLDOWN_MS = 2000L
+        private const val ALIGNMENT_UPDATE_COOLDOWN_MS = 1000L  // was 2000; at 1Hz GPS, 2000ms rejected every other update
 
         // Maximum allowed alignment error before logging warning
         private const val ALIGNMENT_WARNING_THRESHOLD_DEG = 30.0
@@ -58,7 +58,8 @@ class CoordinateAligner {
         private const val MAX_ALIGNMENT_SAMPLES = 10
 
         // Minimum weight sum before accepting alignment (quality threshold)
-        private const val MIN_ALIGNMENT_WEIGHT = 1.0
+        // weight = gpsDistance / gpsAccuracy; 0.5 = 5m walk with 10m accuracy passes
+        private const val MIN_ALIGNMENT_WEIGHT = 0.5  // was 1.0; too strict for campus GPS (6-9m accuracy)
     }
 
     // ============================================================================================
@@ -111,6 +112,7 @@ class CoordinateAligner {
 
     // Whether dual-delta alignment has produced a result
     private var dualDeltaCompleted = false
+    private var lastDualDeltaProgressLog = 0L
 
 
     /**
@@ -231,9 +233,11 @@ class CoordinateAligner {
 
         // Not enough movement yet
         if (gpsDistance < MIN_GPS_DISPLACEMENT_FOR_ALIGNMENT || arDistance < MIN_AR_DISPLACEMENT_FOR_ALIGNMENT) {
-            // Log progress occasionally
-            if (now % 3000 < 100) {
-                FileLogger.d(TAG, "Dual-delta: waiting for displacement GPS=${String.format("%.1f", gpsDistance)}m/${MIN_GPS_DISPLACEMENT_FOR_ALIGNMENT}m, AR=${String.format("%.1f", arDistance)}m/${MIN_AR_DISPLACEMENT_FOR_ALIGNMENT}m")
+            if (now - lastDualDeltaProgressLog > 3000L) {
+                lastDualDeltaProgressLog = now
+                FileLogger.d(TAG, "Dual-delta progress: gpsDisp=${String.format("%.1f", gpsDistance)}m/${MIN_GPS_DISPLACEMENT_FOR_ALIGNMENT}m, " +
+                    "arDisp=${String.format("%.1f", arDistance)}m/${MIN_AR_DISPLACEMENT_FOR_ALIGNMENT}m, " +
+                    "accuracy=${String.format("%.1f", gpsAccuracy)}m, weight=${String.format("%.2f", gpsDistance / gpsAccuracy)}")
             }
             return false
         }
@@ -295,6 +299,7 @@ class CoordinateAligner {
         baselineSnapshot = null
         alignmentSnapshots.clear()
         dualDeltaCompleted = false
+        lastDualDeltaProgressLog = 0L
         FileLogger.d(TAG, "Dual-delta state reset")
     }
 
@@ -332,8 +337,8 @@ class CoordinateAligner {
         }
 
         // GPS bearing is less reliable with poor accuracy
-        if (location.accuracy > 5.0f) {
-            FileLogger.d("MOTION_SKIP", "Accuracy too poor: ${String.format("%.1f", location.accuracy)}m > 5.0m")
+        if (location.accuracy > 10.0f) {  // was 5.0; quality-weight system already down-weights poor accuracy
+            FileLogger.d("MOTION_SKIP", "Accuracy too poor: ${String.format("%.1f", location.accuracy)}m > 10.0m")
             return false
         }
 
