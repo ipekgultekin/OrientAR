@@ -24,7 +24,6 @@ import com.example.orientar.navigation.logic.ArUtils
 import com.example.orientar.navigation.logic.CampusGraph
 import com.example.orientar.navigation.logic.Node
 import com.example.orientar.navigation.logic.Coordinate
-import com.example.orientar.navigation.rendering.ARRenderer
 import com.example.orientar.navigation.rendering.CoordinateAligner
 import com.example.orientar.navigation.rendering.SphereRefresher
 import com.example.orientar.navigation.location.GPSBufferManager
@@ -37,11 +36,8 @@ import kotlinx.coroutines.delay
 import kotlin.math.abs
 import com.example.orientar.navigation.location.KalmanFilter
 import com.example.orientar.navigation.location.HeadingFusionFilter
-import com.example.orientar.navigation.ar.OutdoorAnchorManager
-import com.example.orientar.navigation.ar.RouteSegmentManager
 import com.example.orientar.navigation.util.FileLogger
 import com.example.orientar.R
-// Phase 3: Performance optimized rendering
 
 enum class AppState {
     STEP_0_ROUTE_SELECTION,
@@ -121,7 +117,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     // ========================================================================================
     // CORE SYSTEMS
     // ========================================================================================
-    private lateinit var arRenderer: ARRenderer
     private lateinit var coordinateAligner: CoordinateAligner
     private lateinit var gpsBufferManager: GPSBufferManager
     private lateinit var campusGraph: CampusGraph
@@ -211,21 +206,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private var anchorCreationAttempts = 0       // Track retry attempts
 
     private var lastPlaneLogTime: Long = 0
-    // ========================================================================================
-    // OUTDOOR ANCHOR MANAGEMENT
-    // ========================================================================================
-    // The OutdoorAnchorManager provides improved anchor creation for outdoor environments
-    // using a priority-based strategy: DepthPoint > Plane > Camera-relative estimation
-    private lateinit var outdoorAnchorManager: OutdoorAnchorManager
-    // ========================================================================================
-    // ROUTE SEGMENTATION
-    // ========================================================================================
-    // RouteSegmentManager handles multi-anchor route rendering for long routes.
-    // This prevents drift issues when spheres are far from a single anchor.
-    // ========================================================================================
-    private var routeSegmentManager: RouteSegmentManager? = null
-    private var useSegmentation = true  // Enable segmentation for routes > threshold
-    private val SEGMENTATION_ROUTE_THRESHOLD = 50.0  // Use segmentation for routes > 50m
 
     // Track which anchor strategy was used (for debugging/UI)
     private var lastAnchorStrategy: String = "None"
@@ -397,33 +377,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 android.util.Log.e("AR_LIFECYCLE", "Location stop failed", e)
             }
 
-            // 4. Destroy AR renderer (SceneView still alive)
-            try {
-                if (::arRenderer.isInitialized) {
-                    arRenderer.destroy()
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("AR_LIFECYCLE", "ARRenderer destroy failed", e)
-            }
-
-            // 5. Destroy outdoor anchor manager (SceneView still alive)
-            try {
-                if (::outdoorAnchorManager.isInitialized) {
-                    outdoorAnchorManager.destroy()
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("AR_LIFECYCLE", "OutdoorAnchorManager destroy failed", e)
-            }
-
-            // 6. Destroy route segment manager
-            try {
-                routeSegmentManager?.destroy()
-                routeSegmentManager = null
-            } catch (e: Exception) {
-                android.util.Log.e("AR_LIFECYCLE", "RouteSegmentManager destroy failed", e)
-            }
-
-            // 7. Reset coordinate aligner
+            // 4. Reset coordinate aligner
             try {
                 if (::coordinateAligner.isInitialized) {
                     coordinateAligner.reset()
@@ -615,13 +569,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
      */
     /**
      * Handles plane detection and anchor creation during navigation.
-     *
-     * OUTDOOR AR OPTIMIZATION:
-     * This function now uses OutdoorAnchorManager which provides:
-     * 1. DepthPoint anchoring (best for outdoor - uses depth-from-motion)
-     * 2. Stabilization delay (waits for ARCore to build world model)
-     * 3. Multi-strategy fallback (Depth > Plane > Camera-relative)
-     * 4. User-calibratable phone height for ground estimation
+     * SphereRefresher manages its own identity-rotation anchors.
      *
      * @param frame The current AR frame from ARCore
      */
@@ -849,26 +797,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             layoutDebugPanel.visibility = View.GONE
         }
 
-        // Phase 3 toggle button
-        btnPhase3Toggle.setOnClickListener {
-            performHapticFeedback(it)
-            usePhase3Rendering = !usePhase3Rendering
-            btnPhase3Toggle.isSelected = usePhase3Rendering
-
-            // Initialize Phase 3 if enabling
-            if (usePhase3Rendering && !arRenderer.isPhase3Enabled()) {
-                arRenderer.initializePhase3Components()
-            }
-
-            Toast.makeText(
-                this,
-                "Phase 3: ${if (usePhase3Rendering) "ON ✅" else "OFF ❌"}",
-                Toast.LENGTH_SHORT
-            ).show()
-
-            // SphereRefresher handles rendering — no explicit re-render needed
-        }
-
         // Quick recalibrate button in debug panel
         btnDebugRecalibrate.setOnClickListener {
             performHapticFeedback(it)
@@ -1063,31 +991,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             maxAccuracyThreshold = 10.0f,
             maxScatterDistance = 5.0f
         )
-
-        arRenderer = ARRenderer(arView) { coordinateAligner.getYawOffset() }
-
-        // ============================================================================
-        // PHASE 3: Initialize performance rendering components
-        // ============================================================================
-        if (usePhase3Rendering) {
-            arRenderer.initializePhase3Components()
-            FileLogger.d("AR_INIT", "Phase 3 components initialized")
-
-            // Phase 3 calculation errors — log only, SphereRefresher handles rendering
-            arRenderer.getPositionCalculator()?.setOnCalculationError { error ->
-                runOnUiThread {
-                    FileLogger.e("AR_RENDER", "Phase 3 calculation error: $error")
-                    Toast.makeText(this, "⚠️ Render calculation failed", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-        // Initialize outdoor-optimized anchor manager
-        outdoorAnchorManager = OutdoorAnchorManager(this, arView)
-
-        // Initialize route segment manager (created but not started until navigation begins)
-        // Note: We pass arView and yawOffset provider, same as ARRenderer
-        routeSegmentManager = RouteSegmentManager(arView) { coordinateAligner.getYawOffset() }
 
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
@@ -1531,11 +1434,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             if (distance < VISITATION_DISTANCE_THRESHOLD) {
                 visitedNodeIds.add(node.id)
 
-                // Update segment manager with new visited nodes
-                if (arRenderer.isSegmentationEnabled()) {
-                    routeSegmentManager?.updateVisitedNodes(visitedNodeIds)
-                }
-
                 // Check if this is the final destination
                 val isDestination = (node.id == selectedEndNode?.id)
 
@@ -1580,13 +1478,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         // Enforce cooldown between re-anchors
         if (now - lastReAnchorTime < REANCHOR_COOLDOWN_MS) return
 
-        // In segmentation mode, each segment has its own local anchor.
-        // Use a much higher threshold — only re-anchor on severe tracking loss.
-        val effectiveThreshold = if (arRenderer.isSegmentationEnabled()) {
-            30.0f  // Only re-anchor on severe GPS jump (tracking loss)
-        } else {
-            REANCHOR_THRESHOLD_METERS  // 8m for single-anchor mode
-        }
+        val effectiveThreshold = REANCHOR_THRESHOLD_METERS
 
         lastAnchorLocation?.let { anchor ->
             // Calculate distance from anchor to current position
@@ -1619,14 +1511,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 // CRITICAL: Reset all coordinate-related state
                 // ====================================================================
 
-                // 1. Clear the old anchor and route
-                arRenderer.clearAnchor()
-
-                // 1.5. Clear all segments if segmentation is active
-                if (arRenderer.isSegmentationEnabled()) {
-                    routeSegmentManager?.clearAllSegments()
-                    FileLogger.d("AR_REANCHOR", "Cleared all route segments")
-                }
+                // 1. SphereRefresher manages its own anchor — no legacy clearAnchor needed
 
                 // 2. DO NOT reset CoordinateAligner — the yaw offset is still valid
                 // within the same AR session. Resetting and re-initializing from
@@ -1657,14 +1542,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 }
 
                 waitingForDualDelta = false
-
-                // 3. Only reset terrain profiler if drift is very large
-                if (usePhase3Rendering && distance > 30.0) {
-                    arRenderer.getTerrainProfiler()?.reset()
-                    FileLogger.d("AR_REANCHOR", "Terrain profiler reset (large drift: ${distance.toInt()}m)")
-                } else {
-                    FileLogger.d("AR_REANCHOR", "Terrain profiler kept (small drift: ${distance.toInt()}m)")
-                }
 
                 // 3. Reset anchor location (will be set when new anchor is created)
                 // Keep old location as fallback in case GPS fails during re-anchor
@@ -1735,7 +1612,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     appendLine("🎯 Next: ${"%.1f".format(distanceToNext)}m")
                     appendLine("🧭 Align error: ${"%.1f".format(alignmentError)}°")
                     appendLine("📡 GPS: ${currentLocation.accuracy.toInt()}m")
-                    appendLine("🔵 Spheres: ${arRenderer.getSphereCount()}")
                     appendLine("═══════════════════════")
                     appendLine("🔬 SENSOR FUSION (Phase 2)")
                     if (useSensorFusion) {
@@ -1755,23 +1631,8 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                         }
                         // Show adaptive thresholds
                         appendLine("   Adaptive: ${if (adaptiveFusionEnabled) "ON" else "OFF"}")
-                        appendLine("═══════════════════════════════════════")
-                        appendLine("🎯 PHASE 3 RENDERING")
-                        appendLine("   Enabled: ${if (usePhase3Rendering) "ON" else "OFF"}")
-                        if (usePhase3Rendering && arRenderer.isPhase3Enabled()) {
-                            arRenderer.getTerrainProfiler()?.getLatestEstimate()?.let { est ->
-                                appendLine("   Terrain adj: ${"%.2f".format(est.heightAdjustment)}m")
-                                appendLine("   Terrain conf: ${"%.0f".format(est.confidence * 100)}%")
-                                appendLine("   Slope: ${"%.1f".format(est.slopeAngle)}°")
-                            }
-                        }
                     } else {
                         appendLine("   Disabled (manual)")
-                    }
-                    appendLine(arRenderer.getDebugInfo())
-                    if (arRenderer.isSegmentationEnabled()) {
-                        appendLine()
-                        appendLine(routeSegmentManager?.getDiagnostics() ?: "")
                     }
                 }
                 tvDebugInfo.text = debugText
@@ -1955,7 +1816,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             tvInfo.text = "🔄 Recalibrating...\n👉 Point at ground"
         }
 
-        FileLogger.d("RECALIB", "State after recalib: alignerInit=${coordinateAligner.isInitialized()}, dualDeltaDone=${coordinateAligner.isDualDeltaCompleted()}, waitingDD=$waitingForDualDelta, pendingAnchor=$pendingAnchorCreation, hasAnchor=${arRenderer.hasAnchor()}")
+        FileLogger.d("RECALIB", "State after recalib: alignerInit=${coordinateAligner.isInitialized()}, dualDeltaDone=${coordinateAligner.isDualDeltaCompleted()}, waitingDD=$waitingForDualDelta, pendingAnchor=$pendingAnchorCreation")
 
         // Hide recalibrating message after timeout
         Handler(Looper.getMainLooper()).postDelayed({

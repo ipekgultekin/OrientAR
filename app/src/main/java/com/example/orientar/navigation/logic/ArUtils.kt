@@ -2,7 +2,6 @@ package com.example.orientar.navigation.logic
 
 import android.location.Location
 import kotlin.math.*
-import com.example.orientar.navigation.ar.ARPerformanceConfig
 import com.example.orientar.navigation.util.FileLogger
 
 
@@ -41,7 +40,10 @@ object ArUtils {
     // Earth's radius in meters (WGS84 mean radius)
     private const val EARTH_RADIUS_METERS = 6371000.0
 
-    // Distance constants are centralized in ARPerformanceConfig
+    /** Maximum reasonable distance for AR calculations (meters) — for validation */
+    private const val MAX_AR_CALCULATION_DISTANCE = 500.0f
+    /** Maximum distance to render spheres from anchor (meters) — practical AR visibility limit */
+    private const val MAX_RENDER_DISTANCE = 100.0f
 
     // ============================================================================================
     // DISTANCE CALCULATIONS
@@ -210,7 +212,7 @@ object ArUtils {
         // No clamping — callers should use convertGpsToArPositionOrNull() for filtering
         val renderDist = dist
 
-        if (dist > ARPerformanceConfig.MAX_AR_CALCULATION_DISTANCE) {
+        if (dist > MAX_AR_CALCULATION_DISTANCE) {
             FileLogger.w(TAG, "Point at ${dist.toInt()}m exceeds max calculation distance")
         }
 
@@ -234,7 +236,7 @@ object ArUtils {
         targetLat: Double,
         targetLng: Double,
         yawOffsetDeg: Double,
-        maxDistance: Double = ARPerformanceConfig.MAX_RENDER_DISTANCE.toDouble()
+        maxDistance: Double = MAX_RENDER_DISTANCE.toDouble()
     ): Pair<Float, Float>? {
         val dist = distanceMeters(userLoc.latitude, userLoc.longitude, targetLat, targetLng)
 
