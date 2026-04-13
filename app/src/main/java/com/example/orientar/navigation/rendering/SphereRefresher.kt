@@ -31,8 +31,8 @@ class SphereRefresher(
         private const val TAG = "SphereRefresher"
         private const val INITIAL_RENDER_DISTANCE = 6.0
         private const val CONFIRMED_RENDER_DISTANCE = 15.0
-        private const val BEHIND_RENDER_DISTANCE = 5.0
-        private const val ANCHOR_RECREATE_DISTANCE = 8.0
+        private const val BEHIND_RENDER_DISTANCE = 15.0   // was 5.0
+        private const val ANCHOR_RECREATE_DISTANCE = 8.0   // reverted from 12.0; ARCore recommends ≤8m
         private const val MIN_REFRESH_INTERVAL = 1000L
         private const val INTERPOLATION_SPACING = 2.0
         private const val SPHERE_RADIUS = 0.25f
@@ -55,6 +55,7 @@ class SphereRefresher(
     private var totalRouteDistanceM = 0.0
     private var isInitialized = false
     private var currentRenderDistance = INITIAL_RENDER_DISTANCE
+    private var renderDistanceFloor = INITIAL_RENDER_DISTANCE
     private var lastRefreshYaw = Double.NaN
 
     // Re-entrancy guard (Fix 2)
@@ -225,7 +226,7 @@ class SphereRefresher(
         var milestoneCount = 0
         var totalPointsChecked = 0
         var pointsBeyondRange = 0
-        val startIdx = (nearestRouteIndex - 3).coerceAtLeast(0)
+        val startIdx = (nearestRouteIndex - 8).coerceAtLeast(0)   // was 3; 8 indices = 16m > GPS error range
 
         for (idx in startIdx until interpolatedRoute.size) {
             totalPointsChecked++
@@ -362,7 +363,10 @@ class SphereRefresher(
     fun updateHeadingConfidence(motionUpdateCount: Int) {
         val oldDistance = currentRenderDistance
         val progress = minOf(motionUpdateCount.toDouble(), 5.0) / 5.0
-        currentRenderDistance = INITIAL_RENDER_DISTANCE + (CONFIRMED_RENDER_DISTANCE - INITIAL_RENDER_DISTANCE) * progress
+        currentRenderDistance = maxOf(
+            INITIAL_RENDER_DISTANCE + (CONFIRMED_RENDER_DISTANCE - INITIAL_RENDER_DISTANCE) * progress,
+            renderDistanceFloor
+        )
         if (Math.abs(currentRenderDistance - oldDistance) > 0.5) {
             FileLogger.d("RENDER_DIST", "${String.format("%.0f", oldDistance)}m → ${String.format("%.0f", currentRenderDistance)}m (motionUpdates=$motionUpdateCount)")
         }
@@ -376,6 +380,7 @@ class SphereRefresher(
         destroyAnchor()
         nearestRouteIndex = 0; furthestReachedIndex = 0; minimumAllowedIndex = 0
         currentRenderDistance = INITIAL_RENDER_DISTANCE
+        renderDistanceFloor = INITIAL_RENDER_DISTANCE  // full reset — no floor protection
         lastAttemptTime = 0L; lastSuccessfulRefreshTime = 0L; lastRefreshYaw = Double.NaN
         FileLogger.d(TAG, "Cleared all spheres and anchor")
     }
@@ -383,9 +388,12 @@ class SphereRefresher(
     fun clearForRecalibration() {
         destroyAnchor()
         lastAttemptTime = 0L; lastSuccessfulRefreshTime = 0L; lastRefreshYaw = Double.NaN
-        currentRenderDistance = INITIAL_RENDER_DISTANCE
+        // Partial reset: never drop below 10m on recalibration (was full reset to 6m)
+        currentRenderDistance = maxOf(currentRenderDistance * 0.7, 10.0)
+        renderDistanceFloor = currentRenderDistance  // remember partial reset intent
         FileLogger.d(TAG, "Cleared for recalibration (preserved progress: " +
-            "nearest=$nearestRouteIndex, furthest=$furthestReachedIndex, min=$minimumAllowedIndex)")
+            "nearest=$nearestRouteIndex, furthest=$furthestReachedIndex, min=$minimumAllowedIndex, " +
+            "renderDist=${String.format("%.0f", currentRenderDistance)}m)")
     }
 
     fun destroy() {
@@ -402,12 +410,12 @@ class SphereRefresher(
     private fun updateProgressOnly(userLat: Double, userLng: Double) {
         val rawNearest = findNearestIndex(userLat, userLng)
         nearestRouteIndex = rawNearest.coerceAtLeast(minimumAllowedIndex)
-        if (nearestRouteIndex > minimumAllowedIndex + 2) minimumAllowedIndex = nearestRouteIndex - 3
+        if (nearestRouteIndex > minimumAllowedIndex + 2) minimumAllowedIndex = nearestRouteIndex - 8
         if (nearestRouteIndex > furthestReachedIndex) furthestReachedIndex = nearestRouteIndex
     }
 
     private fun findNearestIndex(lat: Double, lng: Double): Int {
-        val windowStart = (nearestRouteIndex - 3).coerceAtLeast(0)
+        val windowStart = (nearestRouteIndex - 8).coerceAtLeast(0)
         val windowEnd = (nearestRouteIndex + 15).coerceAtMost(interpolatedRoute.size - 1)
         var minDist = Double.MAX_VALUE
         var minIdx = nearestRouteIndex

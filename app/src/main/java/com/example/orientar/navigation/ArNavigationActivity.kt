@@ -367,99 +367,86 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
      * 5. Coordinate aligner
      */
     override fun onDestroy() {
-        // Clean up SphereRefresher FIRST (before super or FileLogger shutdown)
         try {
-            sphereRefresher?.clearAll()
-            sphereRefresher = null
-        } catch (e: Exception) {
-            // Ignore — activity is being destroyed
-        }
+            FileLogger.d("AR_LIFECYCLE", "onDestroy — cleaning up resources")
 
-        super.onDestroy()
-
-        FileLogger.d("AR_LIFECYCLE", "╔════════════════════════════════════════════════════════════")
-        FileLogger.d("AR_LIFECYCLE", "║ onDestroy - Cleaning up resources")
-        // Phase 3 cleanup
-        try {
-            FileLogger.d("AR_LIFECYCLE", "║ ✅ SphereRefresher + Phase 3 cleanup complete")
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "║ Phase 3 cleanup failed: ${e.message}")
-            FileLogger.e("LIFECYCLE", "Phase 3 cleanup failed: ${e.message}")
-        }
-        FileLogger.d("AR_LIFECYCLE", "╚════════════════════════════════════════════════════════════")
-
-        // 1. Unregister sensor listener
-        try {
-            if (::sensorManager.isInitialized) {
-                sensorManager.unregisterListener(this)
-                FileLogger.d("AR_LIFECYCLE", "✅ Sensor listener unregistered")
+            // 1. SphereRefresher cleanup (SceneView still alive)
+            try {
+                sphereRefresher?.clearAll()
+                sphereRefresher = null
+                FileLogger.d("AR_LIFECYCLE", "SphereRefresher cleared")
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "SphereRefresher cleanup failed", e)
             }
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error unregistering sensor: ${e.message}")
-            FileLogger.e("LIFECYCLE", "Sensor unregister error: ${e.message}")
-        }
 
-        // 2. Stop location updates
-        try {
-            if (::locationCallback.isInitialized) {
-                fusedLocationClient.removeLocationUpdates(locationCallback)
-                FileLogger.d("AR_LIFECYCLE", "✅ Location updates stopped")
+            // 2. Unregister sensor listener
+            try {
+                if (::sensorManager.isInitialized) {
+                    sensorManager.unregisterListener(this)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "Sensor unregister failed", e)
             }
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error stopping location updates: ${e.message}")
-            FileLogger.e("LIFECYCLE", "Location stop error: ${e.message}")
-        }
 
-        // 3. Destroy AR renderer
-        try {
-            if (::arRenderer.isInitialized) {
-                arRenderer.destroy()
-                FileLogger.d("AR_LIFECYCLE", "✅ AR renderer destroyed")
+            // 3. Stop location updates
+            try {
+                if (::locationCallback.isInitialized) {
+                    fusedLocationClient.removeLocationUpdates(locationCallback)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "Location stop failed", e)
             }
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error destroying AR renderer: ${e.message}")
-            FileLogger.e("LIFECYCLE", "AR destroy error: ${e.message}")
-        }
 
-        // 4. Destroy outdoor anchor manager
-        try {
-            if (::outdoorAnchorManager.isInitialized) {
-                outdoorAnchorManager.destroy()
-                FileLogger.d("AR_LIFECYCLE", "✅ Outdoor anchor manager destroyed")
+            // 4. Destroy AR renderer (SceneView still alive)
+            try {
+                if (::arRenderer.isInitialized) {
+                    arRenderer.destroy()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "ARRenderer destroy failed", e)
             }
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error destroying outdoor anchor manager: ${e.message}")
-            FileLogger.e("LIFECYCLE", "Anchor manager destroy error: ${e.message}")
-        }
 
-        // 5. Destroy route segment manager
-        try {
-            routeSegmentManager?.destroy()
-            routeSegmentManager = null
-            FileLogger.d("AR_LIFECYCLE", "✅ Route segment manager destroyed")
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error destroying segment manager: ${e.message}")
-            FileLogger.e("LIFECYCLE", "Segment manager destroy error: ${e.message}")
-        }
-
-        // 6. Reset coordinate aligner
-        try {
-            if (::coordinateAligner.isInitialized) {
-                coordinateAligner.reset()
-                FileLogger.d("AR_LIFECYCLE", "✅ Coordinate aligner reset")
+            // 5. Destroy outdoor anchor manager (SceneView still alive)
+            try {
+                if (::outdoorAnchorManager.isInitialized) {
+                    outdoorAnchorManager.destroy()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "OutdoorAnchorManager destroy failed", e)
             }
+
+            // 6. Destroy route segment manager
+            try {
+                routeSegmentManager?.destroy()
+                routeSegmentManager = null
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "RouteSegmentManager destroy failed", e)
+            }
+
+            // 7. Reset coordinate aligner
+            try {
+                if (::coordinateAligner.isInitialized) {
+                    coordinateAligner.reset()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "CoordinateAligner reset failed", e)
+            }
+
+            // 8. Shutdown FileLogger LAST (no FileLogger calls after this)
+            try {
+                FileLogger.d("AR_LIFECYCLE", "All resources cleaned up — shutting down logger")
+                FileLogger.shutdown()
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "FileLogger shutdown failed", e)
+            }
+
         } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error resetting coordinate aligner: ${e.message}")
-            FileLogger.e("LIFECYCLE", "Aligner reset error: ${e.message}")
+            // Top-level catch — prevent any exception from crashing the process
+            android.util.Log.e("AR_LIFECYCLE", "onDestroy cleanup failed", e)
+        } finally {
+            // super.onDestroy() LAST — destroys view hierarchy (SceneView, ARCore session)
+            super.onDestroy()
         }
-        // Shutdown file logger
-        try {
-            FileLogger.shutdown()
-            FileLogger.d("AR_LIFECYCLE", "✅ FileLogger shutdown")
-        } catch (e: Exception) {
-            FileLogger.e("AR_LIFECYCLE", "Error shutting down FileLogger: ${e.message}")
-        }
-        FileLogger.d("AR_LIFECYCLE", "✅ All resources cleaned up")
     }
 
     // ========================================================================================
@@ -1882,9 +1869,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         smoothedCameraY = Float.NaN
 
         // Clear rendering but preserve route progress — user is still at same position
+        // clearForRecalibration() now does partial reset (70% of current, min 10m)
+        // Do NOT call updateHeadingConfidence(0) — that would force back to 6m, undoing the partial reset
         sphereRefresher?.clearForRecalibration()
-        sphereRefresher?.updateHeadingConfidence(0)  // Reset render distance to initial
-        FileLogger.d("AR_RECALIB", "Cleared SphereRefresher (progress preserved, render distance reset)")
+        FileLogger.d("AR_RECALIB", "Cleared SphereRefresher (progress preserved, render distance partially reset)")
 
         // ============================================================================
         // 2. DO NOT reset coordinate aligner — yaw offset is still valid
