@@ -410,7 +410,9 @@ class SphereRefresher(
     private fun updateProgressOnly(userLat: Double, userLng: Double) {
         val rawNearest = findNearestIndex(userLat, userLng)
         nearestRouteIndex = rawNearest.coerceAtLeast(minimumAllowedIndex)
-        if (nearestRouteIndex > minimumAllowedIndex + 2) minimumAllowedIndex = nearestRouteIndex - 8
+        if (nearestRouteIndex > minimumAllowedIndex + 2) minimumAllowedIndex = nearestRouteIndex - 3  // was -8; tighter ratchet (6m not 16m)
+        // Use furthestReachedIndex as hard floor — never regress more than 3 indices behind peak
+        minimumAllowedIndex = maxOf(minimumAllowedIndex, furthestReachedIndex - 3)
         if (nearestRouteIndex > furthestReachedIndex) furthestReachedIndex = nearestRouteIndex
     }
 

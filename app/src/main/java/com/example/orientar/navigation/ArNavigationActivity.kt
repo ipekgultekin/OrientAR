@@ -1286,7 +1286,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         currentUserLocation = location
 
         // Feed dual-delta samples while waiting for walk calibration
-        if (waitingForDualDelta && !coordinateAligner.isInitialized()) {
+        // No !isInitialized() guard — addAlignmentSample() has its own internal guards
+        // This allows dual-delta refinement after recalibration (where isInitialized=true)
+        if (waitingForDualDelta) {
             val frame = arView.frame
             if (frame != null) {
                 val pose = frame.camera.pose
