@@ -446,52 +446,59 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     private fun hasCameraPermission() =
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
-    private fun fuzzyContainsKeyword(ocrText: String, keyword: String): Boolean {
-        val nOcr = normalize(ocrText)
-        val nKey = normalize(keyword)
-        if (nKey.isBlank() || nOcr.isBlank()) return false
-        if (nOcr.contains(nKey)) return true
-
-        val words = nOcr.split(" ")
-        val keyWords = nKey.split(" ")
-        if (words.size < keyWords.size) return isSimilar(nOcr, nKey)
-
-        for (i in 0..(words.size - keyWords.size)) {
-            val window = words.subList(i, i + keyWords.size).joinToString(" ")
-            if (isSimilar(window, nKey)) return true
-        }
-        return false
-    }
-
-    private fun normalize(s: String) =
-        s.uppercase(Locale.getDefault())
-            .replace(Regex("[^A-Z0-9 ]"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-
-    private fun isSimilar(a: String, b: String): Boolean {
-        val dist = levenshtein(a, b)
-        val maxLen = maxOf(a.length, b.length).coerceAtLeast(1)
-        return (dist.toDouble() / maxLen) <= 0.20
-    }
-
-    private fun levenshtein(a: String, b: String): Int {
-        val dp = Array(a.length + 1) { IntArray(b.length + 1) }
-        for (i in 0..a.length) dp[i][0] = i
-        for (j in 0..b.length) dp[0][j] = j
-        for (i in 1..a.length) {
-            for (j in 1..b.length) {
-                val cost = if (a[i - 1] == b[j - 1]) 0 else 1
-                dp[i][j] = minOf(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
-            }
-        }
-        return dp[a.length][b.length]
-    }
-
     override fun onDestroy() {
         recognizer.close()
         cleanupCurrentAnchor()
         arSceneView.destroy()
         super.onDestroy()
     }
+}
+
+internal fun fuzzyContainsKeyword(ocrText: String, keyword: String): Boolean {
+    val nOcr = normalize(ocrText)
+    val nKey = normalize(keyword)
+    if (nKey.isBlank() || nOcr.isBlank()) return false
+    if (nOcr.contains(nKey)) return true
+
+    val words = nOcr.split(" ")
+    val keyWords = nKey.split(" ")
+    if (words.size < keyWords.size) return isSimilar(nOcr, nKey)
+
+    for (i in 0..(words.size - keyWords.size)) {
+        val window = words.subList(i, i + keyWords.size).joinToString(" ")
+        if (isSimilar(window, nKey)) return true
+    }
+    return false
+}
+
+internal fun normalize(s: String): String {
+    return s.uppercase(java.util.Locale.US)
+        .replace("İ", "I")
+        .replace("Ü", "U")
+        .replace("Ö", "O")
+        .replace("Ş", "S")
+        .replace("Ğ", "G")
+        .replace("Ç", "C")
+        .replace(Regex("[^A-Z0-9 ]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+}
+
+internal fun isSimilar(a: String, b: String): Boolean {
+    val dist = levenshtein(a, b)
+    val maxLen = maxOf(a.length, b.length).coerceAtLeast(1)
+    return (dist.toDouble() / maxLen) <= 0.20
+}
+
+internal fun levenshtein(a: String, b: String): Int {
+    val dp = Array(a.length + 1) { IntArray(b.length + 1) }
+    for (i in 0..a.length) dp[i][0] = i
+    for (j in 0..b.length) dp[0][j] = j
+    for (i in 1..a.length) {
+        for (j in 1..b.length) {
+            val cost = if (a[i - 1] == b[j - 1]) 0 else 1
+            dp[i][j] = minOf(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
+        }
+    }
+    return dp[a.length][b.length]
 }
