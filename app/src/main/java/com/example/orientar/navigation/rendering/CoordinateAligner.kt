@@ -502,14 +502,18 @@ class CoordinateAligner {
      *
      * ARCore pose convention:
      * - Identity pose: camera looks along -Z, so zAxis = (0, 0, 1)
-     * - atan2(zAxis[0], zAxis[2]) gives 0° for forward (-Z), 90° for right (+X)
-     * - This matches calculateYawFromForward's atan2(forwardX, -forwardZ) convention
+     * - pose.zAxis points OPPOSITE the camera viewing direction (forward = -zAxis horizontally)
+     * - Formula: atan2(-zAxis[0], zAxis[2]) produces compass-positive yaw
+     *   (0° = AR's -Z direction, 90° = AR's +X direction, clockwise-positive)
+     * - The X component must be negated to match calculateYawFromForward's
+     *   atan2(forwardX, -forwardZ) convention. Both functions produce the same
+     *   yaw for the same physical direction.
      */
     fun calculateYawFromPose(pose: com.google.ar.core.Pose): Double {
         val zAxis = pose.zAxis
         val xzMagnitude = sqrt(zAxis[0] * zAxis[0] + zAxis[2] * zAxis[2])
 
-        val yawRad = atan2(zAxis[0].toDouble(), zAxis[2].toDouble())
+        val yawRad = atan2(-zAxis[0].toDouble(), zAxis[2].toDouble())
         val yaw = ((Math.toDegrees(yawRad) + 360.0) % 360.0)
 
         FileLogger.d("YAW_CALC", "POSE: zX=${String.format("%.3f", zAxis[0])}, zZ=${String.format("%.3f", zAxis[2])}, " +
