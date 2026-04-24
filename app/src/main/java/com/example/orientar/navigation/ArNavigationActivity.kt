@@ -24,6 +24,8 @@ import com.example.orientar.navigation.logic.ArUtils
 import com.example.orientar.navigation.logic.CampusGraph
 import com.example.orientar.navigation.logic.Node
 import com.example.orientar.navigation.logic.Coordinate
+import com.example.orientar.navigation.logic.PhantomRouteResult
+import com.example.orientar.navigation.logic.PhantomStartMode
 import com.example.orientar.navigation.rendering.CoordinateAligner
 import com.example.orientar.navigation.rendering.SphereRefresher
 import com.example.orientar.navigation.location.GPSBufferManager
@@ -1069,6 +1071,19 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun handleStartupMode() {
+        // D10: virtual-start dispatch runs BEFORE the node-ID check. A virtual intent has
+        // END_NODE_ID but deliberately omits START_NODE_ID, which would otherwise fall through
+        // to setupRouteSelectionUI.
+        val startMode = intent.getStringExtra("START_MODE")
+        if (startMode == "VIRTUAL") {
+            val virtualLat = intent.getDoubleExtra("VIRTUAL_LAT", Double.NaN)
+            val virtualLng = intent.getDoubleExtra("VIRTUAL_LNG", Double.NaN)
+            val accuracy = intent.getFloatExtra("VIRTUAL_ACCURACY", Float.MAX_VALUE)
+            val targetId = intent.getIntExtra("END_NODE_ID", -1)
+            handleVirtualStartNavigation(virtualLat, virtualLng, accuracy, targetId)
+            return
+        }
+
         val intentStartId = intent.getIntExtra("START_NODE_ID", -1)
         val intentEndId = intent.getIntExtra("END_NODE_ID", -1)
 
@@ -1107,6 +1122,145 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         Toast.makeText(this, "Route: ${startNode.name} → ${endNode.name}", Toast.LENGTH_LONG).show()
 
         startCompassCalibrationStep()
+    }
+
+    /**
+     * Handles navigation launched with `START_MODE=VIRTUAL`. The user's GPS is projected onto the
+     * campus path network via phantom-node routing (see SCRUM-56 Phase 2 / [CampusGraph.findPathFromPoint]).
+     *
+     * Parallel to [handleIntentNavigation] for the named-destination flow. Mirrors the same
+     * permission gate + sensor init + UI transition + compass-calibration handoff, but substitutes
+     * [CampusGraph.findPathFromPoint] for `calculateRouteOnce` so the route starts at the user's
+     * actual GPS position rather than a named node.
+     *
+     * `selectedStartNode` intentionally stays null on this path — verified safe (only null-safe
+     * readers downstream). `selectedEndNode` IS assigned explicitly (D18) because ~8 downstream
+     * call sites depend on it.
+     */
+    private fun handleVirtualStartNavigation(
+        virtualLat: Double,
+        virtualLng: Double,
+        accuracy: Float,
+        targetId: Int
+    ) {
+        // Defensive: NaN / missing extras (should never occur if caller passed correct extras).
+        if (virtualLat.isNaN() || virtualLng.isNaN()) {
+            Toast.makeText(this, "Missing location data", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+        if (targetId == -1) {
+            Toast.makeText(this, "Missing destination", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+
+        // Permission gate — mirror the pattern used by handleIntentNavigation.
+        if (!checkPermissions()) {
+            requestPermissionLauncher.launch(
+                arrayOf(Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION)
+            )
+            return
+        }
+
+        initSensorsAndLocation()
+
+        // Resolve target node. Fall back to manual route selection on lookup failure, matching
+        // handleIntentNavigation's behavior for bad node IDs.
+        val endNode = campusGraph.nodes[targetId]
+        if (endNode == null) {
+            Toast.makeText(this, "❌ Destination not found!", Toast.LENGTH_SHORT).show()
+            setupRouteSelectionUI()
+            return
+        }
+
+        // Run phantom-node routing.
+        val result = campusGraph.findPathFromPoint(virtualLat, virtualLng, accuracy, targetId)
+
+        when (result) {
+            is PhantomRouteResult.Success -> {
+                // --- Mirror calculateRouteOnce side effects ---
+                routeCoords = result.polyline
+                routeNodePath = result.nodePath
+
+                // D18: selectedEndNode has ~8 downstream readers (arrival UI, milestone logic, etc.)
+                // selectedStartNode stays null — verified safe (null-safe elvis fallbacks only).
+                selectedEndNode = endNode
+
+                val startName = "Your Location"  // D19
+                val endName = endNode.name ?: "Destination"
+                val offNetSuffix = if (result.isOffNetwork) " ⚠ Off-network" else ""
+                staticRouteReport =
+                    "✅ Route: $startName → $endName\n" +
+                    "${routeCoords.size} points, ${routeNodePath.size} nodes\n" +
+                    "Mode: ${result.startMode}, Snap: ${"%.1f".format(result.snapDistance)}m$offNetSuffix\n\n"
+
+                val routeLength = calculateRouteLength()
+                FileLogger.d("AR_ROUTE", "Route length: ${"%.1f".format(routeLength)}m")
+                FileLogger.nav("Route: ${routeNodePath.size} nodes, ${routeCoords.size} coords, ${"%.0f".format(routeLength)}m (phantom, ${result.startMode})")
+                FileLogger.d("AR_ROUTE", "Route ${routeLength.toInt()}m — SphereRefresher will handle rendering")
+
+                // D16: PHANTOM_ROUTE verification log — structured fields so we can confirm in
+                // the log that firstCoord == projection (not the raw user GPS). Critical for
+                // catching silent bugs where reconstruction drops the phantom.
+                val firstCoord = result.polyline.firstOrNull()
+                FileLogger.d(
+                    "PHANTOM_ROUTE",
+                    "mode=${result.startMode} " +
+                        "userGps=($virtualLat, $virtualLng) " +
+                        "firstCoord=(${firstCoord?.lat}, ${firstCoord?.lng}) " +
+                        "snapDist=${"%.1f".format(result.snapDistance)}m " +
+                        "offNetwork=${result.isOffNetwork} " +
+                        "accuracy=${"%.1f".format(accuracy)}m"
+                )
+
+                // Off-network UX warning (MVP: Toast-only; dashed connector deferred).
+                if (result.isOffNetwork) {
+                    Toast.makeText(
+                        this,
+                        "Route starts ${result.snapDistance.toInt()}m from your position — walk to the path",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+                layoutRouteSelection.visibility = View.GONE
+
+                Toast.makeText(
+                    this,
+                    "Navigating from your location to $endName",
+                    Toast.LENGTH_SHORT
+                ).show()
+
+                startCompassCalibrationStep()
+            }
+
+            is PhantomRouteResult.TooFar -> {
+                Toast.makeText(
+                    this,
+                    "You're too far from any path. Please walk closer.",
+                    Toast.LENGTH_LONG
+                ).show()
+                finish()
+            }
+
+            is PhantomRouteResult.AccuracyTooLow -> {
+                Toast.makeText(
+                    this,
+                    "GPS signal too weak (${result.accuracy.toInt()}m). Please move to an open area.",
+                    Toast.LENGTH_LONG
+                ).show()
+                finish()
+            }
+
+            is PhantomRouteResult.NoPath -> {
+                Toast.makeText(
+                    this,
+                    "No route available to destination.",
+                    Toast.LENGTH_LONG
+                ).show()
+                finish()
+            }
+        }
     }
 
     private fun setupRouteSelectionUI() {
@@ -1570,6 +1724,12 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
      *
      * @param currentLocation The user's current GPS location
      */
+    // TODO(SCRUM-56 Phase 2): If re-enabling this drift-detection path, phantom-flow
+    // routes (selectedStartNode == null) require rebuilding via campusGraph.findPathFromPoint
+    // followed by an explicit initializeSphereRefresher() call — see forceRecalibration() Fix 1+3
+    // for the reference pattern. Without that rebuild, spheres will disappear after re-anchor
+    // on phantom routes and never come back. Bug reproduced and fixed 2026-04-24 via three
+    // iterations; see fix_phantom_recalibration.md and fix_sphere_reinit_after_recalib.md.
     private fun checkDriftAndReAnchor(currentLocation: Location) {
         val now = System.currentTimeMillis()
 
@@ -1857,6 +2017,74 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         // Reset dual-delta state (clears old samples)
         coordinateAligner.resetDualDelta()
 
+        // ============================================================================
+        // SCRUM-56 Phase 2: phantom-flow recalibration
+        // ============================================================================
+        // If the original route was launched via virtual-start (chip), rebuild it from
+        // the user's CURRENT GPS. Otherwise the partial-edge slice in routeCoords[0..N]
+        // can leave routeCoords[1] pointing backward after the user has walked forward,
+        // which trips the compass-vs-route diff check at the bearing sanity pass below
+        // and locks us in dual-delta wait until the user walks ≥3m.
+        //
+        // Named flow leaves this block untouched (selectedStartNode non-null).
+        // ============================================================================
+        val isPhantomRoute = selectedStartNode == null
+        if (isPhantomRoute) {
+            val targetNode = selectedEndNode
+            val currentLoc = currentUserLocation
+            if (targetNode != null && currentLoc != null) {
+                FileLogger.d("AR_RECALIB", "Phantom flow detected — rebuilding route from current GPS")
+                val result = campusGraph.findPathFromPoint(
+                    currentLoc.latitude,
+                    currentLoc.longitude,
+                    currentLoc.accuracy,
+                    targetNode.id
+                )
+                when (result) {
+                    is PhantomRouteResult.Success -> {
+                        routeCoords = result.polyline
+                        routeNodePath = result.nodePath
+                        FileLogger.d("AR_RECALIB",
+                            "Phantom route rebuilt: ${result.nodePath.size} nodes, " +
+                                "${result.polyline.size} coords, mode=${result.startMode}, " +
+                                "snapDist=${"%.1f".format(result.snapDistance)}m")
+                        val firstCoord = result.polyline.firstOrNull()
+                        FileLogger.d("PHANTOM_ROUTE",
+                            "recalib mode=${result.startMode} " +
+                                "userGps=(${currentLoc.latitude}, ${currentLoc.longitude}) " +
+                                "firstCoord=(${firstCoord?.lat}, ${firstCoord?.lng}) " +
+                                "snapDist=${"%.1f".format(result.snapDistance)}m " +
+                                "offNetwork=${result.isOffNetwork} " +
+                                "accuracy=${"%.1f".format(currentLoc.accuracy)}m")
+                        // Explicitly re-create SphereRefresher with the new route data.
+                        // The existing `if (sphereRefresher == null) initializeSphereRefresher()`
+                        // guards elsewhere (lines 619/700/1459) only fire during initial setup —
+                        // not on recalibration — so we must trigger re-creation ourselves.
+                        // Field test (2026-04-24 17:20, 17:24) proved nulling alone is insufficient.
+                        sphereRefresher = null
+                        initializeSphereRefresher()
+                        FileLogger.d("AR_RECALIB",
+                            "SphereRefresher re-initialized with rebuilt phantom route")
+                    }
+                    is PhantomRouteResult.TooFar -> {
+                        FileLogger.w("AR_RECALIB",
+                            "Route rebuild: TooFar — keeping old route, proceeding with standard recalib")
+                    }
+                    is PhantomRouteResult.NoPath -> {
+                        FileLogger.w("AR_RECALIB",
+                            "Route rebuild: NoPath — keeping old route, proceeding with standard recalib")
+                    }
+                    is PhantomRouteResult.AccuracyTooLow -> {
+                        FileLogger.w("AR_RECALIB",
+                            "Route rebuild: AccuracyTooLow (${result.accuracy}m) — keeping old route, proceeding with standard recalib")
+                    }
+                }
+            } else {
+                FileLogger.w("AR_RECALIB",
+                    "Phantom recalib skipped: targetNode=${targetNode != null}, currentLoc=${currentLoc != null}")
+            }
+        }
+
         // Re-initialize heading from compass — check phone orientation first
         smoothedCameraY = Float.NaN
         previousGpsForBearing = null
@@ -1911,6 +2139,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             }
         } else {
             // Rare: phone is flat during recalib — defer via dual-delta
+            isRecalibrating = false  // Bug fix: Branches A and B already clear this; Branch C forgot.
             waitingForDualDelta = true
             dualDeltaStartTime = System.currentTimeMillis()
             lastHeadingInitLogTime = 0L
