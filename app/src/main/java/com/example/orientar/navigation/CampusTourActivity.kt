@@ -2,9 +2,12 @@ package com.example.orientar.navigation
 
 // --- Android Core Imports ---
 import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -25,8 +28,15 @@ import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 
+// --- Google Play Services Location ---
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+
 // --- Project Logic Imports ---
 import com.example.orientar.navigation.logic.CampusGraph
+import com.example.orientar.navigation.logic.GeoProjection
 import com.example.orientar.navigation.logic.Node
 import com.example.orientar.R
 
@@ -64,13 +74,37 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     // State
     private var isARMode = false // default 2D (Map)
 
-    // Permission Launcher for Location Access
+    // --- My Location chip state (SCRUM-56 Phase 2) ---
+    private val fusedLocationClient: FusedLocationProviderClient by lazy {
+        LocationServices.getFusedLocationProviderClient(this)
+    }
+    private var pendingLocationAction: (() -> Unit)? = null
+    private var isFetchingLocation = false
+    private var locationCancellationSource: CancellationTokenSource? = null
+
+    // Permission Launcher for Location Access. Serves two purposes:
+    //   1. Enable the map's "My Location" blue-dot layer (existing behaviour).
+    //   2. Resume a pending chip action after a permission prompt (SCRUM-56).
     private val locationPermissionRequest = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val fine = permissions.getOrDefault(Manifest.permission.ACCESS_FINE_LOCATION, false)
         val coarse = permissions.getOrDefault(Manifest.permission.ACCESS_COARSE_LOCATION, false)
-        if (fine || coarse) enableMyLocation()
+        if (fine || coarse) {
+            enableMyLocation()
+            // Capture-then-null-then-invoke: if the invoked action sets a new
+            // pendingLocationAction, it won't be immediately nulled out.
+            val action = pendingLocationAction
+            pendingLocationAction = null
+            action?.invoke()
+        } else {
+            pendingLocationAction = null
+            Toast.makeText(
+                this,
+                "Location permission required to use current location",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -219,8 +253,7 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         chipMyLocation.setOnClickListener {
-            // TODO: Step 4 will implement GPS nearest-destination lookup
-            Toast.makeText(this, "Getting your location...", Toast.LENGTH_SHORT).show()
+            handleMyLocationTap()
         }
     }
 
@@ -528,5 +561,146 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
         } else {
             locationPermissionRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
         }
+    }
+
+    // ============================================================================================
+    // MY LOCATION CHIP — phantom-node virtual start (SCRUM-56 Phase 2)
+    // ============================================================================================
+
+    /**
+     * Entry point for the My Location chip tap. Fetches the user's current GPS position,
+     * validates accuracy, and launches AR with a virtual start intent.
+     *
+     * Unlike Phase 1 (which populated the From field with the nearest named destination), this
+     * handler launches AR directly — the phantom-node routing in [ArNavigationActivity] projects
+     * the user's GPS onto the nearest path edge and begins the route there.
+     *
+     * Required precondition: the user must have picked a destination first (selectedToNode
+     * non-null). Otherwise we show a clear, actionable Toast.
+     */
+    @SuppressLint("MissingPermission")
+    private fun handleMyLocationTap() {
+        // Guard 1: destination must be picked before we can route.
+        val targetNode = selectedToNode
+        if (targetNode == null) {
+            Toast.makeText(
+                this,
+                "Please select a destination first, then tap My Location.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
+        // Guard 2: double-tap / parallel-fetch protection.
+        if (isFetchingLocation) {
+            Toast.makeText(this, "Already fetching location...", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Guard 3: permission — accept FINE or COARSE. FINE is preferred for high accuracy;
+        // COARSE is sufficient to avoid a permission-request loop if the user only granted
+        // approximate location.
+        val hasFine = ActivityCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarse = ActivityCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasFine && !hasCoarse) {
+            pendingLocationAction = { handleMyLocationTap() }
+            locationPermissionRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+            return
+        }
+
+        // Guard 4: device-level location services must be on (at least one provider).
+        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val gpsEnabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        val netEnabled = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        if (!gpsEnabled && !netEnabled) {
+            Toast.makeText(
+                this,
+                "Please enable location services in device settings",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
+        // Kick off the fetch.
+        isFetchingLocation = true
+        Toast.makeText(this, "Getting your location...", Toast.LENGTH_SHORT).show()
+
+        // Cancel any previous in-flight fetch; start a fresh cancellation source.
+        locationCancellationSource?.cancel()
+        val source = CancellationTokenSource()
+        locationCancellationSource = source
+
+        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, source.token)
+            .addOnSuccessListener { location ->
+                if (isFinishing || isDestroyed) return@addOnSuccessListener
+                isFetchingLocation = false
+
+                if (location == null) {
+                    Toast.makeText(
+                        this,
+                        "Could not get your location, please try again",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@addOnSuccessListener
+                }
+
+                // D11: accuracy gate — refuse if GPS uncertainty exceeds the snap tolerance cap.
+                if (location.accuracy > GeoProjection.MAX_ACCURACY_M) {
+                    Toast.makeText(
+                        this,
+                        "GPS signal too weak (${location.accuracy.toInt()}m). Please move to an open area and try again.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@addOnSuccessListener
+                }
+
+                // All gates passed — launch AR with virtual-start intent.
+                startArActivityFromVirtual(
+                    lat = location.latitude,
+                    lng = location.longitude,
+                    accuracy = location.accuracy,
+                    endId = targetNode.id
+                )
+            }
+            .addOnFailureListener { e ->
+                if (isFinishing || isDestroyed) return@addOnFailureListener
+                isFetchingLocation = false
+                android.util.Log.w("CampusTour", "getCurrentLocation failed", e)
+                Toast.makeText(
+                    this,
+                    "Could not get your location, please try again",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+    }
+
+    /**
+     * Launches AR navigation with a virtual (GPS-projected) start. Parallel to [startArActivity]
+     * for the named-destination flow — kept as a separate helper (D15) so both handoff modes
+     * are discoverable in one place and the intent-extras knowledge stays localized.
+     */
+    private fun startArActivityFromVirtual(
+        lat: Double,
+        lng: Double,
+        accuracy: Float,
+        endId: Int
+    ) {
+        val intent = Intent(this, ArNavigationActivity::class.java)
+        intent.putExtra("START_MODE", "VIRTUAL")
+        intent.putExtra("VIRTUAL_LAT", lat)
+        intent.putExtra("VIRTUAL_LNG", lng)
+        intent.putExtra("VIRTUAL_ACCURACY", accuracy)
+        intent.putExtra("END_NODE_ID", endId)
+        startActivity(intent)
+    }
+
+    override fun onDestroy() {
+        locationCancellationSource?.cancel()
+        locationCancellationSource = null
+        super.onDestroy()
     }
 }
