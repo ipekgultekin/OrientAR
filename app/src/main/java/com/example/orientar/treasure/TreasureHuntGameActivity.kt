@@ -69,6 +69,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     private var arSession: Session? = null
     private var lastFrame: Frame? = null
     private var isHosting = false
+    private val minScanMs = 40_000L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -165,57 +166,86 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
     private fun startHosting() {
         if (isHosting) return
-        val session = arSession ?: run {
-            Toast.makeText(this, "AR session not ready", Toast.LENGTH_SHORT).show()
-            return
-        }
+
         val frame = lastFrame ?: run {
             Toast.makeText(this, "Frame not ready, try again", Toast.LENGTH_SHORT).show()
             return
         }
 
+        if (frame.camera.trackingState != TrackingState.TRACKING) {
+            Toast.makeText(this, "Camera is not tracking yet. Move the phone slowly.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         isHosting = true
-        Toast.makeText(this, "Scanning... Walk around the object for 20 seconds.", Toast.LENGTH_LONG).show()
 
-        val cameraPose = frame.camera.pose
-        val targetPose = cameraPose.compose(Pose.makeTranslation(0f, 0f, -0.5f))
-        val anchor = session.createAnchor(targetPose)
+        Toast.makeText(
+            this,
+            "Scan the area/object slowly for ${minScanMs / 1000} seconds.",
+            Toast.LENGTH_LONG
+        ).show()
 
-        val hostingStartTime = SystemClock.elapsedRealtime()
-        val minScanMs = 20_000L // 20 seconds minimum
+        mainHandler.postDelayed({
+            val latestSession = arSession
+            val latestFrame = lastFrame
 
-        session.hostCloudAnchorAsync(anchor, 1) { cloudAnchorId, state ->
-            val elapsed = SystemClock.elapsedRealtime() - hostingStartTime
-            val remaining = minScanMs - elapsed
+            if (latestSession == null || latestFrame == null) {
+                isHosting = false
+                Toast.makeText(this, "AR session/frame lost. Try again.", Toast.LENGTH_LONG).show()
+                return@postDelayed
+            }
 
-            if (state == Anchor.CloudAnchorState.SUCCESS) {
-                if (remaining > 0) {
-                    // ID ready but wait for minimum scan time
-                    runOnUiThread {
-                        Toast.makeText(this, "Almost done! Keep scanning for ${remaining / 1000}s more...", Toast.LENGTH_SHORT).show()
-                    }
-                    mainHandler.postDelayed({
-                        runOnUiThread {
-                            isHosting = false
-                            anchor.detach()
-                            saveAnchorId(cloudAnchorId)
-                        }
-                    }, remaining)
-                } else {
-                    runOnUiThread {
-                        isHosting = false
-                        anchor.detach()
-                        saveAnchorId(cloudAnchorId)
-                    }
-                }
-            } else {
+            if (latestFrame.camera.trackingState != TrackingState.TRACKING) {
+                isHosting = false
+                Toast.makeText(this, "Camera tracking lost. Try scanning again.", Toast.LENGTH_LONG).show()
+                return@postDelayed
+            }
+
+            val quality = latestSession.estimateFeatureMapQualityForHosting(latestFrame.camera.pose)
+
+            Log.d("TH_HOST", "Feature map quality: $quality")
+
+            if (quality == Session.FeatureMapQuality.INSUFFICIENT) {
+                isHosting = false
+                Toast.makeText(
+                    this,
+                    "Not enough visual features. Move slowly and scan from more angles.",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@postDelayed
+            }
+
+            val centerX = arSceneView.width / 2f
+            val centerY = arSceneView.height / 2f
+
+            val hit = latestFrame.hitTest(centerX, centerY).firstOrNull { hitResult ->
+                val trackable = hitResult.trackable
+                (trackable is Plane && trackable.isPoseInPolygon(hitResult.hitPose)) ||
+                        trackable is Point
+            }
+
+            val anchor = hit?.createAnchor()
+                ?: latestSession.createAnchor(
+                    latestFrame.camera.pose.compose(Pose.makeTranslation(0f, 0f, -0.7f))
+                )
+
+            Toast.makeText(this, "Hosting Cloud Anchor...", Toast.LENGTH_SHORT).show()
+
+            latestSession.hostCloudAnchorAsync(anchor, 1) { cloudAnchorId, state ->
                 runOnUiThread {
                     isHosting = false
-                    anchor.detach()
-                    Toast.makeText(this, "Hosting failed: $state", Toast.LENGTH_LONG).show()
+
+                    if (state == Anchor.CloudAnchorState.SUCCESS) {
+                        saveAnchorId(cloudAnchorId)
+                        Toast.makeText(this, "Cloud Anchor saved!", Toast.LENGTH_LONG).show()
+                    } else {
+                        anchor.detach()
+                        Toast.makeText(this, "Hosting failed: $state", Toast.LENGTH_LONG).show()
+                        Log.e("TH_HOST", "Hosting failed: $state")
+                    }
                 }
             }
-        }
+        }, minScanMs)
     }
 
     private fun saveAnchorId(anchorId: String) {
@@ -303,23 +333,46 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     }
 
     private fun loadModel(anchorNode: AnchorNode, q: Question) {
+        Log.d("TH_MODEL", "Loading model path=${q.modelFilePath}, scale=${q.modelScale}")
+
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val modelInstance = modelLoader.loadModelInstance(q.modelFilePath)
+
                 withContext(Dispatchers.Main) {
-                    modelInstance?.let {
-                        val modelNode = ModelNode(
-                            modelInstance = it,
-                            scaleToUnits = q.modelScale
-                        ).apply {
-                            rotation = Rotation(q.modelRotationX, q.modelRotationY, q.modelRotationZ)
-                        }
-                        anchorNode.addChildNode(modelNode)
-                        mainHandler.postDelayed({ showCorrectDialog(q.id) }, 2000)
+                    if (modelInstance == null) {
+                        modelPlaced = false
+                        Log.e("TH_MODEL", "Model instance is null. Path=${q.modelFilePath}")
+                        Toast.makeText(
+                            this@TreasureHuntGameActivity,
+                            "Model could not be loaded: ${q.modelFilePath}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        return@withContext
                     }
+
+                    val modelNode = ModelNode(
+                        modelInstance = modelInstance,
+                        scaleToUnits = q.modelScale
+                    ).apply {
+                        rotation = Rotation(q.modelRotationX, q.modelRotationY, q.modelRotationZ)
+                    }
+
+                    anchorNode.addChildNode(modelNode)
+
+                    Log.d("TH_MODEL", "Model added successfully.")
+                    mainHandler.postDelayed({ showCorrectDialog(q.id) }, 2000)
                 }
             } catch (e: Exception) {
-                Log.e("AR", "Model Load Failed: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    modelPlaced = false
+                    Toast.makeText(
+                        this@TreasureHuntGameActivity,
+                        "Model load failed: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                Log.e("TH_MODEL", "Model Load Failed", e)
             }
         }
     }
@@ -392,23 +445,46 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     }
 
     private fun fetchUserNameAndSaveToLeaderboard() {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        val user = FirebaseAuth.getInstance().currentUser
+        val uid = user?.uid
+
         if (uid == null) {
             goToMenu()
             return
         }
-        FirebaseFirestore.getInstance()
-            .collection("users")
+
+        val db = FirebaseFirestore.getInstance()
+
+        fun saveFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot?) {
+            val firstName = doc?.getString("firstName") ?: ""
+            val lastName = doc?.getString("lastName") ?: ""
+            val fullName = "$firstName $lastName".trim()
+
+            val fallbackName = user.email ?: "Unknown User"
+            saveToLeaderboard(if (fullName.isNotEmpty()) fullName else fallbackName)
+        }
+
+        db.collection("users")
             .document(uid)
             .get()
-            .addOnSuccessListener { doc ->
-                val firstName = doc.getString("firstName") ?: ""
-                val lastName = doc.getString("lastName") ?: ""
-                val fullName = "$firstName $lastName".trim()
-                saveToLeaderboard(if (fullName.isNotEmpty()) fullName else uid)
+            .addOnSuccessListener { directDoc ->
+                if (directDoc.exists()) {
+                    saveFromDoc(directDoc)
+                } else {
+                    db.collection("users")
+                        .whereEqualTo("authUid", uid)
+                        .limit(1)
+                        .get()
+                        .addOnSuccessListener { query ->
+                            saveFromDoc(query.documents.firstOrNull())
+                        }
+                        .addOnFailureListener {
+                            saveToLeaderboard(user.email ?: "Unknown User")
+                        }
+                }
             }
             .addOnFailureListener {
-                goToMenu()
+                saveToLeaderboard(user.email ?: "Unknown User")
             }
     }
 
