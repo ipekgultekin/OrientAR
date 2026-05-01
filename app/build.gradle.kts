@@ -85,7 +85,7 @@ dependencies {
     // ══════════════════════════════════════════════════════════════
     // ARCORE & SCENEVIEW (single version — used by Treasure Hunt + AR Navigation)
     // ══════════════════════════════════════════════════════════════
-    implementation("com.google.ar:core:1.48.0") //for T.H. it was ("com.google.ar:core:1.42.0")
+    implementation("com.google.ar:core:1.48.0")
     implementation("io.github.sceneview:arsceneview:2.3.0")
     implementation("io.github.sceneview:sceneview:2.3.0")
 

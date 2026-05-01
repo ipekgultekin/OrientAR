@@ -1,7 +1,6 @@
 package com.example.orientar.navigation.location
 
 import android.location.Location
-import android.util.Log
 import com.example.orientar.navigation.logic.ArUtils
 import com.example.orientar.navigation.util.FileLogger
 
@@ -119,7 +118,7 @@ class GPSBufferManager(
         // ============================================================================
         if (location.accuracy > maxAccuracyThreshold) {
             samplesRejectedByAccuracy++
-            Log.d(TAG, "Sample rejected: accuracy ${location.accuracy}m exceeds threshold")
+            FileLogger.d(TAG, "Sample rejected: accuracy ${location.accuracy}m exceeds threshold")
             FileLogger.gps("Sample REJECTED: accuracy ${location.accuracy}m > ${maxAccuracyThreshold}m")
             return state
         }
@@ -151,7 +150,7 @@ class GPSBufferManager(
         // ============================================================================
         if (hdop > 0 && hdop > HDOP_MAX) {
             samplesRejectedByHdop++
-            Log.d(TAG, "Sample rejected: HDOP ${hdop} exceeds max ($HDOP_MAX)")
+            FileLogger.d(TAG, "Sample rejected: HDOP ${hdop} exceeds max ($HDOP_MAX)")
             FileLogger.gps("Sample REJECTED: HDOP $hdop > $HDOP_MAX")
             return state
         }
@@ -161,7 +160,7 @@ class GPSBufferManager(
         // ============================================================================
         if (satelliteCount > 0 && satelliteCount < SATELLITES_MIN) {
             samplesRejectedBySatellites++
-            Log.d(TAG, "Sample rejected: Only $satelliteCount satellites (min: $SATELLITES_MIN)")
+            FileLogger.d(TAG, "Sample rejected: Only $satelliteCount satellites (min: $SATELLITES_MIN)")
             FileLogger.gps("Sample REJECTED: satellites $satelliteCount < $SATELLITES_MIN")
             return state
         }
@@ -185,15 +184,15 @@ class GPSBufferManager(
         buffer.add(location)
         enhancedBuffer.add(enhancedSample)
 
-        Log.d(TAG, "✅ Sample added: ${buffer.size}/$requiredSampleCount")
-        Log.d(TAG, "   Accuracy: ${location.accuracy}m, HDOP: ${if (hdop > 0) hdop else "N/A"}, " +
+        FileLogger.d(TAG, "✅ Sample added: ${buffer.size}/$requiredSampleCount")
+        FileLogger.d(TAG, "   Accuracy: ${location.accuracy}m, HDOP: ${if (hdop > 0) hdop else "N/A"}, " +
                 "Sats: ${if (satelliteCount > 0) satelliteCount else "N/A"}, " +
                 "Fix: ${getFixQualityName(fixQuality)}, Score: ${"%.2f".format(qualityScore)}")
         FileLogger.gps("Sample accepted: acc=${location.accuracy}m, hdop=$hdop, sats=$satelliteCount, score=${"%.2f".format(qualityScore)}")
 
         // Prevent buffer overflow
         if (buffer.size > MAX_BUFFER_SIZE) {
-            Log.w(TAG, "Buffer overflow - removing oldest sample")
+            FileLogger.w(TAG, "Buffer overflow - removing oldest sample")
             buffer.removeAt(0)
             enhancedBuffer.removeAt(0)
         }
@@ -270,33 +269,34 @@ class GPSBufferManager(
      * Evaluates the buffer to determine if samples are suitable for anchor placement.
      */
     private fun evaluateBuffer(): State {
-        if (buffer.size < requiredSampleCount) {
-            state = State.COLLECTING
-            return state
-        }
+        // Iterative approach to prevent potential stack overflow from recursive trimming
+        while (buffer.size >= requiredSampleCount) {
+            val recentSamples = buffer.takeLast(requiredSampleCount)
 
-        // Take the most recent N samples for evaluation
-        val recentSamples = buffer.takeLast(requiredSampleCount)
+            if (isClusterTight(recentSamples)) {
+                // Cluster is tight and we have enough samples
+                state = State.READY
+                FileLogger.d(TAG, "✅ Buffer ready - ${recentSamples.size} samples with tight cluster")
+                FileLogger.gps("Buffer READY: ${recentSamples.size} samples, cluster tight")
+                return state
+            }
 
-        // Check cluster tightness
-        if (!isClusterTight(recentSamples)) {
-            Log.w(TAG, "Cluster not tight - scatter > ${maxScatterDistance}m")
+            FileLogger.w(TAG, "Cluster not tight - scatter > ${maxScatterDistance}m")
 
             // Remove oldest sample and try again
             if (buffer.size > requiredSampleCount) {
                 buffer.removeAt(0)
                 enhancedBuffer.removeAt(0)
-                return evaluateBuffer() // Recursive check
+                continue  // Try again with remaining samples
             }
+
+            // Exactly requiredSampleCount samples but cluster not tight
             FileLogger.gps("Buffer REJECTED: scatter > ${maxScatterDistance}m")
             state = State.REJECTED
             return state
         }
 
-        // Cluster is tight and we have enough samples
-        state = State.READY
-        Log.d(TAG, "✅ Buffer ready - ${recentSamples.size} samples with tight cluster")
-        FileLogger.gps("Buffer READY: ${recentSamples.size} samples, cluster tight")
+        state = State.COLLECTING
         return state
     }
 
@@ -316,7 +316,7 @@ class GPSBufferManager(
             )
 
             if (distance > maxScatterDistance) {
-                Log.d(TAG, "Outlier detected: ${distance.toInt()}m from center")
+                FileLogger.d(TAG, "Outlier detected: ${distance.toInt()}m from center")
                 return false
             }
         }
@@ -388,7 +388,7 @@ class GPSBufferManager(
             result.altitude = totalAlt / totalWeight
         }
 
-        Log.d(TAG, "Weighted average: ${samples.size} samples, accuracy: ${result.accuracy}m, altitude: ${if (result.hasAltitude()) "${"%.1f".format(result.altitude)}m" else "N/A"}")
+        FileLogger.d(TAG, "Weighted average: ${samples.size} samples, accuracy: ${result.accuracy}m, altitude: ${if (result.hasAltitude()) "${"%.1f".format(result.altitude)}m" else "N/A"}")
 
         return result
     }
@@ -445,10 +445,10 @@ class GPSBufferManager(
         // Calculate average quality score for logging
         val avgQuality = enhancedSamples.map { it.qualityScore }.average()
 
-        Log.d(TAG, "Enhanced weighted average: ${samples.size} samples")
-        Log.d(TAG, "   Result accuracy: ${result.accuracy}m")
-        Log.d(TAG, "   Avg quality score: ${"%.2f".format(avgQuality)}")
-        Log.d(TAG, "   Altitude: ${if (result.hasAltitude()) "${"%.1f".format(result.altitude)}m" else "N/A"}")
+        FileLogger.d(TAG, "Enhanced weighted average: ${samples.size} samples")
+        FileLogger.d(TAG, "   Result accuracy: ${result.accuracy}m")
+        FileLogger.d(TAG, "   Avg quality score: ${"%.2f".format(avgQuality)}")
+        FileLogger.d(TAG, "   Altitude: ${if (result.hasAltitude()) "${"%.1f".format(result.altitude)}m" else "N/A"}")
 
         return result
     }
@@ -499,7 +499,7 @@ class GPSBufferManager(
         samplesRejectedByAccuracy = 0
         samplesRejectedByHdop = 0
         samplesRejectedBySatellites = 0
-        Log.d(TAG, "Buffer reset")
+        FileLogger.d(TAG, "Buffer reset")
     }
 
     /**

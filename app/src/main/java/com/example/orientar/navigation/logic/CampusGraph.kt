@@ -1,7 +1,6 @@
 package com.example.orientar.navigation.logic
 
 import android.content.Context
-import android.util.Log
 import org.json.JSONObject
 import java.util.PriorityQueue
 import kotlin.math.*
@@ -133,7 +132,7 @@ class CampusGraph(private val context: Context) {
             }
 
         } catch (e: Exception) {
-            Log.e("GraphTest", "ERROR: ${e.message}")
+            FileLogger.e("GraphTest", "ERROR: ${e.message}")
         }
     }
 
@@ -363,6 +362,333 @@ class CampusGraph(private val context: Context) {
     }
 
     // ============================================================
+    // PHANTOM NODE / VIRTUAL START ROUTING
+    // ============================================================
+    //
+    // Supports "navigate from my current GPS location" by projecting the user's GPS position
+    // onto the nearest edge (or snapping to the nearest node), then seeding A* with partial-edge
+    // initial costs. The phantom start point is never inserted into the graph — it lives only
+    // inside the polyline returned to the caller. Graph data structures are never mutated, so
+    // the algorithm is thread-safe and has zero impact on existing destination-to-destination
+    // routing.
+    //
+    // See plan_scrum_56_phase_2.md for the full design.
+    // ============================================================
+
+    /**
+     * Describes a phantom (virtual) start: a point projected onto an edge, plus the data needed
+     * to seed A* with partial-edge initial costs and to slice the edge's geometry during path
+     * reconstruction.
+     *
+     * Invariant (by construction in [findNearestEdge]): `splitGeometry[0]` sits at
+     * `nodes[edgeNodeAId]`'s position and `splitGeometry.last()` sits at `nodes[edgeNodeBId]`'s
+     * position. This holds because edges are stored with the owner node's coordinates at index 0
+     * in the graph loader, and we only scan edges where `ownerId < targetId` — which de-duplicates
+     * the two halves of the bidirectional storage while preserving the "geometry starts at owner"
+     * invariant.
+     */
+    private data class PhantomStart(
+        val edgeNodeAId: Int,
+        val edgeNodeBId: Int,
+        val edgeLength: Double,
+        val splitGeometry: List<Coordinate>,
+        val segmentIndex: Int,
+        val tOnSegment: Double,
+        val tOnPolyline: Double,
+        val projectedLat: Double,
+        val projectedLng: Double,
+        val distanceMeters: Double
+    )
+
+    /**
+     * Route from an arbitrary GPS point to a named destination node.
+     *
+     * Decision tree:
+     * 1. Reject if `accuracy` is worse than [GeoProjection.MAX_ACCURACY_M].
+     * 2. If the user is within [GeoProjection.rNode] of any graph node, snap to that node and
+     *    delegate to the existing [findPath] — no phantom needed.
+     * 3. Otherwise project onto the nearest edge. Refuse if the projection is beyond
+     *    [GeoProjection.R_REFUSE_M]; flag it as off-network if beyond [GeoProjection.rSnap].
+     * 4. Run multi-source A* seeded with both edge endpoints' partial-edge costs, then
+     *    reconstruct the polyline with the projection prepended and the split edge's
+     *    sub-geometry sliced between projection and the winning root.
+     *
+     * @return a [PhantomRouteResult]; [PhantomRouteResult.Success] carries the polyline, node
+     *         path, snap distance, and classification.
+     */
+    fun findPathFromPoint(
+        userLat: Double,
+        userLng: Double,
+        accuracy: Float,
+        targetNodeId: Int
+    ): PhantomRouteResult {
+        // 1. Accuracy gate.
+        if (accuracy > GeoProjection.MAX_ACCURACY_M) {
+            return PhantomRouteResult.AccuracyTooLow(accuracy)
+        }
+
+        // Target must exist.
+        nodes[targetNodeId] ?: return PhantomRouteResult.NoPath
+
+        // 2. AT-node detection (D5): O(N) scan over ALL nodes (not just destinations).
+        var nearestNode: Node? = null
+        var nearestNodeDist = Double.POSITIVE_INFINITY
+        for (n in nodes.values) {
+            val d = haversine(n.lat, n.lng, userLat, userLng)
+            if (d < nearestNodeDist) {
+                nearestNodeDist = d
+                nearestNode = n
+            }
+        }
+        if (nearestNode == null) return PhantomRouteResult.NoPath
+
+        // 3. AT-node short-circuit — delegate to existing findPath.
+        if (nearestNodeDist <= GeoProjection.rNode(accuracy)) {
+            val polyline = findPath(nearestNode.id, targetNodeId)
+            val nodePath = findNodePath(nearestNode.id, targetNodeId)
+            if (polyline.isEmpty() || nodePath.isEmpty()) return PhantomRouteResult.NoPath
+            return PhantomRouteResult.Success(
+                polyline = polyline,
+                nodePath = nodePath,
+                snapDistance = nearestNodeDist,
+                isOffNetwork = false,
+                startMode = PhantomStartMode.AT_NODE
+            )
+        }
+
+        // 4. Find the nearest edge.
+        val phantom = findNearestEdge(userLat, userLng)
+            ?: return PhantomRouteResult.NoPath
+
+        // 5. Refuse if beyond the hard cap.
+        if (phantom.distanceMeters > GeoProjection.R_REFUSE_M) {
+            return PhantomRouteResult.TooFar
+        }
+
+        // 6. Run phantom A*.
+        val aStarResult = runAStarFromProjection(phantom, targetNodeId)
+            ?: return PhantomRouteResult.NoPath
+        val (cameFromNode, cameFromEdge) = aStarResult
+
+        // 7. Reconstruct the polyline + node path.
+        val (polyline, nodePath) = reconstructPathFromProjection(
+            phantom, targetNodeId, cameFromNode, cameFromEdge
+        )
+        if (polyline.isEmpty() || nodePath.isEmpty()) return PhantomRouteResult.NoPath
+
+        // 8. Classify ON_EDGE vs OFF_NETWORK based on snap distance.
+        val offNetwork = phantom.distanceMeters > GeoProjection.rSnap(accuracy)
+        val mode = if (offNetwork) PhantomStartMode.OFF_NETWORK else PhantomStartMode.ON_EDGE
+
+        return PhantomRouteResult.Success(
+            polyline = polyline,
+            nodePath = nodePath,
+            snapDistance = phantom.distanceMeters,
+            isOffNetwork = offNetwork,
+            startMode = mode
+        )
+    }
+
+    /**
+     * Scan every physical edge (with bidirectional de-duplication) and return the one whose
+     * polyline is closest to (lat, lng). Returns null only when the graph has no edges at all.
+     *
+     * Dedup rationale: each physical path is stored as two [Edge] objects — one on each endpoint's
+     * `neighbors` list, with the second holding reversed geometry. Accepting only edges where
+     * `ownerId < targetId` visits each physical path exactly once while preserving the
+     * "geometry starts at owner" invariant relied on by [PhantomStart].
+     */
+    private fun findNearestEdge(lat: Double, lng: Double): PhantomStart? {
+        var best: PhantomStart? = null
+
+        for (currentNode in nodes.values) {
+            for (edge in currentNode.neighbors) {
+                // D6: bidirectional dedup.
+                if (currentNode.id >= edge.targetNodeId) continue
+
+                val projection = GeoProjection.projectPointOnPolyline(
+                    pLat = lat, pLng = lng,
+                    polyline = edge.pathGeometry
+                ) ?: continue
+
+                if (best == null || projection.distanceMeters < best.distanceMeters) {
+                    best = PhantomStart(
+                        edgeNodeAId = currentNode.id,
+                        edgeNodeBId = edge.targetNodeId,
+                        edgeLength = edge.distance,
+                        splitGeometry = edge.pathGeometry,
+                        segmentIndex = projection.segmentIndex,
+                        tOnSegment = projection.tOnSegment,
+                        tOnPolyline = projection.tOnPolyline,
+                        projectedLat = projection.projectedLat,
+                        projectedLng = projection.projectedLng,
+                        distanceMeters = projection.distanceMeters
+                    )
+                }
+            }
+        }
+        return best
+    }
+
+    /**
+     * A* variant whose start is a phantom point on an edge between two real nodes
+     * (A = [PhantomStart.edgeNodeAId], B = [PhantomStart.edgeNodeBId]).
+     *
+     * Multi-source initialization:
+     * - `gScore[A] = tOnPolyline * edgeLength`         (metres from A to projection)
+     * - `gScore[B] = (1 - tOnPolyline) * edgeLength`   (metres from projection to B)
+     * - both endpoints are pushed onto the open set with their respective `f = g + h`.
+     *
+     * The split edge A↔B is skipped during neighbor expansion (D12): its traversal cost is
+     * already encoded in the initial seeds, so traversing it again would double-count. Neither
+     * root has a `cameFromNode` / `cameFromEdge` entry — they are the reconstruction roots.
+     *
+     * Mirrors the structure of [runAStar] (stale-entry check, closed-set, etc.) but is kept as a
+     * separate method so [runAStar] stays untouched.
+     */
+    private fun runAStarFromProjection(
+        phantom: PhantomStart,
+        targetNodeId: Int
+    ): Pair<Map<Int, Int>, Map<Int, Edge>>? {
+        val target = nodes[targetNodeId] ?: return null
+        val nodeA = nodes[phantom.edgeNodeAId] ?: return null
+        val nodeB = nodes[phantom.edgeNodeBId] ?: return null
+
+        val openSet = PriorityQueue<PathNode>()
+        val gScore = HashMap<Int, Double>()
+        val cameFromNode = HashMap<Int, Int>()
+        val cameFromEdge = HashMap<Int, Edge>()
+        val closedSet = HashSet<Int>()
+
+        // Multi-source seeding (partial-edge costs).
+        val gA = phantom.tOnPolyline * phantom.edgeLength
+        val gB = (1.0 - phantom.tOnPolyline) * phantom.edgeLength
+        gScore[phantom.edgeNodeAId] = gA
+        gScore[phantom.edgeNodeBId] = gB
+
+        val hA = haversine(nodeA.lat, nodeA.lng, target.lat, target.lng)
+        val hB = haversine(nodeB.lat, nodeB.lng, target.lat, target.lng)
+        openSet.add(PathNode(phantom.edgeNodeAId, gA + hA))
+        openSet.add(PathNode(phantom.edgeNodeBId, gB + hB))
+
+        while (openSet.isNotEmpty()) {
+            val current = openSet.poll()
+            val currentId = current.id
+
+            // Stale-entry check — mirrors the pattern in runAStar.
+            val currentG = gScore[currentId] ?: Double.MAX_VALUE
+            val currentNode = nodes[currentId] ?: continue
+            val bestPossibleF = currentG +
+                haversine(currentNode.lat, currentNode.lng, target.lat, target.lng)
+            if (current.fScore > bestPossibleF + 1e-6) continue
+
+            if (currentId == targetNodeId) return Pair(cameFromNode, cameFromEdge)
+
+            if (currentId in closedSet) continue
+            closedSet.add(currentId)
+
+            for (edge in currentNode.neighbors) {
+                val neighborId = edge.targetNodeId
+
+                // D12: skip the split edge — its cost is encoded in the phantom seeds.
+                if ((currentId == phantom.edgeNodeAId && neighborId == phantom.edgeNodeBId) ||
+                    (currentId == phantom.edgeNodeBId && neighborId == phantom.edgeNodeAId)
+                ) continue
+
+                if (neighborId in closedSet) continue
+
+                val tentativeG = currentG + edge.distance
+                val oldG = gScore.getOrDefault(neighborId, Double.MAX_VALUE)
+                if (tentativeG < oldG) {
+                    cameFromNode[neighborId] = currentId
+                    cameFromEdge[neighborId] = edge
+                    gScore[neighborId] = tentativeG
+                    val neighborNode = nodes[neighborId] ?: continue
+                    val h = haversine(neighborNode.lat, neighborNode.lng, target.lat, target.lng)
+                    openSet.add(PathNode(neighborId, tentativeG + h))
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * Reconstruct the polyline and node chain for a phantom route.
+     *
+     * The polyline is assembled as:
+     * 1. `[projection point]`
+     * 2. partial-edge sub-geometry from the projection to whichever root (A or B) the walk-back
+     *    terminates at
+     * 3. the full geometry of each edge A* traversed from the winning root to the target
+     *
+     * Boundary de-duplication (D17) is applied at every append via [appendWithDedup] so that a
+     * projection landing on a polyline vertex (`tOnSegment` ≈ 0 or ≈ 1) does not introduce a
+     * duplicate coordinate.
+     *
+     * The returned `nodePath` starts at the winning root (a real node), not at the phantom —
+     * satisfying D7 so SphereRefresher does not render a milestone at the phantom position.
+     */
+    private fun reconstructPathFromProjection(
+        phantom: PhantomStart,
+        targetNodeId: Int,
+        cameFromNode: Map<Int, Int>,
+        cameFromEdge: Map<Int, Edge>
+    ): Pair<List<Coordinate>, List<Node>> {
+        // Walk back from target until we hit a phantom root.
+        val nodeChain = mutableListOf<Int>()
+        var curr = targetNodeId
+        while (curr != phantom.edgeNodeAId && curr != phantom.edgeNodeBId) {
+            nodeChain.add(0, curr)
+            curr = cameFromNode[curr] ?: return Pair(emptyList(), emptyList())
+        }
+        val winningRoot = curr
+        nodeChain.add(0, winningRoot)
+
+        // Build polyline.
+        val polyline = mutableListOf<Coordinate>()
+        polyline.add(Coordinate(phantom.projectedLat, phantom.projectedLng))
+
+        // Partial-edge slice from projection to winning root.
+        val splitSlice: List<Coordinate> = if (winningRoot == phantom.edgeNodeAId) {
+            // A lies at splitGeometry[0]; walking projection → A means reversing segments
+            // [0..segmentIndex], which yields [Pi, Pi-1, ..., P0].
+            phantom.splitGeometry.subList(0, phantom.segmentIndex + 1).reversed()
+        } else {
+            // B lies at splitGeometry.last(); walking projection → B means segments
+            // [segmentIndex+1..end], which yields [Pi+1, Pi+2, ..., Pn].
+            phantom.splitGeometry.subList(
+                phantom.segmentIndex + 1,
+                phantom.splitGeometry.size
+            )
+        }
+        appendWithDedup(polyline, splitSlice)
+
+        // Traverse the rest of the node chain, appending each edge's full geometry.
+        for (i in 1 until nodeChain.size) {
+            val childId = nodeChain[i]
+            val edgeUsed = cameFromEdge[childId] ?: continue
+            appendWithDedup(polyline, edgeUsed.pathGeometry)
+        }
+
+        val nodePath = nodeChain.mapNotNull { nodes[it] }
+        return Pair(polyline, nodePath)
+    }
+
+    /**
+     * Append each coordinate to `polyline`, skipping any that is [almostSame] as the current tail.
+     * Ensures phantom reconstruction produces a clean, duplicate-free polyline at every segment
+     * boundary.
+     */
+    private fun appendWithDedup(polyline: MutableList<Coordinate>, toAdd: List<Coordinate>) {
+        for (coord in toAdd) {
+            val last = polyline.lastOrNull()
+            if (last == null || !almostSame(last, coord)) {
+                polyline.add(coord)
+            }
+        }
+    }
+
+    // ============================================================
     // DEBUG / GRAPH HEALTH REPORT
     // ============================================================
     private fun logGraphHealthReport() {
@@ -389,7 +715,7 @@ class CampusGraph(private val context: Context) {
             }
         }
 
-        Log.d(
+        FileLogger.d(
             "GraphReport",
             """
             ===== GRAPH HEALTH REPORT =====
@@ -405,4 +731,48 @@ class CampusGraph(private val context: Context) {
             """.trimIndent()
         )
     }
+}
+
+// ================================================================================================
+// PHANTOM NODE / VIRTUAL START — PUBLIC RESULT TYPES
+// ================================================================================================
+//
+// Returned by [CampusGraph.findPathFromPoint]. Consumed by ArNavigationActivity to dispatch UX
+// feedback per outcome (success with off-network flag, too far, GPS accuracy too low, no path).
+
+/**
+ * How the phantom start was resolved.
+ */
+enum class PhantomStartMode {
+    /** User was within [GeoProjection.rNode] of a real graph node; existing [CampusGraph.findPath] was used. */
+    AT_NODE,
+
+    /** User was on (or within [GeoProjection.rSnap] of) a path edge; projected onto the edge polyline. */
+    ON_EDGE,
+
+    /** User was beyond [GeoProjection.rSnap] but within [GeoProjection.R_REFUSE_M]; snapped with a warning. */
+    OFF_NETWORK
+}
+
+/**
+ * Result of [CampusGraph.findPathFromPoint]. Exhaustive — consumers should handle every variant.
+ */
+sealed class PhantomRouteResult {
+    /** Successful route. [polyline] begins at the phantom (or AT_NODE snap point). */
+    data class Success(
+        val polyline: List<Coordinate>,
+        val nodePath: List<Node>,
+        val snapDistance: Double,
+        val isOffNetwork: Boolean,
+        val startMode: PhantomStartMode
+    ) : PhantomRouteResult()
+
+    /** User is beyond [GeoProjection.R_REFUSE_M] from any path — refuse to route. */
+    object TooFar : PhantomRouteResult()
+
+    /** A* returned no path (e.g., target in a disconnected component). */
+    object NoPath : PhantomRouteResult()
+
+    /** GPS accuracy exceeded [GeoProjection.MAX_ACCURACY_M] — refuse to route. */
+    data class AccuracyTooLow(val accuracy: Float) : PhantomRouteResult()
 }

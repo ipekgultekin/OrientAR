@@ -25,4 +25,30 @@
     <color name="status_warning">#FF9800</color>
     <color name="status_info">#2196F3</color>
 
+    <!-- Campus Tour Redesign -->
+    <color name="campus_card_bg">#FFFFFF</color>
+    <color name="campus_input_bg">#F8F7F4</color>
+    <color name="campus_input_border">#E5E5E5</color>
+    <color name="campus_input_border_focus">#C62828</color>
+    <color name="campus_label">#AAAAAA</color>
+    <color name="campus_text_primary">#333333</color>
+    <color name="campus_placeholder">#AAAAAA</color>
+    <color name="campus_toggle_bg">#F5F5F5</color>
+    <color name="campus_toggle_active_bg">#FFFFFF</color>
+    <color name="campus_swap_bg">#FFFFFF</color>
+    <color name="campus_swap_border">#EEEEEE</color>
+    <color name="campus_go_red">#C62828</color>
+    <color name="campus_go_shadow">#40C62828</color>
+    <color name="campus_chip_green_bg">#0C4CAF50</color>
+    <color name="campus_chip_green_border">#1E4CAF50</color>
+    <color name="campus_chip_green_text">#4CAF50</color>
+    <color name="campus_dot_green">#4CAF50</color>
+    <color name="campus_dot_red">#C62828</color>
+    <color name="campus_divider">#0D000000</color>
+    <color name="campus_header_title">#333333</color>
+    <color name="campus_header_subtitle">#999999</color>
+    <color name="campus_bar_bg">#FAFAFA</color>
+    <color name="campus_toggle_border">#B71C1C</color>
+    <color name="campus_inactive_text">#6B6B6B</color>
+
 </resources>

@@ -24,5 +24,7 @@ google-services.json
 # Signing
 *.jks
 *.keystore
-# Local API keys
-app/src/main/res/values/google_maps_api.xml
+
+# Claude Code config
+.claude/
+.idea/

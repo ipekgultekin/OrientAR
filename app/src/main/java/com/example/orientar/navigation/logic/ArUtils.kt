@@ -1,9 +1,8 @@
 package com.example.orientar.navigation.logic
 
 import android.location.Location
-import android.util.Log
 import kotlin.math.*
-import com.example.orientar.navigation.ar.ARPerformanceConfig
+import com.example.orientar.navigation.util.FileLogger
 
 
 /**
@@ -41,42 +40,23 @@ object ArUtils {
     // Earth's radius in meters (WGS84 mean radius)
     private const val EARTH_RADIUS_METERS = 6371000.0
 
-    // ============================================================================
-    // BUG-006 FIX: Use centralized constants from ARPerformanceConfig
-    // ============================================================================
-    // REMOVED: private const val MAX_AR_RENDER_DISTANCE = 500.0
-    //
-    // Now using:
-    //   - ARPerformanceConfig.MAX_RENDER_DISTANCE (100m) for rendering cutoff
-    //   - ARPerformanceConfig.MAX_AR_CALCULATION_DISTANCE (500m) for validation
-    // ============================================================================
+    /** Maximum reasonable distance for AR calculations (meters) — for validation */
+    private const val MAX_AR_CALCULATION_DISTANCE = 500.0f
+    /** Maximum distance to render spheres from anchor (meters) — practical AR visibility limit */
+    private const val MAX_RENDER_DISTANCE = 100.0f
 
     // ============================================================================================
     // DISTANCE CALCULATIONS
     // ============================================================================================
 
     /**
-     * Calculates the distance between two GPS coordinates using the Haversine formula.
-     *
-     * THE HAVERSINE FORMULA:
-     * The Haversine formula calculates the great-circle distance between two points
-     * on a sphere. It's the most accurate formula for short to medium distances on Earth.
-     *
-     * Formula:
-     * a = sin²(Δlat/2) + cos(lat1) × cos(lat2) × sin²(Δlon/2)
-     * c = 2 × atan2(√a, √(1-a))
-     * d = R × c
-     *
-     * @param lat1 Latitude of first point (degrees)
-     * @param lon1 Longitude of first point (degrees)
-     * @param lat2 Latitude of second point (degrees)
-     * @param lon2 Longitude of second point (degrees)
-     * @return Distance in meters (Double precision for AR stability)
+     * Haversine distance between two GPS coordinates.
+     * @return Distance in meters
      */
     fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         // Validate inputs
         if (lat1.isNaN() || lon1.isNaN() || lat2.isNaN() || lon2.isNaN()) {
-            Log.w(TAG, "distanceMeters: Invalid coordinates (NaN)")
+            FileLogger.w(TAG, "distanceMeters: NaN coordinates")
             return 0.0
         }
 
@@ -97,28 +77,13 @@ object ArUtils {
     // ============================================================================================
 
     /**
-     * Calculates the initial bearing (azimuth) from a starting point to a target point.
-     *
-     * BEARING DEFINITION:
-     * The bearing is the angle measured clockwise from True North.
-     * - 0° = North
-     * - 90° = East
-     * - 180° = South
-     * - 270° = West
-     *
-     * FORMULA:
-     * θ = atan2(sin(Δlon) × cos(lat2), cos(lat1) × sin(lat2) - sin(lat1) × cos(lat2) × cos(Δlon))
-     *
-     * @param lat1 Latitude of starting point (degrees)
-     * @param lon1 Longitude of starting point (degrees)
-     * @param lat2 Latitude of target point (degrees)
-     * @param lon2 Longitude of target point (degrees)
-     * @return Bearing in degrees [0, 360), where 0 is North
+     * Initial bearing (azimuth) from start to target point.
+     * @return Bearing in degrees [0, 360), where 0° = North
      */
     fun bearingDeg(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         // Validate inputs
         if (lat1.isNaN() || lon1.isNaN() || lat2.isNaN() || lon2.isNaN()) {
-            Log.w(TAG, "bearingDeg: Invalid coordinates (NaN)")
+            FileLogger.w(TAG, "bearingDeg: NaN coordinates")
             return 0.0
         }
 
@@ -155,7 +120,7 @@ object ArUtils {
      */
     fun normalizeAngleDeg(angle: Double): Double {
         if (angle.isNaN() || angle.isInfinite()) {
-            Log.w(TAG, "normalizeAngleDeg: Invalid angle (NaN or Infinite)")
+            FileLogger.w(TAG, "normalizeAngleDeg: invalid angle (NaN/Inf)")
             return 0.0
         }
 
@@ -169,23 +134,11 @@ object ArUtils {
     // ============================================================================================
 
     /**
-     * Generates intermediate points between two GPS coordinates to create a smooth path.
+     * Generates evenly-spaced intermediate GPS points between two coordinates.
+     * Creates a "breadcrumb trail" of points for smooth AR path rendering.
      *
-     * PURPOSE:
-     * Instead of just having spheres at waypoints, we create a "breadcrumb trail"
-     * of smaller spheres between waypoints. This helps the user follow the path
-     * more easily in AR.
-     *
-     * ALGORITHM:
-     * Linear interpolation between start and end points:
-     * point[i] = start + (end - start) × (i / (count + 1))
-     *
-     * @param startLat Starting latitude
-     * @param startLng Starting longitude
-     * @param endLat Ending latitude
-     * @param endLng Ending longitude
      * @param stepMeters Distance between interpolated points (default: 1.5m)
-     * @return List of (lat, lng) pairs for the interpolated points
+     * @return List of (lat, lng) pairs including start point
      */
     fun interpolate(
         startLat: Double, startLng: Double,
@@ -194,7 +147,7 @@ object ArUtils {
     ): List<Pair<Double, Double>> {
         // Validate step size
         if (stepMeters <= 0) {
-            Log.w(TAG, "interpolate: Invalid step size ($stepMeters)")
+            FileLogger.w(TAG, "interpolate: invalid step size ($stepMeters)")
             return emptyList()
         }
 
@@ -230,69 +183,13 @@ object ArUtils {
     // ============================================================================================
 
     /**
-     * Converts a real-world GPS target into AR Scene coordinates (x, z).
+     * Converts a GPS target into AR scene coordinates (x, z) relative to anchor.
      *
-     * ================================================================================================
-     * THE TRANSFORMATION PROBLEM
-     * ================================================================================================
+     * Coordinate mapping:
+     *   GPS: N=0°, E=90°    →    AR: -Z=forward, +X=right
      *
-     * We have:
-     * 1. User's GPS position (anchor location)
-     * 2. Target's GPS position (where we want to place a sphere)
-     * 3. Yaw offset (difference between compass North and AR world forward)
-     *
-     * We need:
-     * AR coordinates (x, z) where the sphere should be placed relative to the anchor
-     *
-     * ================================================================================================
-     * THE SOLUTION
-     * ================================================================================================
-     *
-     * Step 1: Calculate polar coordinates (distance, bearing) from user to target
-     * Step 2: Adjust bearing by yaw offset to get AR-relative angle
-     * Step 3: Convert polar (distance, angle) to Cartesian (x, z)
-     *
-     * ================================================================================================
-     * COORDINATE SYSTEM MAPPING
-     * ================================================================================================
-     *
-     *              Real World                    AR World
-     *              (GPS/Compass)                 (SceneView)
-     *
-     *                 N (0°)                       -Z (Forward)
-     *                   ↑                            ↑
-     *                   │                            │
-     *      W (270°) ←───┼───→ E (90°)  -X (Left) ←───┼───→ +X (Right)
-     *                   │                            │
-     *                   ↓                            ↓
-     *                 S (180°)                      +Z (Behind)
-     *
-     * The yawOffset aligns these two coordinate systems:
-     * - yawOffset = 0° means AR forward (-Z) = North
-     * - yawOffset = 90° means AR forward (-Z) = East
-     *
-     * ================================================================================================
-     * MATHEMATICAL FORMULA
-     * ================================================================================================
-     *
-     * Given:
-     * - bearingToTarget: GPS bearing from user to target [0°, 360°)
-     * - yawOffset: Offset from AR forward to North
-     *
-     * AR angle = bearingToTarget - yawOffset
-     * x = distance × sin(AR angle)    (positive = right)
-     * z = -distance × cos(AR angle)   (negative = forward)
-     *
-     * Examples:
-     * - Target at 0° (North), yawOffset = 0°: x = 0, z = -dist (directly forward)
-     * - Target at 90° (East), yawOffset = 0°: x = +dist, z = 0 (directly right)
-     * - Target at 0° (North), yawOffset = 90°: x = -dist, z = 0 (directly left)
-     *
-     * @param userLoc Current GPS location of the user (anchor position)
-     * @param targetLat Latitude of the target point
-     * @param targetLng Longitude of the target point
-     * @param yawOffsetDeg The yaw offset for coordinate alignment
-     * @return Pair(x, z) positions in AR local space (relative to anchor)
+     * Formula: arAngle = bearing - yawOffset
+     *   x = distance × sin(arAngle), z = -distance × cos(arAngle)
      */
     fun convertGpsToArPosition(
         userLoc: Location,
@@ -307,69 +204,39 @@ object ArUtils {
         val dist = distanceMeters(userLoc.latitude, userLoc.longitude, targetLat, targetLng)
         val bearingToTarget = bearingDeg(userLoc.latitude, userLoc.longitude, targetLat, targetLng)
 
-        // Validate distance
         if (dist.isNaN() || dist.isInfinite()) {
-            Log.w(TAG, "convertGpsToArPosition: Invalid distance calculated")
+            FileLogger.w(TAG, "convertGpsToArPosition: invalid distance")
             return Pair(0f, 0f)
         }
 
-        // ========================================================================
-        // STEP 2: Use actual distance (no clamping to preserve geometry)
-        // ========================================================================
-        // Note: Callers should use convertGpsToArPositionOrNull() to skip far points
-        // instead of rendering them at wrong positions
+        // No clamping — callers should use convertGpsToArPositionOrNull() for filtering
         val renderDist = dist
 
-        // Log warning for very far points (callers should filter these)
-        if (dist > ARPerformanceConfig.MAX_AR_CALCULATION_DISTANCE) {
-            Log.w(TAG, "Warning: Rendering point at ${dist.toInt()}m (beyond ${ARPerformanceConfig.MAX_AR_CALCULATION_DISTANCE.toInt()}m)")
+        if (dist > MAX_AR_CALCULATION_DISTANCE) {
+            FileLogger.w(TAG, "Point at ${dist.toInt()}m exceeds max calculation distance")
         }
 
-        // ========================================================================
-        // STEP 3: Convert GPS bearing to AR angle
-        // ========================================================================
-        // AR angle = GPS bearing - yaw offset
-        // This rotates the bearing from "relative to North" to "relative to AR forward"
+        // Convert GPS bearing to AR-relative angle, then polar → cartesian
         val angleInAr = normalizeAngleDeg(bearingToTarget - yawOffsetDeg)
         val angleRad = Math.toRadians(angleInAr)
-
-        // ========================================================================
-        // STEP 4: Convert polar to Cartesian
-        // ========================================================================
-        // x = distance × sin(angle)  → positive = right
-        // z = -distance × cos(angle) → negative = forward (into screen)
-        //
-        // When angleInAr = 0° (target is in AR forward direction):
-        //   x = sin(0) × dist = 0
-        //   z = -cos(0) × dist = -dist (forward in AR)
-        //
-        // When angleInAr = 90° (target is to the right in AR):
-        //   x = sin(90) × dist = +dist (right in AR)
-        //   z = -cos(90) × dist = 0
         val x = (renderDist * sin(angleRad)).toFloat()
         val z = (-renderDist * cos(angleRad)).toFloat()
 
-        // Validate output
         if (x.isNaN() || z.isNaN()) {
-            Log.e(TAG, "convertGpsToArPosition: Calculation resulted in NaN!")
+            FileLogger.e(TAG, "convertGpsToArPosition: result is NaN!")
             return Pair(0f, 0f)
         }
 
         return Pair(x, z)
     }
 
-    /**
-     * Converts GPS to AR position with distance validation.
-     * Returns null if the point is too far to render (should be skipped).
-     *
-     * @return Pair(x, z) or null if point should not be rendered
-     */
+    /** Like [convertGpsToArPosition] but returns null if beyond [maxDistance]. */
     fun convertGpsToArPositionOrNull(
         userLoc: Location,
         targetLat: Double,
         targetLng: Double,
         yawOffsetDeg: Double,
-        maxDistance: Double = ARPerformanceConfig.MAX_RENDER_DISTANCE.toDouble()
+        maxDistance: Double = MAX_RENDER_DISTANCE.toDouble()
     ): Pair<Float, Float>? {
         val dist = distanceMeters(userLoc.latitude, userLoc.longitude, targetLat, targetLng)
 
