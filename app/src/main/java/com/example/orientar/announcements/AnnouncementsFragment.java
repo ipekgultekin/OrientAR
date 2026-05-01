@@ -1,6 +1,8 @@
 package com.example.orientar.announcements;
 
+import android.Manifest;
 import android.app.AlertDialog;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -14,6 +16,8 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -36,6 +40,8 @@ import java.util.Locale;
 import java.util.Map;
 
 public class AnnouncementsFragment extends Fragment {
+
+    private static final int NOTIFICATION_PERMISSION_REQ = 101;
 
     private AnnouncementsViewModel vm;
 
@@ -63,6 +69,8 @@ public class AnnouncementsFragment extends Fragment {
 
     private int currentTabPosition = 0;
 
+    private AnnouncementNotificationManager notificationManager;
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
@@ -76,6 +84,8 @@ public class AnnouncementsFragment extends Fragment {
         super.onViewCreated(v, savedInstanceState);
 
         db = FirebaseFirestore.getInstance();
+        notificationManager = new AnnouncementNotificationManager(requireContext());
+        requestNotificationPermissionIfNeeded();
 
         Bundle args = getArguments();
         if (args != null) {
@@ -125,8 +135,11 @@ public class AnnouncementsFragment extends Fragment {
         btnRetry.setOnClickListener(x -> {
             if ("leader".equals(userRole) && !leaderDocId.isEmpty()) {
                 loadLeaderGroupAndRefresh();
-            } else {
+            } else if (!"guest".equals(userRole)) {
                 loadStudentGroupAndRefresh();
+            } else {
+                vm.refresh("");
+                startAnnouncementListeners("", true);
             }
         });
 
@@ -161,6 +174,27 @@ public class AnnouncementsFragment extends Fragment {
             loadStudentGroupAndRefresh();
         } else {
             vm.refresh("");
+            startAnnouncementListeners("", true);
+        }
+    }
+
+    private void requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                        requireActivity(),
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                        NOTIFICATION_PERMISSION_REQ
+                );
+            }
+        }
+    }
+
+    private void startAnnouncementListeners(String groupId, boolean isGuest) {
+        if (notificationManager != null) {
+            notificationManager.stopListening();
+            notificationManager.startListening(groupId, isGuest);
         }
     }
 
@@ -175,13 +209,17 @@ public class AnnouncementsFragment extends Fragment {
                     } else {
                         leaderGroupId = "";
                     }
+
                     updateAddButtonVisibility();
                     vm.refresh(leaderGroupId);
+                    startAnnouncementListeners(leaderGroupId, false);
                 })
                 .addOnFailureListener(e -> {
                     leaderGroupId = "";
+
                     updateAddButtonVisibility();
                     vm.refresh(leaderGroupId);
+                    startAnnouncementListeners(leaderGroupId, false);
                 });
     }
 
@@ -190,14 +228,18 @@ public class AnnouncementsFragment extends Fragment {
 
         if (auth.getCurrentUser() == null) {
             studentGroupId = "";
+
             vm.refresh(studentGroupId);
+            startAnnouncementListeners(studentGroupId, false);
             return;
         }
 
         String currentEmail = auth.getCurrentUser().getEmail();
         if (currentEmail == null || currentEmail.trim().isEmpty()) {
             studentGroupId = "";
+
             vm.refresh(studentGroupId);
+            startAnnouncementListeners(studentGroupId, false);
             return;
         }
 
@@ -213,11 +255,15 @@ public class AnnouncementsFragment extends Fragment {
                     } else {
                         studentGroupId = "";
                     }
+
                     vm.refresh(studentGroupId);
+                    startAnnouncementListeners(studentGroupId, false);
                 })
                 .addOnFailureListener(e -> {
                     studentGroupId = "";
+
                     vm.refresh(studentGroupId);
+                    startAnnouncementListeners(studentGroupId, false);
                 });
     }
 
@@ -225,19 +271,17 @@ public class AnnouncementsFragment extends Fragment {
         tabLayoutAnnouncements.removeAllTabs();
 
         tabLayoutAnnouncements.addTab(
-                tabLayoutAnnouncements.newTab().setText("Thıs Week")
+                tabLayoutAnnouncements.newTab().setText("This Week")
         );
         tabLayoutAnnouncements.addTab(
                 tabLayoutAnnouncements.newTab().setText("Formal")
         );
 
-        // Group tab only for logged-in users (not guests)
         if (!"guest".equals(userRole)) {
             tabLayoutAnnouncements.addTab(
                     tabLayoutAnnouncements.newTab().setText("Group")
             );
         } else {
-            // Hide group RecyclerView for guests
             if (rvGroup != null) rvGroup.setVisibility(View.GONE);
         }
 
@@ -263,7 +307,6 @@ public class AnnouncementsFragment extends Fragment {
         rvThisWeek.setVisibility(position == 0 ? View.VISIBLE : View.GONE);
         rvFormal.setVisibility(position == 1 ? View.VISIBLE : View.GONE);
 
-        // Tab 2 = Group (only exists for non-guests)
         if (!"guest".equals(userRole) && rvGroup != null) {
             rvGroup.setVisibility(position == 2 ? View.VISIBLE : View.GONE);
         }
@@ -373,5 +416,13 @@ public class AnnouncementsFragment extends Fragment {
             return "Last updated: " + iso;
         }
         return "Last updated: " + iso;
+    }
+
+    @Override
+    public void onDestroyView() {
+        if (notificationManager != null) {
+            notificationManager.stopListening();
+        }
+        super.onDestroyView();
     }
 }

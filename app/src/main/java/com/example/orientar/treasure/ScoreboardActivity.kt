@@ -43,10 +43,16 @@ class ScoreboardActivity : ComponentActivity() {
             GameState.clearMemory()
             GameState.resetProgress(this)
         }
-        GameState.loadQuestionsFromFirestore {}
-        setContent {
-            MaterialTheme {
-                TreasureHuntLandingScreen(forcedSolved = forcedSolved, forcedTotal = forcedTotal)
+        GameState.loadQuestionsFromFirestore {
+            runOnUiThread {
+                setContent {
+                    MaterialTheme {
+                        TreasureHuntLandingScreen(
+                            forcedSolved = forcedSolved,
+                            forcedTotal = forcedTotal
+                        )
+                    }
+                }
             }
         }
     }
@@ -62,11 +68,6 @@ fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
     var leaderboardTimeMs by remember { mutableStateOf(0L) }
 
     LaunchedEffect(Unit) {
-        while (questionCount == 0) {
-            kotlinx.coroutines.delay(200)
-            questionCount = GameState.totalQuestions()
-            solvedCount   = GameState.totalSolved
-        }
         if (forcedSolved < 0) solvedCount   = GameState.totalSolved
         if (forcedTotal  < 0) questionCount = GameState.totalQuestions()
 
