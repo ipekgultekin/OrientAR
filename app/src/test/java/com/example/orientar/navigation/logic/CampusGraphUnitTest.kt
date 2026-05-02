@@ -4,10 +4,13 @@ import org.junit.Test
 import org.junit.Assert.assertNotNull
 
 /**
- * Smoke test confirming the fromGeoJsonString() factory works — the basis
- * for SCRUM-84 unit tests of A* routing logic.
+ * Unit tests for CampusGraph routing logic.
+ *
+ * Currently covers the [CampusGraph.fromGeoJsonString] factory entry point;
+ * SCRUM-84 will extend to A* `findPath` and phantom-flow `findPathFromPoint`,
+ * including disconnected-node and start-equals-end edge cases.
  */
-class CampusGraphFactorySmokeTest {
+class CampusGraphUnitTest {
 
     @Test
     fun `fromGeoJsonString builds a graph from minimal valid GeoJSON`() {
