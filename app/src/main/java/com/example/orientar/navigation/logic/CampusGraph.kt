@@ -24,7 +24,7 @@ data class Edge(
 
 data class Coordinate(val lat: Double, val lng: Double)
 
-class CampusGraph(private val context: Context) {
+class CampusGraph private constructor() {
 
     val nodes = HashMap<Int, Node>()
     val destinations = ArrayList<Node>()
@@ -39,14 +39,31 @@ class CampusGraph(private val context: Context) {
     // We snap to the nearest node within this tolerance.
     private val SNAP_TOLERANCE_METERS = 1.0
 
-    init {
-        loadGraphFromAssets()
+    /**
+     * Production entry point: reads the campus map from app assets.
+     * Behavior is identical to the pre-refactor `CampusGraph(context)` constructor.
+     */
+    constructor(context: Context) : this() {
+        val jsonString = context.assets.open("Map/map.geojson").bufferedReader().use { it.readText() }
+        loadGraphFromJsonString(jsonString)
         logGraphHealthReport() // Generate report immediately after loading
     }
 
-    private fun loadGraphFromAssets() {
+    /**
+     * Parse a complete GeoJSON FeatureCollection string into the graph.
+     *
+     * Used by the [Context]-based constructor (after asset read) and by the
+     * [fromGeoJsonString] factory (for JVM unit tests, no Android Context needed).
+     *
+     * Schema expected:
+     *   - `Point` features become [Node]s. Properties may include `Type` ("Destination"
+     *     marks the node as a named destination) and `Name`.
+     *   - `LineString` features become [Edge]s, with endpoints snapped to the closest
+     *     [Node] within [SNAP_TOLERANCE_METERS] (gradual to 5m). Each LineString
+     *     produces two `Edge` objects (bidirectional storage).
+     */
+    private fun loadGraphFromJsonString(jsonString: String) {
         try {
-            val jsonString = context.assets.open("Map/map.geojson").bufferedReader().use { it.readText() }
             val json = JSONObject(jsonString)
             val features = json.getJSONArray("features")
 
@@ -730,6 +747,27 @@ class CampusGraph(private val context: Context) {
             ===============================
             """.trimIndent()
         )
+    }
+
+    companion object {
+        /**
+         * Test-friendly factory: builds a [CampusGraph] from a GeoJSON string directly,
+         * bypassing the need for an Android [Context]. Used primarily by JVM unit tests
+         * to avoid Robolectric or instrumented test overhead.
+         *
+         * The graph health report (which the [Context]-based constructor logs after
+         * loading) is intentionally skipped here — tests that want to verify counts
+         * should read the public fields ([nodes], [destinations], counters) directly.
+         *
+         * @param json A complete GeoJSON FeatureCollection containing Point and
+         *             LineString features matching the campus graph schema.
+         * @return A fully-initialized CampusGraph instance.
+         */
+        fun fromGeoJsonString(json: String): CampusGraph {
+            val graph = CampusGraph()
+            graph.loadGraphFromJsonString(json)
+            return graph
+        }
     }
 }
 
