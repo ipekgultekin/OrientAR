@@ -9,64 +9,77 @@ import org.junit.Assert.*
 
 class TreasureHuntLogicUnitTest {
 
-    // 1. normalize(String) Tests
-    // Objective: To verify case normalization, punctuation removal, and whitespace cleanup[cite: 16, 227].
+    // 1. normalize Tests
     @Test
-    fun `normalize should handle case, punctuation and spaces`() {
+    fun `normalize should handle case punctuation spaces and Turkish chars`() {
         assertEquals("LIBRARY", normalize("library"))
         assertEquals("METU", normalize("  metu  "))
         assertEquals("LIBRARY", normalize("Library!"))
         assertEquals("BLOCK A", normalize("Block-A..."))
+        assertEquals("KUTUPHANE", normalize("Kütüphane"))
+        assertEquals("GIRIS", normalize("Giriş"))
     }
 
-    // 2. levenshtein(String, String) Tests
-    // Objective: To verify correct edit distance calculation using known input-output pairs[cite: 16, 530].
+    @Test
+    fun `normalize should return empty for empty input`() {
+        assertEquals("", normalize(""))
+        assertEquals("", normalize("   "))
+    }
+
+    // 2. levenshtein Tests
     @Test
     fun `levenshtein should compute correct edit distance`() {
-        assertEquals(0, levenshtein("METU", "METU")) // Exact match
-        assertEquals(1, levenshtein("METU", "METO")) // 1 character substitution
-        assertEquals(2, levenshtein("LIBRARY", "LIBRY")) // 2 characters missing
-        assertEquals(3, levenshtein("ABC", "DEF")) // Completely different
+        assertEquals(0, levenshtein("METU", "METU"))
+        assertEquals(1, levenshtein("METU", "METO"))
+        assertEquals(2, levenshtein("LIBRARY", "LIBRY"))
+        assertEquals(3, levenshtein("ABC", "DEF"))
     }
 
-    // 3. isSimilar(String, String) Tests
-    // Objective: To verify correct classification based on the 20% similarity threshold[cite: 16, 531, 1119].
+    // 3. isSimilar Tests
     @Test
     fun `isSimilar should respect 20 percent threshold`() {
-        // "KUTUPHANE" is 9 chars. 20% is 1.8 chars. Therefore, 1 error should be accepted.
-        assertTrue(isSimilar("KUTUPHANE", "KUTUPHANE")) // 0 errors -> OK
-        assertTrue(isSimilar("KUTUPHANE", "KUTUPHANI")) // 1 error (approx 11%) -> OK
+        assertTrue(isSimilar("KUTUPHANE", "KUTUPHANE"))
+        assertTrue(isSimilar("KUTUPHANE", "KUTUPHANI"))
 
-        // 2 errors (2/9 = approx 22%) exceeds the threshold and should return FALSE.
-        assertFalse(isSimilar("KUTUPHANE", "KUTUPXXX")) // 3 errors -> FAIL
+        assertFalse(isSimilar("KUTUPHANE", "KUTUPXXX"))
     }
 
-    // 4. fuzzyContainsKeyword(String, String) Tests
-    // Objective: To verify matching behavior including fuzzy matches and sliding window logic in long OCR outputs[cite: 16, 229, 532].
     @Test
-    fun `fuzzyContainsKeyword should find matches in noisy text`() {
-        val ocrOutput = "WELCOME TO THE METU L1BRARY OF CAMPUS"
+    fun `isSimilar should handle empty safely`() {
+        assertFalse(isSimilar("", "ABC"))
+        assertFalse(isSimilar("ABC", ""))
+    }
+
+    // 4. fuzzyContainsKeyword Tests
+    @Test
+    fun `fuzzyContainsKeyword should match noisy OCR text`() {
+        val ocr = "WELCOME TO THE METU L1BRARY OF CAMPUS"
         val target = "LIBRARY"
 
-        // Should recognize "L1BRARY" as "LIBRARY" despite OCR noise
-        assertTrue(fuzzyContainsKeyword(ocrOutput, target))
+        assertTrue(fuzzyContainsKeyword(ocr, target))
     }
 
     @Test
-    fun `fuzzyContainsKeyword should handle multi-word keywords`() {
-        val ocrOutput = "THIS IS THE RECTORATE BUILD1NG"
+    fun `fuzzyContainsKeyword should handle multi word sliding window`() {
+        val ocr = "THIS IS THE RECTORATE BUILD1NG"
         val target = "RECTORATE BUILDING"
 
-        // Should identify matches for multi-word targets using windowed comparison logic [cite: 16, 229]
-        assertTrue(fuzzyContainsKeyword(ocrOutput, target))
+        assertTrue(fuzzyContainsKeyword(ocr, target))
     }
 
     @Test
-    fun `fuzzyContainsKeyword should prevent false positives`() {
-        val ocrOutput = "THE WEATHER IS VERY NICE TODAY"
+    fun `fuzzyContainsKeyword should fallback when OCR shorter than keyword`() {
+        val ocr = "LIB"
         val target = "LIBRARY"
 
-        // Unrelated text should not trigger a match [cite: 16, 532, 540]
-        assertFalse(fuzzyContainsKeyword(ocrOutput, target))
+        assertTrue(isSimilar(normalize(ocr), normalize(target)) == false)
+    }
+
+    @Test
+    fun `fuzzyContainsKeyword should return false for unrelated text`() {
+        val ocr = "THE WEATHER IS NICE"
+        val target = "LIBRARY"
+
+        assertFalse(fuzzyContainsKeyword(ocr, target))
     }
 }

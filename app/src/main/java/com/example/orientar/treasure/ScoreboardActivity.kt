@@ -22,7 +22,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orientar.home.MainActivity
@@ -37,22 +36,16 @@ private val MetuRedDark = Color(0xFF5C0000)
 class ScoreboardActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         val forcedSolved = intent.getIntExtra("forcedSolved", -1)
         val forcedTotal  = intent.getIntExtra("forcedTotal", -1)
-        if (forcedSolved < 0) {
-            GameState.clearMemory()
-            GameState.resetProgress(this)
-        }
-        GameState.loadQuestionsFromFirestore {
-            runOnUiThread {
-                setContent {
-                    MaterialTheme {
-                        TreasureHuntLandingScreen(
-                            forcedSolved = forcedSolved,
-                            forcedTotal = forcedTotal
-                        )
-                    }
-                }
+
+        setContent {
+            MaterialTheme {
+                TreasureHuntLandingScreen(
+                    forcedSolved = forcedSolved,
+                    forcedTotal = forcedTotal
+                )
             }
         }
     }
@@ -68,17 +61,27 @@ fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
     var leaderboardTimeMs by remember { mutableStateOf(0L) }
 
     LaunchedEffect(Unit) {
-        if (forcedSolved < 0) solvedCount   = GameState.totalSolved
-        if (forcedTotal  < 0) questionCount = GameState.totalQuestions()
+        GameState.loadQuestionsFromFirestore {
+            GameState.loadProgress(context)
 
-        FirebaseAuth.getInstance().currentUser?.reload()?.addOnCompleteListener {
-            val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@addOnCompleteListener
-            FirebaseFirestore.getInstance().collection("leaderboard").document(uid).get()
-                .addOnSuccessListener { doc ->
-                    isOnLeaderboard   = doc.exists()
-                    leaderboardTimeMs = if (doc.exists()) doc.getLong("totalTimeMs") ?: 0L else 0L
-                }
-                .addOnFailureListener { isOnLeaderboard = false }
+            if (forcedSolved < 0) solvedCount = GameState.totalSolved
+            if (forcedTotal < 0) questionCount = GameState.totalQuestions()
+
+            FirebaseAuth.getInstance().currentUser?.reload()?.addOnCompleteListener {
+                val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@addOnCompleteListener
+
+                FirebaseFirestore.getInstance()
+                    .collection("leaderboard")
+                    .document(uid)
+                    .get()
+                    .addOnSuccessListener { doc ->
+                        isOnLeaderboard = doc.exists()
+                        leaderboardTimeMs = if (doc.exists()) doc.getLong("totalTimeMs") ?: 0L else 0L
+                    }
+                    .addOnFailureListener {
+                        isOnLeaderboard = false
+                    }
+            }
         }
     }
 
@@ -164,7 +167,7 @@ fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
                         elevation = CardDefaults.cardElevation(0.dp)
                     ) {
                         Column(Modifier.padding(18.dp)) {
-                            Text("$solved of $total questions solved",
+                            Text("You solved $solved of $total clues",
                                 fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
                             Spacer(Modifier.height(6.dp))
                             LinearProgressIndicator(
@@ -174,8 +177,12 @@ fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
                                 trackColor = Color(0xFFFFE0B2)
                             )
                             Spacer(Modifier.height(8.dp))
-                            Text("Complete all questions to appear on the leaderboard.",
-                                fontSize = 12.sp, color = Color(0xFFBF360C), lineHeight = 17.sp)
+                            Text(
+                                "Tap Continue Game to keep searching from where you left off.",
+                                fontSize = 12.sp,
+                                color = Color(0xFFBF360C),
+                                lineHeight = 17.sp
+                            )
                         }
                     }
                 } else if (total > 0) {

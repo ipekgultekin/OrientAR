@@ -1,5 +1,6 @@
 package com.example.orientar.treasure
 
+import android.util.Log
 import android.content.Context
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -90,31 +91,53 @@ object GameState {
     }
 
     fun loadQuestionsFromFirestore(onComplete: () -> Unit) {
+        Log.d("TH_FIRESTORE", "Loading treasure_questions from Firestore")
+
         FirebaseFirestore.getInstance().collection("treasure_questions").get()
             .addOnSuccessListener { snapshot ->
                 questions.clear()
+
+                Log.d("TH_FIRESTORE", "Firestore returned ${snapshot.documents.size} treasure question documents")
+
                 for (doc in snapshot.documents) {
-                    val id = doc.getLong("id")?.toInt() ?: continue
+                    val id = doc.getLong("id")?.toInt()
+                    if (id == null) {
+                        Log.e("TH_FIRESTORE", "Skipping document ${doc.id}: missing id")
+                        continue
+                    }
+
                     val keywords = doc.get("targetKeywords") as? List<String> ?: emptyList()
-                    questions.add(
-                        Question(
-                            id = id,
-                            title = doc.getString("title") ?: "",
-                            text = doc.getString("text") ?: "",
-                            cloudAnchorId = doc.getString("cloudAnchorId") ?: "",
-                            modelFilePath = doc.getString("modelFilePath") ?: "",
-                            modelScale = doc.getDouble("modelScale")?.toFloat() ?: 1f,
-                            modelRotationX = doc.getDouble("modelRotationX")?.toFloat() ?: 0f,
-                            modelRotationY = doc.getDouble("modelRotationY")?.toFloat() ?: 0f,
-                            modelRotationZ = doc.getDouble("modelRotationZ")?.toFloat() ?: 0f,
-                            targetKeywords = keywords
-                        )
+
+                    val question = Question(
+                        id = id,
+                        title = doc.getString("title") ?: "",
+                        text = doc.getString("text") ?: "",
+                        cloudAnchorId = doc.getString("cloudAnchorId") ?: "",
+                        modelFilePath = doc.getString("modelFilePath") ?: "",
+                        modelScale = doc.getDouble("modelScale")?.toFloat() ?: 1f,
+                        modelRotationX = doc.getDouble("modelRotationX")?.toFloat() ?: 0f,
+                        modelRotationY = doc.getDouble("modelRotationY")?.toFloat() ?: 0f,
+                        modelRotationZ = doc.getDouble("modelRotationZ")?.toFloat() ?: 0f,
+                        targetKeywords = keywords
                     )
+
+                    Log.d(
+                        "TH_FIRESTORE",
+                        "Loaded question: doc=${doc.id}, id=${question.id}, title='${question.title}', hasAnchor=${question.cloudAnchorId.isNotEmpty()}, keywords=${question.targetKeywords.size}, model='${question.modelFilePath}'"
+                    )
+
+                    questions.add(question)
                 }
+
                 questions.sortBy { it.id }
+                Log.d("TH_FIRESTORE", "Questions sorted. order=${questions.map { it.id }}")
+
                 onComplete()
             }
-            .addOnFailureListener { onComplete() }
+            .addOnFailureListener { e ->
+                Log.e("TH_FIRESTORE", "Failed to load treasure questions", e)
+                onComplete()
+            }
     }
 
     fun markSolved(questionId: Int, elapsedMs: Long, context: Context? = null) {

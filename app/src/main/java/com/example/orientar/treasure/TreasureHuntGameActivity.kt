@@ -71,6 +71,15 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     private var isHosting = false
     private val minScanMs = 40_000L
 
+    private val TAG_FLOW = "TH_FLOW"
+    private val TAG_HOST = "TH_HOST"
+    private val TAG_RESOLVE = "TH_RESOLVE"
+    private val TAG_OCR = "TH_OCR"
+    private val TAG_TRIGGER = "TH_TRIGGER"
+    private val TAG_MODEL = "TH_MODEL"
+    private val TAG_LEADERBOARD = "TH_LEADERBOARD"
+    private val TAG_GAMESTATE = "TH_GAMESTATE"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_treasure_hunt_game)
@@ -109,12 +118,21 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                     .delete()
             }
         }
+
+        Log.d(TAG_FLOW, "Firestore -> Question Loading started")
         // Always reload questions fresh, then load progress
         GameState.loadQuestionsFromFirestore {
+            Log.d(
+                TAG_FLOW,
+                "Firestore -> Question Loading completed. totalQuestions=${GameState.totalQuestions()}"
+            )
             GameState.loadProgress(this@TreasureHuntGameActivity)
             runOnUiThread {
                 val firstQ = if (isNewGame) GameState.questions.firstOrNull()
                 else GameState.nextUnsolved() ?: GameState.questions.firstOrNull()
+
+                Log.d(TAG_GAMESTATE, "First question selected: id=${firstQ?.id}, title=${firstQ?.title}")
+
                 firstQ?.let { loadQuestion(it) }
             }
         }
@@ -144,12 +162,22 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                     lastCloudCheckTime = now
                     isResolving = true
                     session.resolveCloudAnchorAsync(currentQuestion.cloudAnchorId) { anchor, state ->
+                        Log.d(
+                            "TH_RESOLVE",
+                            "Q=${currentQuestion.id}, anchorId=${currentQuestion.cloudAnchorId}, state=$state"
+                        )
+
                         if (state == Anchor.CloudAnchorState.SUCCESS) {
                             runOnUiThread {
                                 if (!modelPlaced) {
+                                    Log.d(TAG_TRIGGER, "Triggered by Cloud Anchor for Q=${currentQuestion.id}")
                                     placeModelOnAnchor(anchor, currentQuestion)
+                                } else {
+                                    Log.d(TAG_TRIGGER, "Cloud Anchor resolved but model already placed for Q=${currentQuestion.id}")
                                 }
                             }
+                        } else if (state.isError) {
+                            Log.e(TAG_RESOLVE, "Cloud Anchor resolving failed for Q=${currentQuestion.id}, state=$state")
                         }
                         isResolving = false
                     }
@@ -250,15 +278,20 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
     private fun saveAnchorId(anchorId: String) {
         val docName = "q${currentQuestion.id}"
+
+        Log.d(TAG_HOST, "Saving Cloud Anchor ID to Firestore. doc=$docName, anchorId=$anchorId")
+
         FirebaseFirestore.getInstance()
             .collection("treasure_questions")
             .document(docName)
             .set(mapOf("cloudAnchorId" to anchorId), SetOptions.merge())
             .addOnSuccessListener {
                 currentQuestion = currentQuestion.copy(cloudAnchorId = anchorId)
+                Log.d(TAG_HOST, "Cloud Anchor ID saved successfully. doc=$docName")
                 Toast.makeText(this, "Saved! ID: $anchorId", Toast.LENGTH_LONG).show()
             }
             .addOnFailureListener { e ->
+                Log.e(TAG_HOST, "Cloud Anchor ID save failed. doc=$docName", e)
                 Toast.makeText(this, "Firebase error: ${e.message}", Toast.LENGTH_LONG).show()
             }
     }
@@ -271,11 +304,22 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
             recognizer.process(inputImage)
                 .addOnSuccessListener { visionText ->
-                    val matched = currentQuestion.targetKeywords.any { kw ->
+                    val matchedKeyword = currentQuestion.targetKeywords.firstOrNull { kw ->
                         fuzzyContainsKeyword(visionText.text, kw)
                     }
-                    if (matched && !modelPlaced) {
+
+                    Log.d(
+                        "TH_OCR",
+                        "Q=${currentQuestion.id}, OCR='${visionText.text}', matchedKeyword=$matchedKeyword"
+                    )
+
+                    if (matchedKeyword != null && !modelPlaced) {
+                        Log.d(TAG_TRIGGER, "Triggered by OCR for Q=${currentQuestion.id}, keyword=$matchedKeyword")
                         placeModelInFrontOfCamera(session, frame, currentQuestion)
+                    }
+
+                    if (matchedKeyword == null) {
+                        Log.d(TAG_OCR, "OCR negative path: no valid keyword matched for Q=${currentQuestion.id}")
                     }
                 }
                 .addOnCompleteListener {
@@ -312,6 +356,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     }
 
     private fun placeModelOnAnchor(anchor: Anchor, q: Question) {
+        Log.d(TAG_MODEL, "Model placement requested from Cloud Anchor. Q=${q.id}")
         if (modelPlaced) return
         modelPlaced = true
         val anchorNode = AnchorNode(arSceneView.engine, anchor)
@@ -321,6 +366,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     }
 
     private fun placeModelInFrontOfCamera(session: Session, frame: Frame, q: Question) {
+        Log.d(TAG_MODEL, "Model placement requested from OCR camera-relative anchor. Q=${q.id}")
         if (modelPlaced) return
         modelPlaced = true
         val cameraPose = frame.camera.pose
@@ -333,7 +379,10 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     }
 
     private fun loadModel(anchorNode: AnchorNode, q: Question) {
-        Log.d("TH_MODEL", "Loading model path=${q.modelFilePath}, scale=${q.modelScale}")
+        Log.d(
+            TAG_MODEL,
+            "Loading model. Q=${q.id}, path=${q.modelFilePath}, scale=${q.modelScale}, rotation=(${q.modelRotationX}, ${q.modelRotationY}, ${q.modelRotationZ})"
+        )
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -384,6 +433,10 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
         val elapsedMs = SystemClock.elapsedRealtime() - questionStartMs
         GameState.markSolved(questionId, elapsedMs, this)
+        Log.d(
+            TAG_GAMESTATE,
+            "Question solved. questionId=$questionId, elapsedMs=$elapsedMs, totalSolved=${GameState.totalSolved}, totalTimeMs=${GameState.totalTimeMs}"
+        )
 
         val total = GameState.totalQuestions()
         val isLast = total > 0 && GameState.totalSolved == total
@@ -437,6 +490,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
     // Common finish: ALL questions must be solved (and questions must be loaded)
     private fun finishGame() {
+        Log.d(TAG_FLOW, "Finish game requested. solved=${GameState.totalSolved}, total=${GameState.totalQuestions()}")
         val total = GameState.totalQuestions()
         val solved = GameState.totalSolved
         // Guard: if questions not loaded yet, just go to menu
@@ -461,6 +515,10 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             val fullName = "$firstName $lastName".trim()
 
             val fallbackName = user.email ?: "Unknown User"
+            Log.d(
+                TAG_LEADERBOARD,
+                "Resolved leaderboard name. fullName='$fullName', fallback='${user.email}'"
+            )
             saveToLeaderboard(if (fullName.isNotEmpty()) fullName else fallbackName)
         }
 
@@ -497,15 +555,20 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             "totalTimeMs" to GameState.totalTimeMs,
             "timestamp" to com.google.firebase.Timestamp.now()
         )
+
+        Log.d(TAG_LEADERBOARD, "Saving leaderboard entry: $entry")
         // Use uid as document ID so each user has one entry (overwrites on replay)
+
         db.collection("leaderboard")
             .document(uid)
             .set(entry)
             .addOnSuccessListener {
                 Toast.makeText(this, "Score saved! Good luck 🏆", Toast.LENGTH_SHORT).show()
+                Log.d("TH_LEADERBOARD", "Leaderboard save success for uid=$uid")
                 goToMenu()
             }
-            .addOnFailureListener {
+            .addOnFailureListener { e ->
+                Log.e(TAG_LEADERBOARD, "Leaderboard save failed for uid=$uid", e)
                 Toast.makeText(this, "Couldn't save score, but well done!", Toast.LENGTH_SHORT).show()
                 goToMenu()
             }
