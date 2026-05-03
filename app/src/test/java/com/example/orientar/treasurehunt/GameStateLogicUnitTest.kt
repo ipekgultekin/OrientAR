@@ -1,4 +1,4 @@
-package com.example.orientar
+package com.example.orientar.treasurehunt
 
 import com.example.orientar.treasure.GameState
 import com.example.orientar.treasure.Question
