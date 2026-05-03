@@ -1,4 +1,4 @@
-package com.example.orientar
+package com.example.orientar.treasurehunt
 
 import com.example.orientar.treasure.fuzzyContainsKeyword
 import com.example.orientar.treasure.isSimilar

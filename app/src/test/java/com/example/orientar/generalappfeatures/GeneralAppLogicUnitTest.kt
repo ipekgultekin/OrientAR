@@ -1,4 +1,4 @@
-package com.example.orientar
+package com.example.orientar.generalappfeatures
 
 import org.junit.Test
 import org.junit.Assert.*
