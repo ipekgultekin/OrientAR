@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -24,9 +25,9 @@ import com.example.orientar.network.ApiClient
 import com.example.orientar.network.ChatRequest
 import kotlinx.coroutines.launch
 
-private val MetuRed   = Color(0xFF8B0000)
+private val MetuRed = Color(0xFF8B0000)
 private val UserBubble = Color(0xFFE6CACA)
-private val BotBubble  = Color(0xFFF1F1F1)
+private val BotBubble = Color(0xFFF1F1F1)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,39 +38,70 @@ fun ChatbotScreen(userRole: String = "student") {
             "Hi! How can I help you today? Feel free to ask me anything about METU NCC!" to false
         )
     }
-    val scope     = rememberCoroutineScope()
+
+    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    val isKeyboardOpen = WindowInsets.ime.getBottom(density) > 0
 
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.size - 1)
+        }
     }
 
     Scaffold(
-        bottomBar = { SharedBottomBar(userRole = userRole) }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier.fillMaxSize().background(Color.White).padding(paddingValues)
-        ) {
-            // Top bar
-            Surface(modifier = Modifier.fillMaxWidth(), shadowElevation = 4.dp, color = Color.White) {
+        containerColor = Color.White,
+        topBar = {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shadowElevation = 4.dp,
+                color = Color.White
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(76.dp)
+                        .padding(horizontal = 18.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    androidx.compose.foundation.Image(
+                    Image(
                         painter = painterResource(id = R.drawable.metu_logo),
                         contentDescription = "METU Logo",
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(38.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("METU NCC ORIENTATION", color = MetuRed, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Text(
+                        text = "METU NCC ORIENTATION",
+                        color = MetuRed,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1
+                    )
                 }
             }
+        },
+        bottomBar = {
+            if (!isKeyboardOpen) {
+                SharedBottomBar(userRole = userRole)
+            }
+        }
+    ) { paddingValues ->
 
-            // Messages
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White)
+                .padding(paddingValues)
+        ) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.weight(1f).padding(horizontal = 16.dp).imePadding(),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 16.dp)
             ) {
@@ -80,46 +112,71 @@ fun ChatbotScreen(userRole: String = "student") {
                     ) {
                         Box(
                             modifier = Modifier
-                                .background(if (isUser) UserBubble else BotBubble, RoundedCornerShape(16.dp))
-                                .padding(12.dp)
-                                .widthIn(max = 260.dp)
+                                .background(
+                                    if (isUser) UserBubble else BotBubble,
+                                    RoundedCornerShape(18.dp)
+                                )
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                                .widthIn(max = 280.dp)
                         ) {
-                            Text(text = text)
+                            Text(
+                                text = text,
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp,
+                                color = Color(0xFF222222)
+                            )
                         }
                     }
                 }
             }
 
-            // Input
-            Surface(modifier = Modifier.fillMaxWidth(), shadowElevation = 8.dp, color = Color.White) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding(),
+                shadowElevation = 8.dp,
+                color = Color.White
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.Bottom
                 ) {
                     TextField(
                         value = userInput,
                         onValueChange = { userInput = it },
                         placeholder = { Text("Type your question here") },
-                        modifier = Modifier.weight(1f).heightIn(min = 52.dp, max = 120.dp)
-                            .border(1.dp, MetuRed, RoundedCornerShape(26.dp)),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 52.dp, max = 110.dp)
+                            .border(
+                                1.dp,
+                                MetuRed.copy(alpha = 0.7f),
+                                RoundedCornerShape(26.dp)
+                            ),
                         shape = RoundedCornerShape(26.dp),
                         colors = TextFieldDefaults.colors(
-                            focusedContainerColor   = Color.White,
+                            focusedContainerColor = Color.White,
                             unfocusedContainerColor = Color.White,
-                            focusedIndicatorColor   = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
-                            cursorColor             = MetuRed
+                            cursorColor = MetuRed
                         ),
-                        maxLines = 5
+                        maxLines = 4
                     )
+
                     Spacer(modifier = Modifier.width(8.dp))
+
                     IconButton(
                         onClick = {
                             if (userInput.isBlank()) return@IconButton
+
                             val question = userInput
                             messages.add(question to true)
                             messages.add("Thinking..." to false)
                             userInput = ""
+
                             scope.launch {
                                 try {
                                     val response = ApiClient.api.askQuestion(ChatRequest(question))
@@ -131,9 +188,15 @@ fun ChatbotScreen(userRole: String = "student") {
                                 }
                             }
                         },
-                        modifier = Modifier.size(48.dp).background(MetuRed, CircleShape)
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(MetuRed, CircleShape)
                     ) {
-                        Icon(Icons.Filled.Send, contentDescription = "Send", tint = Color.White)
+                        Icon(
+                            Icons.Filled.Send,
+                            contentDescription = "Send",
+                            tint = Color.White
+                        )
                     }
                 }
             }

@@ -122,7 +122,9 @@
         <activity
             android:name=".chatbot.ChatbotActivity"
             android:exported="false"
-            android:label="Chatbot" />
+            android:label="Chatbot"
+            android:windowSoftInputMode="adjustResize" />
+
 
 
         <!-- ANNOUNCEMENTS  -->
