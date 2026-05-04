@@ -67,21 +67,23 @@ fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
             if (forcedSolved < 0) solvedCount = GameState.totalSolved
             if (forcedTotal < 0) questionCount = GameState.totalQuestions()
 
-            FirebaseAuth.getInstance().currentUser?.reload()?.addOnCompleteListener {
-                val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@addOnCompleteListener
-
-                FirebaseFirestore.getInstance()
-                    .collection("leaderboard")
-                    .document(uid)
-                    .get()
-                    .addOnSuccessListener { doc ->
-                        isOnLeaderboard = doc.exists()
-                        leaderboardTimeMs = if (doc.exists()) doc.getLong("totalTimeMs") ?: 0L else 0L
-                    }
-                    .addOnFailureListener {
-                        isOnLeaderboard = false
-                    }
+            val uid = FirebaseAuth.getInstance().currentUser?.uid
+            if (uid == null) {
+                isOnLeaderboard = false
+                return@loadQuestionsFromFirestore
             }
+
+            FirebaseFirestore.getInstance()
+                .collection("leaderboard")
+                .document(uid)
+                .get()
+                .addOnSuccessListener { doc ->
+                    isOnLeaderboard = doc.exists()
+                    leaderboardTimeMs = if (doc.exists()) doc.getLong("totalTimeMs") ?: 0L else 0L
+                }
+                .addOnFailureListener {
+                    isOnLeaderboard = false
+                }
         }
     }
 
@@ -263,10 +265,28 @@ fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
             confirmButton = {
                 TextButton(onClick = {
                     showReplayConfirm = false
-                    context.startActivity(Intent(context, TreasureHuntGameActivity::class.java).apply {
-                        putExtra("isNewGame", true)
-                    })
-                }) { Text("Yes, Play Again", color = MetuRed, fontWeight = FontWeight.Bold) }
+
+                    val uid = FirebaseAuth.getInstance().currentUser?.uid
+                    GameState.resetProgress(context)
+
+                    if (uid != null) {
+                        FirebaseFirestore.getInstance()
+                            .collection("leaderboard")
+                            .document(uid)
+                            .delete()
+                            .addOnCompleteListener {
+                                context.startActivity(Intent(context, TreasureHuntGameActivity::class.java).apply {
+                                    putExtra("isNewGame", true)
+                                })
+                            }
+                    } else {
+                        context.startActivity(Intent(context, TreasureHuntGameActivity::class.java).apply {
+                            putExtra("isNewGame", true)
+                        })
+                    }
+                }) {
+                    Text("Yes, Play Again", color = MetuRed, fontWeight = FontWeight.Bold)
+                }
             },
             dismissButton = {
                 TextButton(onClick = { showReplayConfirm = false }) { Text("Cancel", color = Color.Gray) }
