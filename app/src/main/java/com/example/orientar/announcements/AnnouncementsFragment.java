@@ -271,7 +271,7 @@ public class AnnouncementsFragment extends Fragment {
         tabLayoutAnnouncements.removeAllTabs();
 
         tabLayoutAnnouncements.addTab(
-                tabLayoutAnnouncements.newTab().setText("This Week")
+                tabLayoutAnnouncements.newTab().setText("Thıs Week")
         );
         tabLayoutAnnouncements.addTab(
                 tabLayoutAnnouncements.newTab().setText("Formal")
