@@ -53,7 +53,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
     // Intervals
     private var lastCloudCheckTime = 0L
-    private val cloudCheckIntervalMs = 2000L
+    private val cloudCheckIntervalMs = 10000L
     private var lastOcrTime = 0L
     private val ocrIntervalMs = 1500L
 
@@ -133,7 +133,11 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
                 Log.d(TAG_GAMESTATE, "First question selected: id=${firstQ?.id}, title=${firstQ?.title}")
 
-                firstQ?.let { loadQuestion(it) }
+                if (firstQ != null && GameState.totalSolved < GameState.totalQuestions()) {
+                    loadQuestion(firstQ)
+                } else {
+                    finishGame()
+                }
             }
         }
 
@@ -234,13 +238,12 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             Log.d("TH_HOST", "Feature map quality: $quality")
 
             if (quality == Session.FeatureMapQuality.INSUFFICIENT) {
-                isHosting = false
+                Log.w(TAG_HOST, "Feature map quality is INSUFFICIENT, but hosting will continue for testing/demo.")
                 Toast.makeText(
                     this,
-                    "Not enough visual features. Move slowly and scan from more angles.",
+                    "Visual quality is low, but hosting will continue.",
                     Toast.LENGTH_LONG
                 ).show()
-                return@postDelayed
             }
 
             val centerX = arSceneView.width / 2f
@@ -259,7 +262,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
             Toast.makeText(this, "Hosting Cloud Anchor...", Toast.LENGTH_SHORT).show()
 
-            latestSession.hostCloudAnchorAsync(anchor, 1) { cloudAnchorId, state ->
+            latestSession.hostCloudAnchorAsync(anchor, 60) { cloudAnchorId, state ->
                 runOnUiThread {
                     isHosting = false
 
@@ -462,8 +465,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
     // Get the next question in order (index+1), regardless of solved status
     private fun nextQuestionInOrder(): Question? {
-        val idx = GameState.questions.indexOfFirst { it.id == currentQuestion.id }
-        return if (idx >= 0 && idx + 1 < GameState.questions.size) GameState.questions[idx + 1] else null
+        return GameState.nextUnsolvedAfter(currentQuestion.id)
     }
 
     // Called from NEXT/FINISH button — always go in order, no leaderboard check
