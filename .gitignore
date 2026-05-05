@@ -28,3 +28,12 @@ google-services.json
 # Claude Code config
 .claude/
 .idea/
+
+# Python tooling (scripts/)
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
