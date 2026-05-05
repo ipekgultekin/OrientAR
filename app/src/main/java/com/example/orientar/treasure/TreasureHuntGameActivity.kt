@@ -262,7 +262,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
             Toast.makeText(this, "Hosting Cloud Anchor...", Toast.LENGTH_SHORT).show()
 
-            latestSession.hostCloudAnchorAsync(anchor, 60) { cloudAnchorId, state ->
+            latestSession.hostCloudAnchorAsync(anchor, 1) { cloudAnchorId, state ->
                 runOnUiThread {
                     isHosting = false
 
@@ -408,6 +408,10 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                         scaleToUnits = q.modelScale
                     ).apply {
                         rotation = Rotation(q.modelRotationX, q.modelRotationY, q.modelRotationZ)
+
+                        // Makes the model less affected by dark AR shadows
+                        isShadowCaster = false
+                        isShadowReceiver = false
                     }
 
                     anchorNode.addChildNode(modelNode)
