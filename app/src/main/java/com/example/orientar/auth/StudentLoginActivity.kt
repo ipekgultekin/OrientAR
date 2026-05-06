@@ -1,5 +1,5 @@
 package com.example.orientar.auth
-
+import android.util.Log
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -49,6 +49,9 @@ fun StudentLoginScreen() {
     val auth    = remember { FirebaseAuth.getInstance() }
     val db      = remember { FirebaseFirestore.getInstance() }
 
+    val TAG_ENROLL = "GA_ENROLL"
+    val TAG_AUTH = "GA_AUTH"
+
     var currentScreen by remember { mutableStateOf(StudentScreen.INVITATION) }
 
     // ── Invitation state ─────────────────────────────────────────────────────
@@ -89,10 +92,13 @@ fun StudentLoginScreen() {
     fun verifyCode() {
         if (invitationCode.trim().isEmpty()) {
             invitationError = "Please enter your invitation code."
+            Log.d(TAG_ENROLL, "Invitation code verification blocked: empty input.")
             return
         }
 
         invitationLoading = true
+        Log.d(TAG_ENROLL, "Invitation code verification started. code=${invitationCode.trim().uppercase()}")
+
         invitationError = ""
 
         db.collection("invitation_codes")
@@ -104,10 +110,12 @@ fun StudentLoginScreen() {
                 when {
                     !doc.exists() -> {
                         invitationError = "Invalid invitation code. Please check and try again."
+                        Log.d(TAG_ENROLL, "Invitation code invalid. code=${invitationCode.trim().uppercase()}")
                     }
 
                     doc.getBoolean("used") == true -> {
                         invitationError = "This invitation code has already been used."
+                        Log.d(TAG_ENROLL, "Invitation code already used. code=${invitationCode.trim().uppercase()}")
                     }
 
                     else -> {
@@ -117,6 +125,7 @@ fun StudentLoginScreen() {
 
                         if (codeEmail.isBlank()) {
                             invitationError = "This invitation code is not linked to a valid student record."
+                            Log.d(TAG_ENROLL, "Invitation code exists but email is blank. code=${invitationCode.trim().uppercase()}")
                             return@addOnSuccessListener
                         }
 
@@ -127,6 +136,10 @@ fun StudentLoginScreen() {
                         // auto-fill register form with coordinator-provided email
                         regEmail = codeEmail
                         regError = ""
+                        Log.d(
+                            TAG_ENROLL,
+                            "Invitation code verified. email=$codeEmail, groupId=$codeGroupId, studentNumber=$codeStudentNumber"
+                        )
                         currentScreen = StudentScreen.REGISTER
                     }
                 }
@@ -134,6 +147,7 @@ fun StudentLoginScreen() {
             .addOnFailureListener {
                 invitationLoading = false
                 invitationError = "Connection error. Please try again."
+                Log.e(TAG_ENROLL, "Invitation code verification failed", it)
             }
     }
 
@@ -144,12 +158,15 @@ fun StudentLoginScreen() {
             return
         }
         loginLoading = true
+        Log.d(TAG_AUTH, "Student login started. email=${loginEmail.trim()}")
         loginError   = ""
 
         auth.signInWithEmailAndPassword(loginEmail.trim(), loginPassword)
             .addOnSuccessListener {
                 loginLoading = false
+                Log.d(TAG_AUTH, "Student Firebase Authentication success. Routing to MainActivity.")
                 // Clear back stack so the user can't navigate back to the login screen
+                Log.d(TAG_ENROLL, "Enrollment flow completed. Routing to MainActivity.")
                 context.startActivity(
                     Intent(context, MainActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -159,6 +176,7 @@ fun StudentLoginScreen() {
             .addOnFailureListener {
                 loginLoading = false
                 loginError   = "Incorrect email or password. Please try again."
+                Log.e(TAG_AUTH, "Student Firebase Authentication failed. email=${loginEmail.trim()}", it)
             }
     }
 
@@ -169,27 +187,33 @@ fun StudentLoginScreen() {
         when {
             regFirstName.trim().isEmpty() -> {
                 regError = "Please enter your first name."
+                Log.d(TAG_ENROLL, "Registration blocked: missing first name.")
                 return
             }
             regLastName.trim().isEmpty() -> {
                 regError = "Please enter your last name."
+                Log.d(TAG_ENROLL, "Registration blocked: missing last name.")
                 return
             }
             regEmail.trim().isEmpty() -> {
                 regError = "Please enter your email address."
+                Log.d(TAG_ENROLL, "Registration blocked: missing email.")
                 return
             }
             !regEmail.trim().endsWith("@metu.edu.tr") -> {
                 regError = "You must use your METU email address (@metu.edu.tr)."
+                Log.d(TAG_ENROLL, "Registration blocked: invalid email domain. email=${regEmail.trim()}")
                 return
             }
             else -> validatePassword(regPassword)?.let {
                 regError = it
+                Log.d(TAG_ENROLL, "Registration blocked: password validation failed. reason=$it")
                 return
             }
         }
 
         regLoading = true
+        Log.d(TAG_ENROLL, "Student registration started. email=${regEmail.trim().lowercase()}, code=${invitationCode.trim().uppercase()}")
         regError = ""
 
         val normalizedEmail = regEmail.trim().lowercase()
@@ -203,12 +227,14 @@ fun StudentLoginScreen() {
                 if (!inviteDoc.exists()) {
                     regLoading = false
                     regError = "Invalid invitation code."
+                    Log.d(TAG_ENROLL, "Registration blocked: invitation code does not exist.")
                     return@addOnSuccessListener
                 }
 
                 if (inviteDoc.getBoolean("used") == true) {
                     regLoading = false
                     regError = "This invitation code has already been used."
+                    Log.d(TAG_ENROLL, "Registration blocked: invitation code already used.")
                     return@addOnSuccessListener
                 }
 
@@ -219,12 +245,14 @@ fun StudentLoginScreen() {
                 if (inviteEmail.isBlank()) {
                     regLoading = false
                     regError = "This invitation code is not linked to a student account."
+                    Log.d(TAG_ENROLL, "Registration blocked: invitation email is blank.")
                     return@addOnSuccessListener
                 }
 
                 if (inviteEmail != normalizedEmail) {
                     regLoading = false
                     regError = "This email does not match the invitation record."
+                    Log.d(TAG_ENROLL, "Registration blocked: email mismatch. inviteEmail=$inviteEmail, inputEmail=$normalizedEmail")
                     return@addOnSuccessListener
                 }
 
@@ -238,6 +266,7 @@ fun StudentLoginScreen() {
                         if (userQuery.isEmpty) {
                             regLoading = false
                             regError = "You are not registered by the coordinator."
+                            Log.d(TAG_ENROLL, "Registration blocked: coordinator-created student record not found. email=$normalizedEmail")
                             return@addOnSuccessListener
                         }
 
@@ -255,6 +284,10 @@ fun StudentLoginScreen() {
                         ) {
                             regLoading = false
                             regError = "Invitation information does not match your coordinator record."
+                            Log.d(
+                                TAG_ENROLL,
+                                "Registration blocked: student number mismatch. inviteStudentNumber=$inviteStudentNumber, existingStudentNumber=$existingStudentNumber"
+                            )
                             return@addOnSuccessListener
                         }
 
@@ -262,6 +295,7 @@ fun StudentLoginScreen() {
                         auth.createUserWithEmailAndPassword(normalizedEmail, regPassword)
                             .addOnSuccessListener { result ->
                                 val uid = result.user?.uid
+                                Log.d(TAG_ENROLL, "Firebase account created for student. uid=$uid")
                                 if (uid.isNullOrBlank()) {
                                     regLoading = false
                                     regError = "Registration failed. Please try again."
@@ -278,6 +312,12 @@ fun StudentLoginScreen() {
                                             "usedAt" to FieldValue.serverTimestamp()
                                         )
                                     )
+                                    .addOnSuccessListener {
+                                        Log.d(TAG_ENROLL, "Invitation code marked as used successfully. code=$normalizedCode, uid=$uid")
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Log.e(TAG_ENROLL, "Failed to mark invitation code as used. code=$normalizedCode", e)
+                                    }
 
                                 // Update existing Firestore student record created by panel
                                 val updates = hashMapOf<String, Any>(
@@ -298,12 +338,23 @@ fun StudentLoginScreen() {
                                     .update(updates)
                                     .addOnSuccessListener {
                                         regLoading = false
+                                        Log.d(TAG_ENROLL, "Firestore student document updated successfully. docId=$existingUserDocId")
 
                                         // Keep group membership consistent with panel-side user doc id
                                         if (inviteGroupId.isNotEmpty()) {
+                                            Log.d(TAG_ENROLL, "Adding student to orientation group. groupId=$inviteGroupId, userDocId=$existingUserDocId")
+
                                             db.collection("orientation_groups")
                                                 .document(inviteGroupId)
                                                 .update("members", FieldValue.arrayUnion(existingUserDocId))
+                                                .addOnSuccessListener {
+                                                    Log.d(TAG_ENROLL, "Student added to orientation group successfully. groupId=$inviteGroupId")
+                                                }
+                                                .addOnFailureListener { e ->
+                                                    Log.e(TAG_ENROLL, "Failed to add student to orientation group. groupId=$inviteGroupId", e)
+                                                }
+                                        } else {
+                                            Log.d(TAG_ENROLL, "No orientation group found for invitation. Skipping group membership update.")
                                         }
 
                                         context.startActivity(
