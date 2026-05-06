@@ -1,5 +1,5 @@
 package com.example.orientar.auth
-
+import android.util.Log
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -110,6 +110,7 @@ fun LeaderLoginForm(
     db: FirebaseFirestore
 ) {
     val context = LocalContext.current
+    val TAG_AUTH = "GA_AUTH"
 
     var email           by remember { mutableStateOf("") }
     var password        by remember { mutableStateOf("") }
@@ -123,6 +124,7 @@ fun LeaderLoginForm(
             return
         }
         isLoading = true
+        Log.d(TAG_AUTH, "Leader login started. email=${email.trim()}")
         errorMessage = ""
 
         auth.signInWithEmailAndPassword(email.trim(), password)
@@ -131,7 +133,8 @@ fun LeaderLoginForm(
                     isLoading = false
                     return@addOnSuccessListener
                 }
-
+                Log.d(TAG_AUTH, "Leader Firebase Authentication success. uid=$uid")
+                Log.d(TAG_AUTH, "Leader role verification started in Firestore.")
                 db.collection("users")
                     .whereEqualTo("authUid", uid)
                     .whereEqualTo("role", "leader")
@@ -143,26 +146,31 @@ fun LeaderLoginForm(
                             val doc   = query.documents.first()
                             val docId = doc.id
                             val mustChange = doc.getBoolean("mustChangePassword") ?: false
-
+                            Log.d(TAG_AUTH, "Leader role verified. docId=$docId, mustChangePassword=$mustChange")
                             if (mustChange) {
                                 onLoginSuccess(uid, docId, email.trim(), password)
+                                Log.d(TAG_AUTH, "Leader must change password. Routing to ChangePasswordScreen.")
                             } else {
                                 onDirectLogin(docId)
+                                Log.d(TAG_AUTH, "Leader direct login allowed. Routing to MainActivity.")
                             }
                         } else {
                             auth.signOut()
                             errorMessage = "This account is not registered as an Orientation Leader."
+                            Log.d(TAG_AUTH, "Leader role verification failed. Auth account is not leader. Signing out.")
                         }
                     }
                     .addOnFailureListener {
                         isLoading = false
                         errorMessage = "Failed to verify account. Please try again."
+                        Log.e(TAG_AUTH, "Leader Firestore role verification failed", it)
                         auth.signOut()
                     }
             }
             .addOnFailureListener {
                 isLoading = false
                 errorMessage = "Incorrect email or password. Please try again."
+                Log.e(TAG_AUTH, "Leader Firebase Authentication failed. email=${email.trim()}", it)
             }
     }
 
@@ -274,6 +282,7 @@ fun ChangePasswordScreen(
     var confirmVisible  by remember { mutableStateOf(false) }
     var errorMessage    by remember { mutableStateOf("") }
     var isLoading       by remember { mutableStateOf(false) }
+    val TAG_PROFILE = "GA_PROFILE"
 
     fun changePassword() {
         errorMessage = ""
@@ -282,35 +291,46 @@ fun ChangePasswordScreen(
         if (newPassword == currentPassword) { errorMessage = "New password must be different from the temporary one."; return }
 
         isLoading = true
-        val user = auth.currentUser ?: run { isLoading = false; return }
+        Log.d(TAG_PROFILE, "Leader password change started. leaderDocId=$leaderDocId")
+        val user = auth.currentUser ?: run {
+            isLoading = false
+            Log.e(TAG_PROFILE, "Leader password change failed: currentUser is null.")
+            return
+        }
 
         // Re-authenticate then update password
         val credential = EmailAuthProvider.getCredential(leaderEmail, currentPassword)
         user.reauthenticate(credential)
             .addOnSuccessListener {
+                Log.d(TAG_PROFILE, "Leader reauthentication success.")
                 user.updatePassword(newPassword)
                     .addOnSuccessListener {
+                        Log.d(TAG_PROFILE, "Leader Firebase password update success.")
                         // Mark mustChangePassword = false in Firestore
                         db.collection("users").document(leaderDocId)
                             .update("mustChangePassword", false)
                             .addOnSuccessListener {
                                 isLoading = false
+                                Log.d(TAG_PROFILE, "Leader mustChangePassword updated to false. Routing to MainActivity.")
                                 onSuccess()
                             }
                             .addOnFailureListener {
                                 // Even if Firestore update fails, password is changed — proceed
                                 isLoading = false
+                                Log.e(TAG_PROFILE, "Leader password change step failed", it)
                                 onSuccess()
                             }
                     }
                     .addOnFailureListener {
                         isLoading = false
                         errorMessage = "Failed to update password. Please try again."
+                        Log.e(TAG_PROFILE, "Leader password change step failed", it)
                     }
             }
             .addOnFailureListener {
                 isLoading = false
                 errorMessage = "Authentication failed. Please restart and try again."
+                Log.e(TAG_PROFILE, "Leader password change step failed", it)
             }
     }
 

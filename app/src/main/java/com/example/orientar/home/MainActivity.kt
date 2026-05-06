@@ -1,5 +1,5 @@
 package com.example.orientar.home
-
+import android.util.Log
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -50,6 +50,8 @@ class MainActivity : ComponentActivity() {
         FirebaseApp.initializeApp(this)
         val userRole    = intent.getStringExtra("USER_ROLE") ?: "student"
         val leaderDocId = intent.getStringExtra("LEADER_DOC_ID") ?: ""
+        Log.d("GA_ROUTING", "MainActivity opened. userRole=$userRole, leaderDocId=$leaderDocId, selectedTab=${currentTab.intValue}")
+
         currentTab.intValue = intent.getIntExtra("OPEN_TAB", 0)
         setContent {
             MaterialTheme {

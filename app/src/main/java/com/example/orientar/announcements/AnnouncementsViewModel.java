@@ -1,5 +1,5 @@
 package com.example.orientar.announcements;
-
+import android.util.Log;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class AnnouncementsViewModel extends ViewModel {
+    private static final String TAG_ANN = "GA_ANN";
 
     public static class UiState {
         public boolean loading;
@@ -49,6 +50,7 @@ public class AnnouncementsViewModel extends ViewModel {
     }
 
     public void refresh(String groupId) {
+        Log.d(TAG_ANN, "Announcements refresh started. groupId=" + groupId);
         UiState cur = state.getValue();
 
         state.setValue(new UiState(
@@ -68,6 +70,9 @@ public class AnnouncementsViewModel extends ViewModel {
                         repo.fetchThisWeekOnCampus(new AnnouncementsRepository.Callback() {
                             @Override
                             public void onSuccess(ThisWeekResponse thisWeekData) {
+                                Log.d(TAG_ANN, "Announcements refresh completed. formalCount=" + formalData.size()
+                                        + ", groupCount=" + groupData.size()
+                                        + ", thisWeekCount=" + (thisWeekData.events == null ? 0 : thisWeekData.events.size()));
                                 state.postValue(new UiState(
                                         false,
                                         null,
