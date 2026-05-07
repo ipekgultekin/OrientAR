@@ -37,3 +37,7 @@ __pycache__/
 venv/
 .pytest_cache/
 .mypy_cache/
+
+# SCRUM-86 field-walk logs (do not commit captured .log files)
+scripts/logs/**/*.log
+scripts/logs/**/*.zip
