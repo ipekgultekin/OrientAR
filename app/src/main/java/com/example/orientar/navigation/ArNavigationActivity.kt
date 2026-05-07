@@ -115,6 +115,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var tvArrivalTime: TextView
     private lateinit var tvArrivalDistance: TextView
     private lateinit var btnArrivalClose: Button
+    private lateinit var btnArrivalShareLog: Button
 
     // ========================================================================================
     // CORE SYSTEMS
@@ -836,6 +837,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         tvArrivalTime = findViewById(R.id.tvArrivalTime)
         tvArrivalDistance = findViewById(R.id.tvArrivalDistance)
         btnArrivalClose = findViewById(R.id.btnArrivalClose)
+        btnArrivalShareLog = findViewById(R.id.btnArrivalShareLog)
 
         // Setup navigation button listeners
         setupNavigationUI()
@@ -901,6 +903,11 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         btnArrivalClose.setOnClickListener {
             performHapticFeedback(it)
             finish()
+        }
+        // Arrival Share Log button
+        btnArrivalShareLog.setOnClickListener {
+            performHapticFeedback(it)
+            FileLogger.shareLogFile(this)
         }
     }
 
