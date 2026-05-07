@@ -1,5 +1,5 @@
 package com.example.orientar.treasure
-
+import android.widget.Toast
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -93,6 +93,28 @@ fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
     val hasPartial   = total > 0 && solved > 0 && solved < total && !isOnLeaderboard
     val totalSeconds = leaderboardTimeMs / 1000.0
     var showReplayConfirm by remember { mutableStateOf(false) }
+
+    //I added this one since the testing process
+    fun resetTreasureHuntForTesting() {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+
+        GameState.resetProgress(context)
+        solvedCount = 0
+        leaderboardTimeMs = 0L
+        isOnLeaderboard = false
+
+        if (uid != null) {
+            FirebaseFirestore.getInstance()
+                .collection("leaderboard")
+                .document(uid)
+                .delete()
+                .addOnCompleteListener {
+                    Toast.makeText(context, "Treasure Hunt progress reset.", Toast.LENGTH_SHORT).show()
+                }
+        } else {
+            Toast.makeText(context, "Treasure Hunt progress reset.", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Scaffold(
         bottomBar = { SharedBottomBar(userRole = "student") },
@@ -252,6 +274,19 @@ fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
                     Icon(Icons.Outlined.EmojiEvents, null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Leaderboard", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+
+                //Reset button for testing process
+                OutlinedButton(
+                    onClick = { resetTreasureHuntForTesting() },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color.Gray),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Gray)
+                ) {
+                    Icon(Icons.Outlined.Replay, null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Restart Game (Test)", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

@@ -10,6 +10,7 @@ data class Question(
     val title: String,
     val text: String,
     val cloudAnchorId: String = "",
+    val cloudAnchorIds: List<String> = emptyList(),
     val modelFilePath: String,
     val modelScale: Float,
     val modelRotationX: Float,
@@ -107,12 +108,14 @@ object GameState {
                     }
 
                     val keywords = doc.get("targetKeywords") as? List<String> ?: emptyList()
+                    val anchorIds = doc.get("cloudAnchorIds") as? List<String> ?: emptyList()
 
                     val question = Question(
                         id = id,
                         title = doc.getString("title") ?: "",
                         text = doc.getString("text") ?: "",
                         cloudAnchorId = doc.getString("cloudAnchorId") ?: "",
+                        cloudAnchorIds = anchorIds,
                         modelFilePath = doc.getString("modelFilePath") ?: "",
                         modelScale = doc.getDouble("modelScale")?.toFloat() ?: 1f,
                         modelRotationX = doc.getDouble("modelRotationX")?.toFloat() ?: 0f,
