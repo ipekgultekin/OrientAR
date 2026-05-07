@@ -72,6 +72,20 @@ ROUTE_LAUNCH = re.compile(
     r"(?:\s*\(phantom,\s*(\w+)\))?"
 )
 
+# D/FPS: "frames=58 dt=1024ms fps=56.6"
+# Emitted every ~1 second by Patch C's instrumentation during active navigation.
+FPS_DATA = re.compile(
+    r"D/FPS\] frames=(\d+) dt=(\d+)ms fps=([\d.]+)"
+)
+
+# D/HEAP: "used=45MB total=80MB max=192MB usedPct=23.4%"
+# Emitted every ~5 seconds by Patch C's instrumentation during active navigation.
+# The "used=" prefix distinguishes data lines from D/HEAP lifecycle markers
+# ("Sampler started", "Sampler stopped"), which this regex will not match.
+HEAP_DATA = re.compile(
+    r"D/HEAP\] used=(\d+)MB total=(\d+)MB max=(\d+)MB usedPct=([\d.]+)%"
+)
+
 # Session header (from file head)
 SESSION_START = re.compile(r"Session Started:\s*([\d\-: ]+)")
 DEVICE = re.compile(r"Device:\s*(\S.*)")
@@ -125,6 +139,12 @@ class SessionMetrics:
         self.route_node_count: int = 0
         self.route_coord_count: int = 0
         self.route_length_m: int = 0
+
+        # Performance — frame rate (Patch D / D5 deviation)
+        self.fps_samples: list[float] = []  # raw fps values for distribution stats
+
+        # Performance — heap stability (Patch D / D5 deviation)
+        self.heap_samples: list[tuple[float, int]] = []  # (relative_sec, used_mb) for trend analysis
 
         # Counters
         self.line_count = 0
@@ -183,6 +203,28 @@ class SessionMetrics:
             "route_node_count": self.route_node_count,
             "route_coord_count": self.route_coord_count,
             "route_length_m": self.route_length_m,
+            # Performance — frame rate
+            "fps_sample_count": len(self.fps_samples),
+            "fps_median": round(statistics.median(self.fps_samples), 1) if self.fps_samples else 0.0,
+            "fps_min": round(min(self.fps_samples), 1) if self.fps_samples else 0.0,
+            "fps_pct_above_25": (
+                round(100 * sum(1 for f in self.fps_samples if f >= 25.0) / len(self.fps_samples), 1)
+                if self.fps_samples else 0.0
+            ),
+            # Performance — heap stability
+            "heap_sample_count": len(self.heap_samples),
+            "heap_used_min_mb": min(s[1] for s in self.heap_samples) if self.heap_samples else 0,
+            "heap_used_max_mb": max(s[1] for s in self.heap_samples) if self.heap_samples else 0,
+            "heap_used_first_mb": self.heap_samples[0][1] if self.heap_samples else 0,
+            "heap_used_last_mb": self.heap_samples[-1][1] if self.heap_samples else 0,
+            "heap_variation_pct": (
+                round(
+                    100 * (max(s[1] for s in self.heap_samples) - min(s[1] for s in self.heap_samples))
+                    / (sum(s[1] for s in self.heap_samples) / len(self.heap_samples)),
+                    1
+                )
+                if self.heap_samples and len(self.heap_samples) >= 2 else 0.0
+            ),
         }
         return d
 
@@ -303,6 +345,26 @@ def parse_log(path: Path) -> SessionMetrics:
                     m.arrival_destination = ar.group(1).strip()
                 continue
 
+            # D/FPS — frame rate sample
+            fp = FPS_DATA.search(line)
+            if fp:
+                try:
+                    fps_val = float(fp.group(3))
+                    m.fps_samples.append(fps_val)
+                except ValueError:
+                    pass
+                continue
+
+            # D/HEAP — heap sample (data lines only; lifecycle markers don't match)
+            hp = HEAP_DATA.search(line)
+            if hp:
+                try:
+                    used_mb = int(hp.group(1))
+                    m.heap_samples.append((last_relative_sec, used_mb))
+                except ValueError:
+                    pass
+                continue
+
         m.duration_sec = last_relative_sec
 
     return m
@@ -409,6 +471,38 @@ def write_summary(sessions: list[SessionMetrics], out_path: Path) -> None:
     md.append(f"- **Median walk-to-arrival time:** {median_arrival}s")
     md.append("")
     md.append("ARRIVED supplements PROGRESS-based completion: a session can have furthest_index < total but still arrive (final PROGRESS sample may not capture the last index update before arrival fires).")
+    md.append("")
+
+    md.append("## Performance — frame rate (D/FPS)")
+    md.append("")
+    fps_rows = [r for r in rows if r["fps_sample_count"] > 0]
+    md.append(f"- **Sessions with FPS data:** {len(fps_rows)} of {total}")
+    if fps_rows:
+        all_fps_medians = [r["fps_median"] for r in fps_rows]
+        global_median_fps = round(statistics.median(all_fps_medians), 1)
+        sessions_meeting_target = sum(1 for r in fps_rows if r["fps_pct_above_25"] >= 95.0)
+        md.append(f"- **Median FPS across sessions:** {global_median_fps}")
+        md.append(f"- **Sessions where ≥95% of samples are ≥25fps:** {sessions_meeting_target} of {len(fps_rows)}")
+    md.append("")
+    md.append("Per Test Plan Section 5.4.4 / Table 22: frame rate ≥25fps for ≥95% of session.")
+    md.append("")
+
+    md.append("## Performance — heap stability (D/HEAP)")
+    md.append("")
+    heap_rows = [r for r in rows if r["heap_sample_count"] > 0]
+    md.append(f"- **Sessions with heap data:** {len(heap_rows)} of {total}")
+    if heap_rows:
+        median_variation = round(statistics.median([r["heap_variation_pct"] for r in heap_rows]), 1)
+        stable_count = sum(1 for r in heap_rows if r["heap_variation_pct"] <= 10.0)
+        no_upward_trend = sum(
+            1 for r in heap_rows
+            if r["heap_used_first_mb"] == 0 or r["heap_used_last_mb"] <= r["heap_used_first_mb"] * 1.10
+        )
+        md.append(f"- **Median heap variation (max−min)/mean:** {median_variation}%")
+        md.append(f"- **Sessions with stable heap (≤10% variation):** {stable_count} of {len(heap_rows)}")
+        md.append(f"- **Sessions with no sustained upward trend (last ≤ first×1.10):** {no_upward_trend} of {len(heap_rows)}")
+    md.append("")
+    md.append("Per Test Plan Section 5.4.4 / Table 22: heap stable (±10%) with no sustained upward trend over 5-minute sessions.")
     md.append("")
 
     md.append("## Per-session table")
