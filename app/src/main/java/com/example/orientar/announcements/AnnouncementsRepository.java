@@ -1,5 +1,5 @@
 package com.example.orientar.announcements;
-
+import android.util.Log;
 import com.example.orientar.announcements.models.FormalAnnouncement;
 import com.example.orientar.announcements.models.ThisWeekEvent;
 import com.example.orientar.announcements.models.ThisWeekResponse;
@@ -7,12 +7,12 @@ import com.example.orientar.announcements.models.GroupAnnouncement;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class AnnouncementsRepository {
+    private static final String TAG_ANN = "GA_ANN";
 
     public interface Callback {
         void onSuccess(ThisWeekResponse data);
@@ -27,6 +27,7 @@ public class AnnouncementsRepository {
         void onError(String message);
     }
     public void fetchFormalAnnouncements(FormalCallback cb) {
+        Log.d(TAG_ANN, "Formal announcements loading started.");
         FirebaseFirestore.getInstance()
                 .collection("formal_announcements")
                 .whereEqualTo("isActive", true)
@@ -45,7 +46,7 @@ public class AnnouncementsRepository {
                         item.createdAt = doc.getTimestamp("createdAt");
                         items.add(item);
                     }
-
+                    Log.d(TAG_ANN, "Formal announcements loaded. count=" + items.size());
                     cb.onSuccess(items);
                 })
                 .addOnFailureListener(e -> cb.onError(
@@ -53,6 +54,7 @@ public class AnnouncementsRepository {
                 ));
     }
     public void fetchThisWeekOnCampus(Callback cb) {
+        Log.d(TAG_ANN, "This Week on Campus loading started.");
         FirebaseFirestore.getInstance()
                 .collection("campus_events_weeks")
                 .document("this-week-on-campus")
@@ -60,9 +62,13 @@ public class AnnouncementsRepository {
                 .addOnSuccessListener(doc -> {
                     if (!doc.exists()) {
                         cb.onError("No announcements found.");
+                        Log.d(TAG_ANN, "This Week on Campus document not found.");
                         return;
                     }
-                    cb.onSuccess(parse(doc));
+                    ThisWeekResponse data = parse(doc);
+                    Log.d(TAG_ANN, "This Week on Campus loaded. eventCount=" +
+                            (data.events == null ? 0 : data.events.size()));
+                    cb.onSuccess(data);
                 })
                 .addOnFailureListener(e -> cb.onError(
                         e.getMessage() != null ? e.getMessage() : "Unknown error"
@@ -102,7 +108,10 @@ public class AnnouncementsRepository {
         return res;
     }
     public void fetchGroupAnnouncements(String groupId, GroupCallback cb) {
+        Log.d(TAG_ANN, "Group announcements loading started. groupId=" + groupId);
+
         if (groupId == null || groupId.trim().isEmpty()) {
+            Log.d(TAG_ANN, "Group announcements skipped because groupId is empty.");
             cb.onSuccess(new ArrayList<>());
             return;
         }
@@ -127,7 +136,7 @@ public class AnnouncementsRepository {
                         item.createdAt = doc.getTimestamp("createdAt");
                         items.add(item);
                     }
-
+                    Log.d(TAG_ANN, "Group announcements loaded. groupId=" + groupId + ", count=" + items.size());
                     cb.onSuccess(items);
                 })
                 .addOnFailureListener(e -> cb.onError(
