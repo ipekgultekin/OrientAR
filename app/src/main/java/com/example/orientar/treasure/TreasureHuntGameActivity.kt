@@ -1,7 +1,7 @@
 package com.example.orientar.treasure
 
 import com.example.orientar.R
-
+import com.google.firebase.firestore.FieldValue
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -149,6 +149,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
             config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
             config.depthMode = Config.DepthMode.DISABLED
+            config.lightEstimationMode = Config.LightEstimationMode.DISABLED
             session.configure(config)
         }
 
@@ -161,30 +162,26 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             val now = SystemClock.elapsedRealtime()
 
             // 1. 3D CLOUD ANCHOR
-            if (currentQuestion.cloudAnchorId.isNotEmpty() && !isResolving) {
+            val anchorIdsToTry = buildList {
+                addAll(currentQuestion.cloudAnchorIds)
+
+                if (currentQuestion.cloudAnchorId.isNotEmpty()) {
+                    add(currentQuestion.cloudAnchorId)
+                }
+            }.distinct()
+
+            if (anchorIdsToTry.isNotEmpty() && !isResolving) {
+
                 if (now - lastCloudCheckTime >= cloudCheckIntervalMs) {
+
                     lastCloudCheckTime = now
                     isResolving = true
-                    session.resolveCloudAnchorAsync(currentQuestion.cloudAnchorId) { anchor, state ->
-                        Log.d(
-                            "TH_RESOLVE",
-                            "Q=${currentQuestion.id}, anchorId=${currentQuestion.cloudAnchorId}, state=$state"
-                        )
 
-                        if (state == Anchor.CloudAnchorState.SUCCESS) {
-                            runOnUiThread {
-                                if (!modelPlaced) {
-                                    Log.d(TAG_TRIGGER, "Triggered by Cloud Anchor for Q=${currentQuestion.id}")
-                                    placeModelOnAnchor(anchor, currentQuestion)
-                                } else {
-                                    Log.d(TAG_TRIGGER, "Cloud Anchor resolved but model already placed for Q=${currentQuestion.id}")
-                                }
-                            }
-                        } else if (state.isError) {
-                            Log.e(TAG_RESOLVE, "Cloud Anchor resolving failed for Q=${currentQuestion.id}, state=$state")
-                        }
-                        isResolving = false
-                    }
+                    resolveAnchorListSequentially(
+                        session,
+                        anchorIdsToTry,
+                        0
+                    )
                 }
             }
 
@@ -262,7 +259,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
             Toast.makeText(this, "Hosting Cloud Anchor...", Toast.LENGTH_SHORT).show()
 
-            latestSession.hostCloudAnchorAsync(anchor, 1) { cloudAnchorId, state ->
+            latestSession.hostCloudAnchorAsync(anchor, 60) { cloudAnchorId, state ->
                 runOnUiThread {
                     isHosting = false
 
@@ -287,9 +284,17 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         FirebaseFirestore.getInstance()
             .collection("treasure_questions")
             .document(docName)
-            .set(mapOf("cloudAnchorId" to anchorId), SetOptions.merge())
-            .addOnSuccessListener {
-                currentQuestion = currentQuestion.copy(cloudAnchorId = anchorId)
+            .set(
+                mapOf(
+                    "cloudAnchorId" to anchorId,
+                    "cloudAnchorIds" to FieldValue.arrayUnion(anchorId)
+                ),
+                SetOptions.merge()
+            )            .addOnSuccessListener {
+                currentQuestion = currentQuestion.copy(
+                    cloudAnchorId = anchorId,
+                    cloudAnchorIds = (currentQuestion.cloudAnchorIds + anchorId).distinct()
+                )
                 Log.d(TAG_HOST, "Cloud Anchor ID saved successfully. doc=$docName")
                 Toast.makeText(this, "Saved! ID: $anchorId", Toast.LENGTH_LONG).show()
             }
@@ -297,6 +302,70 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                 Log.e(TAG_HOST, "Cloud Anchor ID save failed. doc=$docName", e)
                 Toast.makeText(this, "Firebase error: ${e.message}", Toast.LENGTH_LONG).show()
             }
+    }
+
+
+
+    private fun resolveAnchorListSequentially(
+        session: Session,
+        anchorIds: List<String>,
+        index: Int
+    ) {
+
+        if (modelPlaced) {
+            isResolving = false
+            return
+        }
+        if (index >= anchorIds.size) {
+            Log.e(
+                TAG_RESOLVE,
+                "All Cloud Anchor IDs failed for Q=${currentQuestion.id}"
+            )
+            isResolving = false
+            return
+        }
+
+        val anchorId = anchorIds[index]
+
+        Log.d(
+            TAG_RESOLVE,
+            "Trying anchor ${index + 1}/${anchorIds.size} : $anchorId"
+        )
+
+        session.resolveCloudAnchorAsync(anchorId) { anchor, state ->
+
+            Log.d(
+                TAG_RESOLVE,
+                "Q=${currentQuestion.id}, anchorId=$anchorId, state=$state"
+            )
+            if (state == Anchor.CloudAnchorState.SUCCESS) {
+                runOnUiThread {
+                    if (!modelPlaced) {
+                        Log.d(
+                            TAG_TRIGGER,
+                            "Triggered by Cloud Anchor for Q=${currentQuestion.id}"
+                        )
+                        placeModelOnAnchor(anchor, currentQuestion)
+                    }
+                }
+                isResolving = false
+
+            } else {
+                if (state.isError) {
+                    Log.e(
+                        TAG_RESOLVE,
+                        "Anchor failed. Trying next..."
+                    )
+                }
+                runOnUiThread {
+                    resolveAnchorListSequentially(
+                        session,
+                        anchorIds,
+                        index + 1
+                    )
+                }
+            }
+        }
     }
 
     private fun runOcrTask(session: Session, frame: Frame) {
