@@ -49,10 +49,12 @@ ALIGN_MOTION_UPDATE = re.compile(
     r"D/ALIGN\].*?Motion update:\s*(-?\d+)°\s*(?:→|->)\s*(-?\d+)°"
 )
 
-# D/ALIGN dual-delta convergence: "🎯 DUAL-DELTA INITIALIZED: offset=-29° (...)"
-# One-shot event — first match marks heading convergence point.
+# D/ALIGN convergence event — matches BOTH variants:
+#   "🎯 DUAL-DELTA INITIALIZED: offset=-29° (...)" — full dual-delta path
+#   "🎯 INITIALIZED: compass=N°, arYaw=N°, offset=-149°" — compass-only fast path
+# Both represent first-time heading convergence per Test Plan Table 21.
 ALIGN_DUAL_DELTA_INIT = re.compile(
-    r"D/ALIGN\].*?DUAL-DELTA INITIALIZED:\s*offset=(-?\d+)°"
+    r"D/ALIGN\].*?(?:DUAL-DELTA )?INITIALIZED:.*?offset=(-?\d+)°"
 )
 
 # D/AR_NAVIGATION: "🎉 ARRIVED at CCC Building"
