@@ -75,7 +75,7 @@ ROUTE_LAUNCH = re.compile(
 # D/FPS: "frames=58 dt=1024ms fps=56.6"
 # Emitted every ~1 second by Patch C's instrumentation during active navigation.
 FPS_DATA = re.compile(
-    r"D/FPS\] frames=(\d+) dt=(\d+)ms fps=([\d.]+)"
+    r"D/FPS\] frames=(\d+) dt=(\d+)ms fps=([\d,.]+)"
 )
 
 # D/HEAP: "used=45MB total=80MB max=192MB usedPct=23.4%"
@@ -83,7 +83,7 @@ FPS_DATA = re.compile(
 # The "used=" prefix distinguishes data lines from D/HEAP lifecycle markers
 # ("Sampler started", "Sampler stopped"), which this regex will not match.
 HEAP_DATA = re.compile(
-    r"D/HEAP\] used=(\d+)MB total=(\d+)MB max=(\d+)MB usedPct=([\d.]+)%"
+    r"D/HEAP\] used=(\d+)MB total=(\d+)MB max=(\d+)MB usedPct=([\d,.]+)%"
 )
 
 # Session header (from file head)
@@ -349,7 +349,7 @@ def parse_log(path: Path) -> SessionMetrics:
             fp = FPS_DATA.search(line)
             if fp:
                 try:
-                    fps_val = float(fp.group(3))
+                    fps_val = euro_float(fp.group(3))
                     m.fps_samples.append(fps_val)
                 except ValueError:
                     pass
