@@ -115,6 +115,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var tvArrivalTime: TextView
     private lateinit var tvArrivalDistance: TextView
     private lateinit var btnArrivalClose: Button
+    private lateinit var btnArrivalShareLog: Button
 
     // ========================================================================================
     // CORE SYSTEMS
@@ -240,6 +241,26 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private var lastFusionLogTime = 0L
     private var frameCount = 0
     private var lastFpsLogTime = 0L
+
+    // HEAP sampler instrumentation (Patch C / D5 deviation)
+    private val heapSamplerHandler = Handler(Looper.getMainLooper())
+    private var heapSamplerActive = false
+    private val heapSamplerRunnable = object : Runnable {
+        override fun run() {
+            if (sphereRefresher != null && heapSamplerActive) {
+                val rt = Runtime.getRuntime()
+                val usedBytes = rt.totalMemory() - rt.freeMemory()
+                val totalBytes = rt.totalMemory()
+                val maxBytes = rt.maxMemory()
+                val usedMB = usedBytes / (1024 * 1024)
+                val totalMB = totalBytes / (1024 * 1024)
+                val maxMB = maxBytes / (1024 * 1024)
+                val usedPct = if (maxBytes > 0) (usedBytes * 100f) / maxBytes else 0f
+                FileLogger.d("HEAP", "used=${usedMB}MB total=${totalMB}MB max=${maxMB}MB usedPct=${String.format("%.1f", usedPct)}%")
+                heapSamplerHandler.postDelayed(this, 5000L)
+            }
+        }
+    }
 
     /** Extract yaw from ARCore pose quaternion (tilt-independent), with xzMagnitude filter */
     private fun getArYaw(): Double {
@@ -387,6 +408,13 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 }
             } catch (e: Exception) {
                 android.util.Log.e("AR_LIFECYCLE", "CoordinateAligner reset failed", e)
+            }
+
+            // 7. Stop heap sampler (Patch C / D5 deviation)
+            try {
+                stopHeapSampler()
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "stopHeapSampler failed", e)
             }
 
             // 8. Shutdown FileLogger LAST (no FileLogger calls after this)
@@ -552,6 +580,22 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         //     frameCount = 0
         //     lastFpsLogTime = fpsNow
         // }
+
+        // FPS instrumentation (Patch C / D5 deviation; resurrects the disabled block above with 1s window and new format)
+        // Gated by sphereRefresher != null so it only fires during active navigation, not during calibration/buffer/heading-init.
+        if (sphereRefresher != null) {
+            frameCount++
+            val fpsNow = System.currentTimeMillis()
+            if (lastFpsLogTime == 0L) {
+                lastFpsLogTime = fpsNow
+            } else if (fpsNow - lastFpsLogTime > 1000) {
+                val dt = fpsNow - lastFpsLogTime
+                val fps = if (dt > 0) frameCount * 1000f / dt else 0f
+                FileLogger.d("FPS", "frames=$frameCount dt=${dt}ms fps=${String.format("%.1f", fps)}")
+                frameCount = 0
+                lastFpsLogTime = fpsNow
+            }
+        }
 
         when (camera.trackingState) {
             TrackingState.TRACKING -> {
@@ -836,6 +880,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         tvArrivalTime = findViewById(R.id.tvArrivalTime)
         tvArrivalDistance = findViewById(R.id.tvArrivalDistance)
         btnArrivalClose = findViewById(R.id.btnArrivalClose)
+        btnArrivalShareLog = findViewById(R.id.btnArrivalShareLog)
 
         // Setup navigation button listeners
         setupNavigationUI()
@@ -901,6 +946,11 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         btnArrivalClose.setOnClickListener {
             performHapticFeedback(it)
             finish()
+        }
+        // Arrival Share Log button
+        btnArrivalShareLog.setOnClickListener {
+            performHapticFeedback(it)
+            FileLogger.shareLogFile(this)
         }
     }
 
@@ -1528,6 +1578,20 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         updateLiveUI(location)
     }
 
+    private fun startHeapSampler() {
+        if (heapSamplerActive) return
+        heapSamplerActive = true
+        heapSamplerHandler.post(heapSamplerRunnable)
+        FileLogger.d("HEAP", "Sampler started (5s interval)")
+    }
+
+    private fun stopHeapSampler() {
+        if (!heapSamplerActive) return
+        heapSamplerActive = false
+        heapSamplerHandler.removeCallbacks(heapSamplerRunnable)
+        FileLogger.d("HEAP", "Sampler stopped")
+    }
+
     /**
      * Create and initialize SphereRefresher with route data and materials.
      * Called after compass init succeeds (either immediate or deferred).
@@ -1557,6 +1621,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             ).also { it.initialize() }
 
             FileLogger.d("REFRESH", "SphereRefresher created: ${routeCoords.size} route points")
+            startHeapSampler()
         } catch (e: Exception) {
             FileLogger.e("REFRESH", "Failed to create SphereRefresher: ${e.message}")
         }

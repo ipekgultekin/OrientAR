@@ -280,7 +280,7 @@ class SphereRefresher(
 
             val refreshEnd = System.currentTimeMillis()
             val gap = if (lastSuccessfulRefreshTime > 0) refreshEnd - lastSuccessfulRefreshTime else 0
-            if (gap > 2000) FileLogger.d("REFRESH_GAP", "Gap since last refresh: ${gap}ms")
+            if (gap > 0) FileLogger.d("REFRESH_GAP", "Gap since last refresh: ${gap}ms")
             lastSuccessfulRefreshTime = refreshEnd
 
             FileLogger.d("SPHERE_SWAP", "Swapped: ${previousSpheres.size} old → ${newSpheres.size} new")

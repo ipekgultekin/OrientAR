@@ -43,10 +43,47 @@ PROGRESS = re.compile(
     r"D/PROGRESS\] Index:\s*raw=(\d+),\s*clamped=(\d+),\s*min=(\d+),\s*furthest=(\d+),\s*total=(\d+)"
 )
 
-# Heading fusion samples — looking for any update to fused heading value
-# Pattern is variable across versions; we focus on yaw offset reports
-COORDINATE_ALIGNER_OFFSET = re.compile(
-    r"D/CoordinateAligner\].*?yawOffset[Dd]eg=([\-\d.]+)"
+# D/ALIGN motion update: "🎯 Motion update: -29° → -32° (correction: -3,1°, speed: 0,9m/s)"
+# Group 2 is the post-correction offset (the live yaw-offset state).
+ALIGN_MOTION_UPDATE = re.compile(
+    r"D/ALIGN\].*?Motion update:\s*(-?\d+)°\s*(?:→|->)\s*(-?\d+)°"
+)
+
+# D/ALIGN convergence event — matches BOTH variants:
+#   "🎯 DUAL-DELTA INITIALIZED: offset=-29° (...)" — full dual-delta path
+#   "🎯 INITIALIZED: compass=N°, arYaw=N°, offset=-149°" — compass-only fast path
+# Both represent first-time heading convergence per Test Plan Table 21.
+ALIGN_DUAL_DELTA_INIT = re.compile(
+    r"D/ALIGN\].*?(?:DUAL-DELTA )?INITIALIZED:.*?offset=(-?\d+)°"
+)
+
+# D/AR_NAVIGATION: "🎉 ARRIVED at CCC Building"
+# D/NAV: ">> ARRIVED at: CCC Building"
+# Either tag fires on arrival; ":?" handles the colon/no-colon variation.
+ARRIVED = re.compile(
+    r"D/(?:AR_NAVIGATION|NAV)\].*?ARRIVED at:?\s+(.+?)\s*$"
+)
+
+# D/NAV: ">> Route: 4 nodes, 7 coords, 50m"
+#    or  ">> Route: 30 nodes, 90 coords, 1275m (phantom, OFF_NETWORK)"
+# The "(phantom, MODE)" suffix is optional — present only when phantom-node insertion fires.
+ROUTE_LAUNCH = re.compile(
+    r"D/NAV\]\s*>>\s*Route:\s*(\d+)\s*nodes,\s*(\d+)\s*coords,\s*(\d+)m"
+    r"(?:\s*\(phantom,\s*(\w+)\))?"
+)
+
+# D/FPS: "frames=58 dt=1024ms fps=56.6"
+# Emitted every ~1 second by Patch C's instrumentation during active navigation.
+FPS_DATA = re.compile(
+    r"D/FPS\] frames=(\d+) dt=(\d+)ms fps=([\d.]+)"
+)
+
+# D/HEAP: "used=45MB total=80MB max=192MB usedPct=23.4%"
+# Emitted every ~5 seconds by Patch C's instrumentation during active navigation.
+# The "used=" prefix distinguishes data lines from D/HEAP lifecycle markers
+# ("Sampler started", "Sampler stopped"), which this regex will not match.
+HEAP_DATA = re.compile(
+    r"D/HEAP\] used=(\d+)MB total=(\d+)MB max=(\d+)MB usedPct=([\d.]+)%"
 )
 
 # Session header (from file head)
@@ -89,7 +126,25 @@ class SessionMetrics:
         self.max_furthest_index: int = 0
 
         # Heading
-        self.yaw_offsets_seen: list[float] = []
+        self.align_motion_offsets: list[tuple[float, int]] = []  # (relative_sec, post_correction_offset_deg)
+        self.dual_delta_init_time_s: float = 0.0   # 0.0 means INITIALIZED never fired
+        self.dual_delta_init_offset_deg: int = 0   # offset captured at INITIALIZED event
+
+        # Arrival
+        self.arrived: bool = False
+        self.arrival_time_s: float = 0.0
+        self.arrival_destination: str = ""
+
+        # Route metadata (from D/NAV >> Route; populated even when PHANTOM_ROUTE absent)
+        self.route_node_count: int = 0
+        self.route_coord_count: int = 0
+        self.route_length_m: int = 0
+
+        # Performance — frame rate (Patch D / D5 deviation)
+        self.fps_samples: list[float] = []  # raw fps values for distribution stats
+
+        # Performance — heap stability (Patch D / D5 deviation)
+        self.heap_samples: list[tuple[float, int]] = []  # (relative_sec, used_mb) for trend analysis
 
         # Counters
         self.line_count = 0
@@ -123,13 +178,53 @@ class SessionMetrics:
             "max_route_length_nodes": self.max_total_route_length,
             "max_furthest_index": self.max_furthest_index,
             "completion_pct": (
-                round(100 * self.max_furthest_index / self.max_total_route_length, 1)
+                100.0 if self.arrived
+                else round(100 * self.max_furthest_index / self.max_total_route_length, 1)
                 if self.max_total_route_length > 0 else 0.0
             ),
             # Compatibility flags
             "has_phantom_tag": self.has_phantom_tag,
             "has_progress_tag": self.has_progress_tag,
-            "yaw_offsets_count": len(self.yaw_offsets_seen),
+            # Heading convergence (replaces yaw_offsets_count)
+            "align_motion_count": len(self.align_motion_offsets),
+            "align_first_offset_deg": self.align_motion_offsets[0][1] if self.align_motion_offsets else 0,
+            "align_last_offset_deg": self.align_motion_offsets[-1][1] if self.align_motion_offsets else 0,
+            "align_offset_range_deg": (
+                max(o for _, o in self.align_motion_offsets) - min(o for _, o in self.align_motion_offsets)
+                if self.align_motion_offsets else 0
+            ),
+            "dual_delta_init_time_s": round(self.dual_delta_init_time_s, 1),
+            "dual_delta_init_offset_deg": self.dual_delta_init_offset_deg,
+            # Arrival
+            "arrived": self.arrived,
+            "arrival_time_s": round(self.arrival_time_s, 1),
+            "arrival_destination": self.arrival_destination,
+            # Route metadata
+            "route_node_count": self.route_node_count,
+            "route_coord_count": self.route_coord_count,
+            "route_length_m": self.route_length_m,
+            # Performance — frame rate
+            "fps_sample_count": len(self.fps_samples),
+            "fps_median": round(statistics.median(self.fps_samples), 1) if self.fps_samples else 0.0,
+            "fps_min": round(min(self.fps_samples), 1) if self.fps_samples else 0.0,
+            "fps_pct_above_25": (
+                round(100 * sum(1 for f in self.fps_samples if f >= 25.0) / len(self.fps_samples), 1)
+                if self.fps_samples else 0.0
+            ),
+            # Performance — heap stability
+            "heap_sample_count": len(self.heap_samples),
+            "heap_used_min_mb": min(s[1] for s in self.heap_samples) if self.heap_samples else 0,
+            "heap_used_max_mb": max(s[1] for s in self.heap_samples) if self.heap_samples else 0,
+            "heap_used_first_mb": self.heap_samples[0][1] if self.heap_samples else 0,
+            "heap_used_last_mb": self.heap_samples[-1][1] if self.heap_samples else 0,
+            "heap_variation_pct": (
+                round(
+                    100 * (max(s[1] for s in self.heap_samples) - min(s[1] for s in self.heap_samples))
+                    / (sum(s[1] for s in self.heap_samples) / len(self.heap_samples)),
+                    1
+                )
+                if self.heap_samples and len(self.heap_samples) >= 2 else 0.0
+            ),
         }
         return d
 
@@ -199,13 +294,76 @@ def parse_log(path: Path) -> SessionMetrics:
                 m.max_furthest_index = max(m.max_furthest_index, furthest)
                 continue
 
-            # Yaw offset
-            ya = COORDINATE_ALIGNER_OFFSET.search(line)
-            if ya:
+            # D/ALIGN motion update — append (timestamp, post-correction offset)
+            am = ALIGN_MOTION_UPDATE.search(line)
+            if am:
                 try:
-                    m.yaw_offsets_seen.append(float(ya.group(1)))
+                    post_offset = int(am.group(2))
+                    m.align_motion_offsets.append((last_relative_sec, post_offset))
                 except ValueError:
                     pass
+                continue
+
+            # D/ALIGN DUAL-DELTA INITIALIZED — one-shot convergence event
+            ai = ALIGN_DUAL_DELTA_INIT.search(line)
+            if ai:
+                if m.dual_delta_init_time_s == 0.0:
+                    try:
+                        m.dual_delta_init_time_s = last_relative_sec
+                        m.dual_delta_init_offset_deg = int(ai.group(1))
+                    except ValueError:
+                        pass
+                continue
+
+            # D/NAV >> Route launch — captures route metadata
+            rl = ROUTE_LAUNCH.search(line)
+            if rl:
+                try:
+                    if m.route_length_m == 0:
+                        m.route_node_count = int(rl.group(1))
+                        m.route_coord_count = int(rl.group(2))
+                        m.route_length_m = int(rl.group(3))
+                        phantom_mode = rl.group(4)
+                        if phantom_mode:
+                            m.modes_seen.add(phantom_mode)
+                            if not m.first_mode:
+                                m.first_mode = phantom_mode
+                        else:
+                            if not m.first_mode:
+                                m.first_mode = "STANDARD"
+                                m.modes_seen.add("STANDARD")
+                except ValueError:
+                    pass
+                continue
+
+            # D/AR_NAVIGATION or D/NAV — arrival event
+            ar = ARRIVED.search(line)
+            if ar:
+                if not m.arrived:
+                    m.arrived = True
+                    m.arrival_time_s = last_relative_sec
+                    m.arrival_destination = ar.group(1).strip()
+                continue
+
+            # D/FPS — frame rate sample
+            fp = FPS_DATA.search(line)
+            if fp:
+                try:
+                    fps_val = float(fp.group(3))
+                    m.fps_samples.append(fps_val)
+                except ValueError:
+                    pass
+                continue
+
+            # D/HEAP — heap sample (data lines only; lifecycle markers don't match)
+            hp = HEAP_DATA.search(line)
+            if hp:
+                try:
+                    used_mb = int(hp.group(1))
+                    m.heap_samples.append((last_relative_sec, used_mb))
+                except ValueError:
+                    pass
+                continue
 
         m.duration_sec = last_relative_sec
 
@@ -293,18 +451,74 @@ def write_summary(sessions: list[SessionMetrics], out_path: Path) -> None:
         md.append(f"- **Sessions reaching ≥90% completion:** {ge_90} of {len(completions)} ({100*ge_90//len(completions)}%)")
         md.append("")
 
+    md.append("## Heading convergence (D/ALIGN dual-delta)")
+    md.append("")
+    sessions_with_init = sum(1 for r in rows if r["dual_delta_init_time_s"] > 0)
+    init_times = [r["dual_delta_init_time_s"] for r in rows if r["dual_delta_init_time_s"] > 0]
+    median_init = round(statistics.median(init_times), 1) if init_times else 0.0
+    md.append(f"- **Sessions where DUAL-DELTA INITIALIZED fired:** {sessions_with_init} of {total}")
+    md.append(f"- **Median time to convergence:** {median_init}s")
+    md.append("")
+    md.append("Per Test Plan Section 5.3.4 / Table 21: heading should converge within the first 2 minutes (120s) of walking.")
+    md.append("")
+
+    md.append("## Arrival detection (D/AR_NAVIGATION / D/NAV ARRIVED)")
+    md.append("")
+    arrived_count = sum(1 for r in rows if r["arrived"])
+    arrival_times = [r["arrival_time_s"] for r in rows if r["arrived"]]
+    median_arrival = round(statistics.median(arrival_times), 1) if arrival_times else 0.0
+    md.append(f"- **Sessions where ARRIVED fired:** {arrived_count} of {total}")
+    md.append(f"- **Median walk-to-arrival time:** {median_arrival}s")
+    md.append("")
+    md.append("ARRIVED supplements PROGRESS-based completion: a session can have furthest_index < total but still arrive (final PROGRESS sample may not capture the last index update before arrival fires).")
+    md.append("")
+
+    md.append("## Performance — frame rate (D/FPS)")
+    md.append("")
+    fps_rows = [r for r in rows if r["fps_sample_count"] > 0]
+    md.append(f"- **Sessions with FPS data:** {len(fps_rows)} of {total}")
+    if fps_rows:
+        all_fps_medians = [r["fps_median"] for r in fps_rows]
+        global_median_fps = round(statistics.median(all_fps_medians), 1)
+        sessions_meeting_target = sum(1 for r in fps_rows if r["fps_pct_above_25"] >= 95.0)
+        md.append(f"- **Median FPS across sessions:** {global_median_fps}")
+        md.append(f"- **Sessions where ≥95% of samples are ≥25fps:** {sessions_meeting_target} of {len(fps_rows)}")
+    md.append("")
+    md.append("Per Test Plan Section 5.4.4 / Table 22: frame rate ≥25fps for ≥95% of session.")
+    md.append("")
+
+    md.append("## Performance — heap stability (D/HEAP)")
+    md.append("")
+    heap_rows = [r for r in rows if r["heap_sample_count"] > 0]
+    md.append(f"- **Sessions with heap data:** {len(heap_rows)} of {total}")
+    if heap_rows:
+        median_variation = round(statistics.median([r["heap_variation_pct"] for r in heap_rows]), 1)
+        stable_count = sum(1 for r in heap_rows if r["heap_variation_pct"] <= 10.0)
+        no_upward_trend = sum(
+            1 for r in heap_rows
+            if r["heap_used_first_mb"] == 0 or r["heap_used_last_mb"] <= r["heap_used_first_mb"] * 1.10
+        )
+        md.append(f"- **Median heap variation (max−min)/mean:** {median_variation}%")
+        md.append(f"- **Sessions with stable heap (≤10% variation):** {stable_count} of {len(heap_rows)}")
+        md.append(f"- **Sessions with no sustained upward trend (last ≤ first×1.10):** {no_upward_trend} of {len(heap_rows)}")
+    md.append("")
+    md.append("Per Test Plan Section 5.4.4 / Table 22: heap stable (±10%) with no sustained upward trend over 5-minute sessions.")
+    md.append("")
+
     md.append("## Per-session table")
     md.append("")
-    md.append("| Session | Duration (s) | Cycle samples | Median gap (ms) | p95 gap (ms) | First mode | Snap (m) | Acc (m) | Route len | Furthest | Completion |")
-    md.append("|---|---|---|---|---|---|---|---|---|---|---|")
+    md.append("| Session | Duration (s) | Cycle samples | Median gap (ms) | p95 gap (ms) | First mode | Route len (m) | Furthest | Total | Completion | Arrived | Init (s) |")
+    md.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for r in rows:
         sname = r["filename"].replace("orientar_", "").replace(".log", "")
+        arrived_mark = "✓" if r["arrived"] else "—"
+        init_display = f"{r['dual_delta_init_time_s']}" if r["dual_delta_init_time_s"] > 0 else "—"
         md.append(
             f"| {sname} | {r['duration_sec']} | {r['cycle_count']} | "
             f"{r['cycle_median_ms']} | {r['cycle_p95_ms']} | {r['first_mode'] or '-'} | "
-            f"{r['first_snap_dist_m'] or '-'} | {r['first_accuracy_m'] or '-'} | "
-            f"{r['max_route_length_nodes'] or '-'} | {r['max_furthest_index'] or '-'} | "
-            f"{r['completion_pct']}%"
+            f"{r['route_length_m'] or '-'} | "
+            f"{r['max_furthest_index'] or '-'} | {r['max_route_length_nodes'] or '-'} | "
+            f"{r['completion_pct']}% | {arrived_mark} | {init_display}"
             "|"
         )
     md.append("")
@@ -341,9 +555,9 @@ def main():
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    log_files = sorted(logs_dir.glob("orientar_*.log"))
+    log_files = sorted(logs_dir.glob("*.log"))
     if not log_files:
-        print(f"ERROR: no orientar_*.log files found in {logs_dir}", file=sys.stderr)
+        print(f"ERROR: no .log files found in {logs_dir}", file=sys.stderr)
         return 1
 
     print(f"Found {len(log_files)} log files. Parsing...")
