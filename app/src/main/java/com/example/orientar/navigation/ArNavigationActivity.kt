@@ -374,13 +374,24 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         try {
             FileLogger.d("AR_LIFECYCLE", "onDestroy — cleaning up resources")
 
-            // 1. SphereRefresher cleanup (SceneView still alive)
+            // 1. SphereRefresher reference clear only (no native cleanup)
+            //
+            // SCRUM-121: Do NOT call sphereRefresher.clearAll() in onDestroy.
+            // Logcat evidence (tombstone_18 + AR_LIFECYCLE timeline) showed that by
+            // the time onDestroy's body runs, SceneView's lifecycle observer has
+            // already deleted the ArSession ("Deleting ArSession..." at native level)
+            // and destroyed the Filament Engine. Filament PanicLog reported
+            // "Object at 0x... doesn't exist (double free?)" — SceneView is already
+            // cleaning up our sphere nodes. Calling clearAll() → destroyAnchor() →
+            // any anchor or session JNI method hits freed native memory and SIGSEGVs.
+            // JVM reference clear is sufficient — the JVM will GC the SphereRefresher
+            // instance, and SceneView has already handled all native and Filament
+            // cleanup by this point.
             try {
-                sphereRefresher?.clearAll()
                 sphereRefresher = null
-                FileLogger.d("AR_LIFECYCLE", "SphereRefresher cleared")
+                FileLogger.d("AR_LIFECYCLE", "SphereRefresher reference cleared (native cleanup deferred to SceneView)")
             } catch (e: Exception) {
-                android.util.Log.e("AR_LIFECYCLE", "SphereRefresher cleanup failed", e)
+                android.util.Log.e("AR_LIFECYCLE", "SphereRefresher reference clear failed", e)
             }
 
             // 2. Unregister sensor listener
