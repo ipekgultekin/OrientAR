@@ -26,6 +26,7 @@ import com.example.orientar.navigation.logic.Node
 import com.example.orientar.navigation.logic.Coordinate
 import com.example.orientar.navigation.logic.PhantomRouteResult
 import com.example.orientar.navigation.logic.PhantomStartMode
+import com.example.orientar.navigation.logic.RouteProgressTracker
 import com.example.orientar.navigation.rendering.CoordinateAligner
 import com.example.orientar.navigation.rendering.SphereRefresher
 import com.example.orientar.navigation.location.GPSBufferManager
@@ -183,9 +184,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private var selectedEndNode: Node? = null
     private var routeCoords: List<Coordinate> = emptyList()
     private var routeNodePath: List<Node> = emptyList()
-    private var lastClosestRouteIndex: Int = 0
-    private var lastRenderProgressIndex: Int = 0
-    private val visitedNodeIds = HashSet<Int>()
+    // Route progress + visitation tracker (SCRUM-120: extracted to RouteProgressTracker)
+    // Recreated on each route launch / recalibration via initRouteProgressTracker().
+    private var routeProgressTracker: RouteProgressTracker? = null
 
     // ========================================================================================
     // CONFIGURATION
@@ -193,7 +194,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private val REANCHOR_THRESHOLD_METERS = 8.0f
     private val REANCHOR_COOLDOWN_MS = 5000L
     private val VISITATION_DISTANCE_THRESHOLD = 5.0f
-    private val RERENDER_PROGRESS_DELTA = 12
     private var lastReAnchorTime: Long = 0
     @Volatile
     private var pendingAnchorCreation = false
@@ -374,13 +374,24 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         try {
             FileLogger.d("AR_LIFECYCLE", "onDestroy — cleaning up resources")
 
-            // 1. SphereRefresher cleanup (SceneView still alive)
+            // 1. SphereRefresher reference clear only (no native cleanup)
+            //
+            // SCRUM-121: Do NOT call sphereRefresher.clearAll() in onDestroy.
+            // Logcat evidence (tombstone_18 + AR_LIFECYCLE timeline) showed that by
+            // the time onDestroy's body runs, SceneView's lifecycle observer has
+            // already deleted the ArSession ("Deleting ArSession..." at native level)
+            // and destroyed the Filament Engine. Filament PanicLog reported
+            // "Object at 0x... doesn't exist (double free?)" — SceneView is already
+            // cleaning up our sphere nodes. Calling clearAll() → destroyAnchor() →
+            // any anchor or session JNI method hits freed native memory and SIGSEGVs.
+            // JVM reference clear is sufficient — the JVM will GC the SphereRefresher
+            // instance, and SceneView has already handled all native and Filament
+            // cleanup by this point.
             try {
-                sphereRefresher?.clearAll()
                 sphereRefresher = null
-                FileLogger.d("AR_LIFECYCLE", "SphereRefresher cleared")
+                FileLogger.d("AR_LIFECYCLE", "SphereRefresher reference cleared (native cleanup deferred to SceneView)")
             } catch (e: Exception) {
-                android.util.Log.e("AR_LIFECYCLE", "SphereRefresher cleanup failed", e)
+                android.util.Log.e("AR_LIFECYCLE", "SphereRefresher reference clear failed", e)
             }
 
             // 2. Unregister sensor listener
@@ -1237,6 +1248,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 // selectedStartNode stays null — verified safe (null-safe elvis fallbacks only).
                 selectedEndNode = endNode
 
+                // SCRUM-120: (re)build the progress tracker for the new route
+                initRouteProgressTracker()
+
                 val startName = "Your Location"  // D19
                 val endName = endNode.name ?: "Destination"
                 val offNetSuffix = if (result.isOffNetwork) " ⚠ Off-network" else ""
@@ -1574,7 +1588,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             sphereRefresher?.refresh(location, frame, session)
         }
 
-        updateProgressOnRoute(location)
+        routeProgressTracker?.updateProgress(location.latitude, location.longitude)
         updateLiveUI(location)
     }
 
@@ -1678,6 +1692,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             return
         }
 
+        // SCRUM-120: (re)build the progress tracker for the new route
+        initRouteProgressTracker()
+
         staticRouteReport = "✅ Route: ${startNode.name} → ${endNode.name}\n${routeCoords.size} points, ${routeNodePath.size} nodes\n\n"
 
         // Calculate total route length to decide on segmentation
@@ -1706,63 +1723,26 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
     // (renderRouteInAR removed — SphereRefresher handles all rendering)
 
-    private fun updateProgressOnRoute(userLocation: Location) {
-        if (routeCoords.isEmpty()) return
+    /**
+     * Current nearest-route index. Returns 0 before any route is loaded or
+     * before the tracker has received its first GPS update.
+     */
+    private fun currentRouteIndex(): Int = routeProgressTracker?.getCurrentIndex() ?: 0
 
-        var bestIdx = lastClosestRouteIndex
-        var bestDist = Double.MAX_VALUE
-
-        // Search window: look behind (for backtracking) and ahead
-        val startIdx = (lastClosestRouteIndex - 50).coerceAtLeast(0)
-        val endIdx = (lastClosestRouteIndex + 200).coerceAtMost(routeCoords.size - 1)
-
-        for (i in startIdx..endIdx) {
-            val p = routeCoords[i]
-            val d = ArUtils.distanceMeters(userLocation.latitude, userLocation.longitude, p.lat, p.lng)
-            if (d < bestDist) {
-                bestDist = d
-                bestIdx = i
-            }
-        }
-
-        // Allow both forward and backward movement
-        if (bestIdx != lastClosestRouteIndex) {
-            lastClosestRouteIndex = bestIdx
-            markVisitedNodes(userLocation)
-
-            // Rendering is handled by SphereRefresher — no explicit re-render needed.
-            // SphereRefresher.refresh() runs on every GPS update and picks up progress changes.
-            if (abs(lastClosestRouteIndex - lastRenderProgressIndex) >= RERENDER_PROGRESS_DELTA) {
-                lastRenderProgressIndex = lastClosestRouteIndex
-                FileLogger.d("PROGRESS", "Progress updated: nearest=$lastClosestRouteIndex, visited=${visitedNodeIds.size}")
-            }
-        }
-    }
-
-    private fun markVisitedNodes(userLocation: Location) {
-        for (node in routeNodePath) {
-            if (visitedNodeIds.contains(node.id)) continue
-
-            val distance = ArUtils.distanceMeters(
-                userLocation.latitude, userLocation.longitude,
-                node.lat, node.lng
-            )
-
-            if (distance < VISITATION_DISTANCE_THRESHOLD) {
-                visitedNodeIds.add(node.id)
-
-                // Check if this is the final destination
-                val isDestination = (node.id == selectedEndNode?.id)
-
-                if (isDestination) {
-                    // Show arrival celebration!
-                    showArrivalCelebration()
-                } else {
-                    // Play checkpoint animation
-                    playCheckpointReachedAnimation(node.name ?: "Checkpoint")
-                }
-            }
-        }
+    /**
+     * (Re)build [routeProgressTracker] from the currently-assigned routeCoords,
+     * routeNodePath, and selectedEndNode. Call after each route assignment:
+     * phantom-route launch, calculateRouteOnce, and recalibration.
+     */
+    private fun initRouteProgressTracker() {
+        routeProgressTracker = RouteProgressTracker(
+            routeCoords = routeCoords,
+            routeNodePath = routeNodePath,
+            selectedEndNode = selectedEndNode,
+            arrivalThreshold = VISITATION_DISTANCE_THRESHOLD,
+            onArrival = { _ -> showArrivalCelebration() },
+            onCheckpoint = { node -> playCheckpointReachedAnimation(node.name ?: "Checkpoint") }
+        )
     }
 
     // (checkDriftAndReAnchor removed — SphereRefresher recreates anchors every 8m)
@@ -1941,7 +1921,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 val debugText = buildString {
                     appendLine("🛠️ DEBUG MODE")
                     appendLine("═══════════════════════")
-                    appendLine("📍 Position: $lastClosestRouteIndex/${routeCoords.size}")
+                    appendLine("📍 Position: ${currentRouteIndex()}/${routeCoords.size}")
                     appendLine("🎯 Next: ${"%.1f".format(distanceToNext)}m")
                     appendLine("🧭 Align error: ${"%.1f".format(alignmentError)}°")
                     appendLine("📡 GPS: ${currentLocation.accuracy.toInt()}m")
@@ -1999,17 +1979,18 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun calculateRemainingDistance(currentLocation: Location): Double {
-        if (lastClosestRouteIndex >= routeCoords.size - 1) return 0.0
+        val idx = currentRouteIndex()
+        if (idx >= routeCoords.size - 1) return 0.0
 
         // Include the perpendicular distance from user to closest route point
-        val closestPoint = routeCoords[lastClosestRouteIndex]
+        val closestPoint = routeCoords[idx]
         var remaining = ArUtils.distanceMeters(
             currentLocation.latitude, currentLocation.longitude,
             closestPoint.lat, closestPoint.lng
         )
 
         // Add remaining route distance from closest point to destination
-        for (i in lastClosestRouteIndex until routeCoords.size - 1) {
+        for (i in idx until routeCoords.size - 1) {
             val p1 = routeCoords[i]
             val p2 = routeCoords[i + 1]
             remaining += ArUtils.distanceMeters(p1.lat, p1.lng, p2.lat, p2.lng)
@@ -2109,6 +2090,8 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     is PhantomRouteResult.Success -> {
                         routeCoords = result.polyline
                         routeNodePath = result.nodePath
+                        // SCRUM-120: (re)build the progress tracker for the rebuilt route
+                        initRouteProgressTracker()
                         FileLogger.d("AR_RECALIB",
                             "Phantom route rebuilt: ${result.nodePath.size} nodes, " +
                                 "${result.polyline.size} coords, mode=${result.startMode}, " +
@@ -2375,7 +2358,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun calculateDistanceToNext(location: Location): Double {
-        val nextIdx = (lastClosestRouteIndex + 1).coerceAtMost(routeCoords.lastIndex)
+        val nextIdx = (currentRouteIndex() + 1).coerceAtMost(routeCoords.lastIndex)
         val target = routeCoords.getOrNull(nextIdx) ?: return 0.0
 
         return ArUtils.distanceMeters(location.latitude, location.longitude, target.lat, target.lng)
