@@ -67,4 +67,24 @@
     <string name="compass_instruction">Hold phone flat and rotate slowly\nCalibrating compass…</string>
     <string name="gps_instruction">Acquiring GPS signal…\nStand in open area.</string>
 
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- SCRUM-107 — Unified Notification Strings                 -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <string name="notif_compass_ready">Compass ready</string>
+    <string name="notif_compass_timeout_title">Compass calibration timed out</string>
+    <string name="notif_compass_timeout_desc">Proceeding with reduced accuracy</string>
+    <string name="notif_heading_calibrated">Heading calibrated</string>
+    <string name="notif_walk_calibration_title">Hold phone upright</string>
+    <string name="notif_walk_calibration_desc">Walk forward to calibrate orientation</string>
+    <string name="notif_position_drift_title">Position drift detected</string>
+    <string name="notif_position_drift_desc">Recalibrating route alignment (%1$dm offset)</string>
+    <string name="notif_recalibrating_title">Recalibrating</string>
+    <string name="notif_recalibrating_desc">Hold phone steady</string>
+    <string name="notif_no_gps_title">No GPS signal</string>
+    <string name="notif_no_gps_desc">Cannot recalibrate without GPS — move to an open area</string>
+    <string name="notif_recalibrated">Recalibrated</string>
+    <string name="notif_flipping_title">Flipping 180°</string>
+    <string name="notif_flipping_desc">Reorienting your view</string>
+    <string name="notif_flipped">Heading flipped 180°</string>
+
 </resources>

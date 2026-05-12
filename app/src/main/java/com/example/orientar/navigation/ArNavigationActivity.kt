@@ -30,6 +30,7 @@ import com.example.orientar.navigation.logic.RouteProgressTracker
 import com.example.orientar.navigation.rendering.CoordinateAligner
 import com.example.orientar.navigation.rendering.SphereRefresher
 import com.example.orientar.navigation.location.GPSBufferManager
+import com.example.orientar.navigation.ui.NotificationManager
 import com.google.ar.core.*
 import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.ar.arcore.createAnchorOrNull
@@ -77,7 +78,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var layoutCompassHud: FrameLayout
     private lateinit var ivCompassArrow: ImageView
     private lateinit var tvCompassBearing: TextView
-    private lateinit var tvRecalculating: TextView
 
     // Navigation UI elements
     private lateinit var layoutTopBar: LinearLayout
@@ -85,7 +85,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var layoutDebugPanel: LinearLayout  // Changed from ScrollView
     private lateinit var layoutDebugButtons: LinearLayout  // NEW
     private lateinit var btnDebugToggle: ImageButton
-    private lateinit var btnPhase3Toggle: ImageButton  // NEW
     private lateinit var btnDebugRecalibrate: Button  // NEW
     private lateinit var btnDebugFlip: Button  // NEW
     private lateinit var btnShareLogs: Button  // Share logs button
@@ -100,6 +99,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var tvNextCheckpoint: TextView
     private lateinit var tvETA: TextView
     private lateinit var tvDebugInfo: TextView
+
+    // SCRUM-107 — Unified notification system
+    private lateinit var notifications: NotificationManager
 
     //LOG
     private var gpsLogCounter = 0
@@ -421,6 +423,14 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 android.util.Log.e("AR_LIFECYCLE", "CoordinateAligner reset failed", e)
             }
 
+            // 5. Cancel pending notification handlers (SCRUM-107)
+            try {
+                if (::notifications.isInitialized) notifications.destroy()
+                android.util.Log.d("AR_LIFECYCLE", "✅ NotificationManager destroyed")
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "NotificationManager destroy failed", e)
+            }
+
             // 7. Stop heap sampler (Patch C / D5 deviation)
             try {
                 stopHeapSampler()
@@ -673,7 +683,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                         isRecalibrating = false
                         if (sphereRefresher == null) initializeSphereRefresher()
                         runOnUiThread {
-                            Toast.makeText(this, "🧭 Heading ready — navigation starting", Toast.LENGTH_SHORT).show()
+                            notifications.showSuccess(getString(R.string.notif_heading_calibrated))
                         }
                     } else {
                         val now = System.currentTimeMillis()
@@ -831,25 +841,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private fun initializeUI() {
         arView = findViewById(R.id.arView)
         tvInfo = findViewById(R.id.tvInfo)
-        tvRecalculating = findViewById(R.id.tvRecalculating)
-        var lastFlipTime = 0L
-        tvRecalculating.setOnClickListener {
-            if (tvRecalculating.visibility == View.VISIBLE) {
-                val now = System.currentTimeMillis()
-
-                // If tapped within 2 seconds of last flip, do full recalibration
-                if (now - lastFlipTime < 2000) {
-                    FileLogger.d("AR_RECALIB", "Double-tap detected - full recalibration")
-                    forceRecalibration()
-                    lastFlipTime = 0L  // Reset
-                } else {
-                    // First tap - try 180° flip
-                    FileLogger.d("AR_RECALIB", "Single tap - trying 180° flip")
-                    flip180Degrees()
-                    lastFlipTime = now
-                }
-            }
-        }
+        // SCRUM-107: tvRecalculating gesture (single-tap flip / double-tap recalib) dropped — actions accessible via debug panel
         btnForceStart = findViewById(R.id.btnForceStart)
         progressBar = findViewById(R.id.progressBar)
         layoutRouteSelection = findViewById(R.id.layoutRouteSelection)
@@ -870,7 +862,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         layoutDebugPanel = findViewById(R.id.layoutDebugPanel)
         layoutDebugButtons = findViewById(R.id.layoutDebugButtons)
         btnDebugToggle = findViewById(R.id.btnDebugToggle)
-        btnPhase3Toggle = findViewById(R.id.btnPhase3Toggle)
         btnDebugRecalibrate = findViewById(R.id.btnDebugRecalibrate)
         btnDebugFlip = findViewById(R.id.btnDebugFlip)
         btnShareLogs = findViewById(R.id.btnShareLogs)
@@ -899,6 +890,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
         btnForceStart.setOnClickListener { handleForceStart() }
         btnConfirmRoute.setOnClickListener { confirmRouteAndStart() }
+
+        // SCRUM-107 — Unified notification system
+        notifications = NotificationManager(this, findViewById(android.R.id.content))
     }
     private fun setupNavigationUI() {
         // Debug toggle button
@@ -1392,13 +1386,16 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
                 if (lastKnownAccuracy >= SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM) {
                     minCalibrationTimePassed = true
-                    Toast.makeText(this@ArNavigationActivity, "✅ Compass Ready!", Toast.LENGTH_SHORT).show()
+                    notifications.showSuccess(getString(R.string.notif_compass_ready))
                     updateStateUI(AppState.STEP_2_GPS_COLLECTION)
                 } else if (attempts < 10) {
                     handler.postDelayed(this, 4000)
                 } else {
                     minCalibrationTimePassed = true
-                    Toast.makeText(this@ArNavigationActivity, "⚠️ Compass timeout", Toast.LENGTH_LONG).show()
+                    notifications.showWarning(
+                        title = getString(R.string.notif_compass_timeout_title),
+                        description = getString(R.string.notif_compass_timeout_desc)
+                    )
                     updateStateUI(AppState.STEP_2_GPS_COLLECTION)
                 }
             }
@@ -1522,7 +1519,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                         "yawOffset=${coordinateAligner.getYawOffset().toInt()}°")
                     if (sphereRefresher == null) initializeSphereRefresher()
                     runOnUiThread {
-                        Toast.makeText(this, "🧭 Heading calibrated — navigation starting", Toast.LENGTH_SHORT).show()
+                        notifications.showSuccess(getString(R.string.notif_heading_calibrated))
                     }
                     // Fall through — let the rest of handleNavigationUpdate run for the first time
                 } else {
@@ -1664,7 +1661,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
             FileLogger.d("HEADING_INIT", "Dual-delta wait started — walk to calibrate, compass fallback in ${DUAL_DELTA_TIMEOUT_SECONDS}s")
             runOnUiThread {
-                Toast.makeText(this, "🧭 Hold phone upright, then walk forward to calibrate", Toast.LENGTH_LONG).show()
+                notifications.showInstruction(
+                    title = getString(R.string.notif_walk_calibration_title),
+                    description = getString(R.string.notif_walk_calibration_desc)
+                )
             }
         }
 
@@ -1674,10 +1674,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         updateStateUI(AppState.STEP_3_NAVIGATION)
 
         FileLogger.d("INIT", "Navigation started: SphereRefresher ONLY. Old renderer disabled.")
-
-        runOnUiThread {
-            Toast.makeText(this, "🔍 Looking for floor...", Toast.LENGTH_SHORT).show()
-        }
+        // SCRUM-107: "Looking for floor..." Toast dropped — walk-calibration Instruction (above) covers the same intent
     }
 
     private fun calculateRouteOnce() {
@@ -1806,8 +1803,11 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
                 // Show user feedback
                 runOnUiThread {
-                    tvRecalculating.visibility = View.VISIBLE
-                    tvRecalculating.text = "⚠️ Position drift: ${distance.toInt()}m\n🔄 Recalibrating..."
+                    notifications.showWarning(
+                        title = getString(R.string.notif_position_drift_title),
+                        description = getString(R.string.notif_position_drift_desc, distance.toInt()),
+                        dismissable = false
+                    )
                 }
 
                 // ====================================================================
@@ -1871,11 +1871,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
                 // Aligner already reinitialized from compass above (step 2b)
 
-                // Hide the recalculating message after a delay
+                // Hide the recalculating notification after a delay
                 Handler(Looper.getMainLooper()).postDelayed({
-                    runOnUiThread {
-                        tvRecalculating.visibility = View.GONE
-                    }
+                    notifications.hide()
                 }, 5000)
             }
         }
@@ -2021,8 +2019,11 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         FileLogger.d("AR_RECALIB", "╚════════════════════════════════════════════════════════════")
 
         runOnUiThread {
-            tvRecalculating.visibility = View.VISIBLE
-            tvRecalculating.text = "🔄 Recalibrating...\n👉 Hold phone steady"
+            notifications.showWarning(
+                title = getString(R.string.notif_recalibrating_title),
+                description = getString(R.string.notif_recalibrating_desc),
+                dismissable = false
+            )
         }
 
         // Get current GPS position for new anchor
@@ -2032,8 +2033,11 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             FileLogger.e("AR_RECALIB", "❌ No GPS available for recalibration!")
             FileLogger.e("RECALIB", "No GPS for recalibration!")
             runOnUiThread {
-                tvRecalculating.visibility = View.GONE
-                Toast.makeText(this, "❌ No GPS signal - cannot recalibrate", Toast.LENGTH_LONG).show()
+                notifications.hide()
+                notifications.showWarning(
+                    title = getString(R.string.notif_no_gps_title),
+                    description = getString(R.string.notif_no_gps_desc)
+                )
             }
             return
         }
@@ -2225,14 +2229,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
         FileLogger.d("RECALIB", "State after recalib: alignerInit=${coordinateAligner.isInitialized()}, dualDeltaDone=${coordinateAligner.isDualDeltaCompleted()}, waitingDD=$waitingForDualDelta, pendingAnchor=$pendingAnchorCreation")
 
-        // Hide recalibrating message after timeout
+        // Replace recalibrating warning with success after timeout (single-slot semantics)
         Handler(Looper.getMainLooper()).postDelayed({
-            runOnUiThread {
-                if (tvRecalculating.visibility == View.VISIBLE) {
-                    tvRecalculating.visibility = View.GONE
-                    Toast.makeText(this, "✅ Recalibrated!", Toast.LENGTH_SHORT).show()
-                }
-            }
+            notifications.showSuccess(getString(R.string.notif_recalibrated))
         }, 5000)
     }
 
@@ -2271,8 +2270,11 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         }
 
         runOnUiThread {
-            tvRecalculating.visibility = View.VISIBLE
-            tvRecalculating.text = "🔄 Flipping 180°..."
+            notifications.showWarning(
+                title = getString(R.string.notif_flipping_title),
+                description = getString(R.string.notif_flipping_desc),
+                dismissable = false
+            )
         }
 
         // Get current offset and flip it by 180°
@@ -2303,8 +2305,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         FileLogger.d("AR_RECALIB", "SphereRefresher cleared — will recreate with flipped offset on next GPS")
 
         runOnUiThread {
-            tvRecalculating.visibility = View.GONE
-            Toast.makeText(this, "🔄 Heading flipped 180° — spheres refreshing...", Toast.LENGTH_SHORT).show()
+            notifications.showSuccess(getString(R.string.notif_flipped))
         }
     }
 
@@ -2411,8 +2412,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     layoutBottomCard.visibility = View.VISIBLE
                     layoutCompassHud.visibility = View.VISIBLE
                     layoutDebugButtons.visibility = View.VISIBLE  // FIXED: Show button container
-                    // Set initial Phase 3 toggle state
-                    btnPhase3Toggle.isSelected = usePhase3Rendering
 
                     // Hide debug panel by default (user can toggle)
                     layoutDebugPanel.visibility = View.GONE

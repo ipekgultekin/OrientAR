@@ -1,36 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Success notification — confirmation ("Compass ready", "Recalibrated").
-    Glass-card with green 3dp left border. Single-line; no description.
-    Auto-dismisses after 2.5s by default.
-    SCRUM-107 Step 1. Inflated by NotificationManager.showSuccess().
+    SCRUM-107 Hot Fix #3: premium snackbar variant. 32dp icon container, 16dp icon,
+    tighter 10dp vertical padding, single-line title (no description).
+    IDs preserved: notification_icon, notification_title (read by NotificationManager.kt).
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="wrap_content"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_notification_success"
-    android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingStart="14dp"
-    android:paddingTop="10dp"
-    android:paddingEnd="14dp"
-    android:paddingBottom="10dp">
+    android:background="@drawable/bg_notification_success"
+    android:paddingHorizontal="15dp"
+    android:paddingVertical="10dp"
+    android:gravity="center_vertical">
 
-    <ImageView
-        android:id="@+id/notification_icon"
-        android:layout_width="16dp"
-        android:layout_height="16dp"
-        android:layout_marginEnd="10dp"
-        android:contentDescription="@null"
-        android:src="@drawable/ic_notification_check"
-        app:tint="@color/status_success" />
+    <FrameLayout
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="@drawable/bg_icon_container_success"
+        android:layout_marginEnd="12dp">
+        <ImageView
+            android:id="@+id/notification_icon"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_notification_check"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:tint="@color/status_success"/>
+    </FrameLayout>
 
     <TextView
         android:id="@+id/notification_title"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:textColor="#FFFFFFFF"
-        android:textSize="12sp"
-        android:textStyle="bold" />
+        android:layout_weight="1"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:textColor="@color/text_white"
+        android:letterSpacing="-0.01"/>
 </LinearLayout>

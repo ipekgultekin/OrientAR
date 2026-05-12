@@ -13,6 +13,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.example.orientar.R
 
 /**
@@ -248,8 +250,10 @@ class NotificationManager(
                 .withEndAction { safeRemove(previous) }
                 .start()
         }
+        // SCRUM-107 hotfix: width = MATCH_PARENT (+16dp side margins) so notifications
+        // fill the screen width instead of hugging their wrap_content children.
         val params = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
         )
         params.gravity = gravity
@@ -259,7 +263,29 @@ class NotificationManager(
         params.marginEnd = dp(16)
         view.layoutParams = params
         view.alpha = 0f
+        view.elevation = dp(4).toFloat()
         rootView.addView(view)
+
+        // SCRUM-107 hotfix: WindowInsets-aware positioning. Without this, TOP
+        // notifications collide with the status bar and BOTTOM ones collide with
+        // the navigation bar — `android.R.id.content` extends behind both system
+        // bars on edge-to-edge layouts. CENTER slot needs no adjustment.
+        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val lp = v.layoutParams as FrameLayout.LayoutParams
+            when {
+                lp.gravity and Gravity.TOP == Gravity.TOP -> {
+                    lp.topMargin = systemBars.top + dp(80)  // Clear top bar (destination name + distance)
+                }
+                lp.gravity and Gravity.BOTTOM == Gravity.BOTTOM -> {
+                    lp.bottomMargin = systemBars.bottom + dp(160)  // Clear bottom nav card (progress + ETA + buttons)
+                }
+            }
+            v.layoutParams = lp
+            insets
+        }
+        ViewCompat.requestApplyInsets(view)
+
         view.animate().alpha(1f).setDuration(300).start()
         currentView = view
     }
@@ -289,7 +315,7 @@ class NotificationManager(
             setTextColor(0xFFFFFFFF.toInt())
             background = ContextCompat.getDrawable(
                 activity,
-                if (primary) R.drawable.bg_button_red else R.drawable.bg_button_outline
+                if (primary) R.drawable.bg_button_error_primary else R.drawable.bg_button_outline
             )
             minWidth = dp(96)
             setPadding(dp(16), dp(8), dp(16), dp(8))

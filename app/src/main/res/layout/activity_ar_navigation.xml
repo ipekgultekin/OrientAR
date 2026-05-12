@@ -223,19 +223,6 @@
         android:visibility="gone"
         android:id="@+id/layoutDebugButtons">
 
-        <!-- Phase 3 Toggle Button -->
-        <ImageButton
-            android:id="@+id/btnPhase3Toggle"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/bg_debug_toggle"
-            android:contentDescription="Toggle Phase 3"
-            android:src="@android:drawable/ic_menu_manage"
-            android:scaleType="centerInside"
-            android:padding="10dp"
-            app:tint="#FFFFFF" />
-
         <!-- Debug Toggle Button -->
         <ImageButton
             android:id="@+id/btnDebugToggle"
@@ -360,21 +347,8 @@
         </ScrollView>
     </LinearLayout>
     <!-- ============================================================ -->
-    <!-- RECALCULATING BANNER (Center - shown during drift correction) -->
+    <!-- (SCRUM-107: tvRecalculating banner removed — migrated to NotificationManager Warnings) -->
     <!-- ============================================================ -->
-    <TextView
-        android:id="@+id/tvRecalculating"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:background="@drawable/bg_glass_card"
-        android:paddingHorizontal="24dp"
-        android:paddingVertical="16dp"
-        android:text="⚠️ Recalibrating..."
-        android:textColor="#FF9800"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:visibility="gone" />
 
     <!-- ============================================================ -->
     <!-- CALIBRATION PANEL (Center - shown during calibration steps) -->
