@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Glass-card body with a white 3dp left border.
+    Used by notification_instruction.xml.
+    SCRUM-107 Step 1.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Layer 1: full-bleed colored rectangle (only the 3dp left strip is visible). -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#FFFFFFFF" />
+            <corners android:radius="16dp" />
+        </shape>
+    </item>
+    <!-- Layer 2: glass-card body, inset 3dp from the left to expose the colored stripe. -->
+    <item android:left="3dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#CC1A1A2E" />
+            <corners
+                android:topLeftRadius="0dp"
+                android:bottomLeftRadius="0dp"
+                android:topRightRadius="15dp"
+                android:bottomRightRadius="15dp" />
+            <stroke
+                android:width="1dp"
+                android:color="#33FFFFFF" />
+        </shape>
+    </item>
+</layer-list>
