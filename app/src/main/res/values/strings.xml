@@ -111,4 +111,21 @@
     <string name="cal_step_gps">GPS</string>
     <string name="cal_step_walk">Walk</string>
 
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- SCRUM-107 Step 2C — F3 walk calibration overlay          -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <string name="f3_title_walk_forward">Walk forward</string>
+    <string name="f3_title_move_open">Move to an open area</string>
+    <string name="f3_subtitle_default">Walking helps us align AR direction with the route</string>
+    <string name="f3_subtitle_poor_gps">GPS signal is too weak to calibrate. Try stepping away from buildings or trees</string>
+    <string name="f3_walked_label">WALKED</string>
+    <string name="f3_gps_quality_label">GPS quality</string>
+    <string name="f3_gps_quality_good">Good</string>
+    <string name="f3_gps_quality_poor">Poor (%1$dm)</string>
+    <string name="f3_meters_format">%.1f</string>
+
+    <!-- Recalibration failed warning (used by NotificationManager Warning) -->
+    <string name="notif_recalibrate_failed_title">Recalibration failed</string>
+    <string name="notif_recalibrate_failed_desc">Using compass only</string>
+
 </resources>

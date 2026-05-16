@@ -565,6 +565,206 @@
     </LinearLayout>
 
     <!-- ============================================================ -->
+    <!-- F3 WALK CALIBRATION OVERLAY (Bottom card - STEP_3 dual-delta wait) -->
+    <!-- SCRUM-107 Step 2C Plan B: F3 migrated from dynamic inflate to    -->
+    <!-- static embedding matching F4's pattern. F3CalibrationOverlay.kt -->
+    <!-- now resolves this view via findViewById(R.id.layoutF3Overlay)   -->
+    <!-- and toggles visibility + alpha. Reuses bg_calibration_card.xml. -->
+    <!-- ============================================================ -->
+    <LinearLayout
+        android:id="@+id/layoutF3Overlay"
+        android:layout_width="320dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="95dp"
+        android:background="@drawable/bg_calibration_card"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:elevation="0dp"
+        android:orientation="vertical"
+        android:padding="18dp"
+        android:visibility="gone">
+
+        <!-- Step strip: Compass done • GPS done • Walk active -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="14dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <View
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:background="@drawable/bg_step_dot_done"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:letterSpacing="-0.01"
+                android:text="@string/cal_step_compass"
+                android:textColor="#B8FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+
+            <View
+                android:layout_width="18dp"
+                android:layout_height="1dp"
+                android:layout_marginStart="7dp"
+                android:layout_marginEnd="7dp"
+                android:background="@color/status_success"/>
+
+            <View
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:background="@drawable/bg_step_dot_done"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:letterSpacing="-0.01"
+                android:text="@string/cal_step_gps"
+                android:textColor="#B8FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+
+            <View
+                android:layout_width="18dp"
+                android:layout_height="1dp"
+                android:layout_marginStart="7dp"
+                android:layout_marginEnd="7dp"
+                android:background="@color/status_success"/>
+
+            <View
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:background="@drawable/bg_step_dot_active"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:letterSpacing="-0.01"
+                android:text="@string/cal_step_walk"
+                android:textColor="@color/text_white"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+        </LinearLayout>
+
+        <!-- Title (dynamic) -->
+        <TextView
+            android:id="@+id/tvF3Title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:letterSpacing="-0.015"
+            android:text="@string/f3_title_walk_forward"
+            android:textColor="@color/text_white"
+            android:textSize="14sp"
+            android:textStyle="bold"/>
+
+        <!-- Subtitle (dynamic) -->
+        <TextView
+            android:id="@+id/tvF3Subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="10dp"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.45"
+            android:paddingHorizontal="4dp"
+            android:text="@string/f3_subtitle_default"
+            android:textColor="@color/text_white_secondary"
+            android:textSize="11sp"/>
+
+        <!-- Big number row: "1.8 / 3 m" -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvF3BigNumber"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:letterSpacing="-0.04"
+                android:text="0.0"
+                android:textColor="@color/text_white"
+                android:textSize="36sp"
+                android:textStyle="bold"/>
+
+            <TextView
+                android:id="@+id/tvF3NumberUnit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:layout_marginStart="2dp"
+                android:layout_marginBottom="4dp"
+                android:text="/ 3 m"
+                android:textColor="#99FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold"/>
+        </LinearLayout>
+
+        <!-- WALKED caps label -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="12dp"
+            android:letterSpacing="0.08"
+            android:text="@string/f3_walked_label"
+            android:textColor="#80FFFFFF"
+            android:textSize="10sp"
+            android:textStyle="bold"/>
+
+        <!-- GPS quality row: divider above, label + value -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#14FFFFFF"/>
+
+        <!-- GPS quality row (spacer removed in Hot Fix #6; value TextView right-aligned
+             via layout_weight=1 + gravity=end instead. The spacer View with
+             layout_height="wrap_content" + layout_weight="1" was measuring to 1754px
+             on Samsung A26, inflating the parent F3 LinearLayout to 2272px. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="2dp"
+            android:paddingTop="9dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/f3_gps_quality_label"
+                android:textColor="#99FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"/>
+
+            <TextView
+                android:id="@+id/tvF3GpsQuality"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="end"
+                android:text="@string/f3_gps_quality_good"
+                android:textColor="@color/status_success"
+                android:textSize="11sp"
+                android:textStyle="bold"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ============================================================ -->
     <!-- ROUTE SELECTION PANEL (Fallback - rarely shown) -->
     <!-- ============================================================ -->
     <LinearLayout
