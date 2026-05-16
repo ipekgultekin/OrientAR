@@ -87,4 +87,28 @@
     <string name="notif_flipping_desc">Reorienting your view</string>
     <string name="notif_flipped">Heading flipped 180°</string>
 
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- SCRUM-107 Step 2B — Calibration overlay strings (F2 + F4) -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <string name="cal_f2_compass_kicker">Compass calibration in</string>
+    <string name="cal_f2_compass_hint_title">Hold phone flat</string>
+    <string name="cal_f2_compass_hint_sub">Rotate slowly while waiting</string>
+    <string name="cal_f2_walk_kicker">AR guidance starts in</string>
+    <string name="cal_f2_walk_hint_title">Hold phone upright</string>
+    <string name="cal_f2_walk_hint_sub">Start walking when countdown ends</string>
+    <string name="cal_f2_ready_pill">Compass + GPS ready</string>
+    <string name="cal_f4_compass_title">Calibrate compass</string>
+    <string name="cal_f4_compass_desc">Keep the phone flat and move it in small circles</string>
+    <string name="cal_f4_compass_status_low">Keep moving</string>
+    <string name="cal_f4_compass_status_med">Almost there</string>
+    <string name="cal_f4_compass_status_high">Good</string>
+    <string name="cal_f4_gps_title">Acquiring GPS</string>
+    <string name="cal_f4_gps_desc">Stand in an open area</string>
+    <string name="cal_f4_gps_status_search">Searching</string>
+    <string name="cal_f4_gps_start_anyway">Start anyway</string>
+    <string name="cal_f4_gps_caveat">Accuracy may vary</string>
+    <string name="cal_step_compass">Compass</string>
+    <string name="cal_step_gps">GPS</string>
+    <string name="cal_step_walk">Walk</string>
+
 </resources>

@@ -30,6 +30,7 @@ import com.example.orientar.navigation.logic.RouteProgressTracker
 import com.example.orientar.navigation.rendering.CoordinateAligner
 import com.example.orientar.navigation.rendering.SphereRefresher
 import com.example.orientar.navigation.location.GPSBufferManager
+import com.example.orientar.navigation.ui.F2CountdownOverlay
 import com.example.orientar.navigation.ui.NotificationManager
 import com.google.ar.core.*
 import io.github.sceneview.ar.ARSceneView
@@ -65,16 +66,30 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     // ========================================================================================
     private lateinit var arView: ARSceneView
     private lateinit var tvInfo: TextView
-    private lateinit var btnForceStart: Button
-    private lateinit var progressBar: ProgressBar
     private lateinit var layoutRouteSelection: LinearLayout
     private lateinit var spinnerStartNode: Spinner
     private lateinit var spinnerEndNode: Spinner
     private lateinit var btnConfirmRoute: Button
     private lateinit var layoutCalibration: LinearLayout
-    private lateinit var tvStepTitle: TextView
-    private lateinit var tvStepDesc: TextView
-    private lateinit var ivStepIcon: ImageView
+    // SCRUM-107 Step 2B — F4 calibration step strip
+    private lateinit var viewCalStepDot1: View
+    private lateinit var viewCalStepDot2: View
+    private lateinit var viewCalStepDot3: View
+    private lateinit var viewCalStepLine1: View
+    private lateinit var viewCalStepLine2: View
+    private lateinit var tvCalStepLabel1: TextView
+    private lateinit var tvCalStepLabel2: TextView
+    private lateinit var tvCalStepLabel3: TextView
+    // SCRUM-107 Step 2B — F4 calibration ring + content
+    private lateinit var calProgressRing: com.google.android.material.progressindicator.CircularProgressIndicator
+    private lateinit var ivCalRingIcon: ImageView
+    private lateinit var tvCalRingLabel: TextView
+    private lateinit var tvCalRingValue: TextView
+    private lateinit var tvCalTitle: TextView
+    private lateinit var tvCalDesc: TextView
+    // SCRUM-107 Step 2B — F4 "Start anyway" pill
+    private lateinit var layoutCalStartAnyway: View
+    private lateinit var btnCalStartAnyway: TextView
     private lateinit var layoutCompassHud: FrameLayout
     private lateinit var ivCompassArrow: ImageView
     private lateinit var tvCompassBearing: TextView
@@ -102,6 +117,23 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
     // SCRUM-107 — Unified notification system
     private lateinit var notifications: NotificationManager
+
+    // SCRUM-107 Step 2B — F2 countdown overlay (pre-compass + pre-walk)
+    private lateinit var f2Overlay: F2CountdownOverlay
+
+    // SCRUM-107 Step 2B — F4 dynamic update listeners (unregistered on state exit)
+    private var compassAccuracyListener: ((Int) -> Unit)? = null
+    private var gpsAccuracyListener: ((Float) -> Unit)? = null
+
+    // SCRUM-107 Step 2B — Risk #1 fix: track polling Runnable to cancel on skip/transition
+    private var compassPollingRunnable: Runnable? = null
+    private var compassPollingHandler: Handler? = null
+
+    // SCRUM-107 Step 2B follow-up (IMPORTANT 10 fix): prevent F2 WALK_PRE re-entry
+    // when GPS oscillates READY/COLLECTING during the 3-second countdown window.
+    // Reset at every new calibration flow (startCompassCalibrationStep) so each
+    // session gets a fresh trigger.
+    private var f2WalkPreFired = false
 
     //LOG
     private var gpsLogCounter = 0
@@ -145,7 +177,12 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private var lastRemapLogTime = 0L  // Throttle COMPASS_REMAP diagnostic log
     private var smoothedAzimuth: Float = 0f
     private var magneticDeclination: Float = 0f
-    private var lastKnownAccuracy = 0
+    // SCRUM-107 Step 2B — property setter pushes compass accuracy changes to F4 ring UI
+    private var lastKnownAccuracy: Int = 0
+        set(value) {
+            field = value
+            compassAccuracyListener?.invoke(value)
+        }
     private var currentTrueBearing: Float = 0f
     // FOR SENSOR FUSION
     private lateinit var kalmanFilter: KalmanFilter
@@ -429,6 +466,22 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 android.util.Log.d("AR_LIFECYCLE", "✅ NotificationManager destroyed")
             } catch (e: Exception) {
                 android.util.Log.e("AR_LIFECYCLE", "NotificationManager destroy failed", e)
+            }
+
+            // 6. F2 countdown overlay cleanup (SCRUM-107 Step 2B)
+            try {
+                if (::f2Overlay.isInitialized) f2Overlay.destroy()
+                f2WalkPreFired = false  // Defensive: reset re-entry guard (Activity is dying anyway)
+                android.util.Log.d("AR_LIFECYCLE", "✅ F2CountdownOverlay destroyed")
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "F2 destroy failed", e)
+            }
+
+            // 6b. Cancel compass polling Runnable (SCRUM-107 Step 2B Risk #1 fix)
+            try {
+                cancelCompassPolling()
+            } catch (e: Exception) {
+                android.util.Log.e("AR_LIFECYCLE", "cancelCompassPolling failed", e)
             }
 
             // 7. Stop heap sampler (Patch C / D5 deviation)
@@ -842,16 +895,38 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         arView = findViewById(R.id.arView)
         tvInfo = findViewById(R.id.tvInfo)
         // SCRUM-107: tvRecalculating gesture (single-tap flip / double-tap recalib) dropped — actions accessible via debug panel
-        btnForceStart = findViewById(R.id.btnForceStart)
-        progressBar = findViewById(R.id.progressBar)
         layoutRouteSelection = findViewById(R.id.layoutRouteSelection)
         spinnerStartNode = findViewById(R.id.spinnerStartNode)
         spinnerEndNode = findViewById(R.id.spinnerEndNode)
         btnConfirmRoute = findViewById(R.id.btnConfirmRoute)
         layoutCalibration = findViewById(R.id.layoutCalibration)
-        tvStepTitle = findViewById(R.id.tvStepTitle)
-        tvStepDesc = findViewById(R.id.tvStepDesc)
-        ivStepIcon = findViewById(R.id.ivStepIcon)
+
+        // SCRUM-107 Step 2B — F4 calibration step strip
+        viewCalStepDot1 = findViewById(R.id.viewCalStepDot1)
+        viewCalStepDot2 = findViewById(R.id.viewCalStepDot2)
+        viewCalStepDot3 = findViewById(R.id.viewCalStepDot3)
+        viewCalStepLine1 = findViewById(R.id.viewCalStepLine1)
+        viewCalStepLine2 = findViewById(R.id.viewCalStepLine2)
+        tvCalStepLabel1 = findViewById(R.id.tvCalStepLabel1)
+        tvCalStepLabel2 = findViewById(R.id.tvCalStepLabel2)
+        tvCalStepLabel3 = findViewById(R.id.tvCalStepLabel3)
+        // SCRUM-107 Step 2B — F4 ring + content
+        calProgressRing = findViewById(R.id.calProgressRing)
+        ivCalRingIcon = findViewById(R.id.ivCalRingIcon)
+        tvCalRingLabel = findViewById(R.id.tvCalRingLabel)
+        tvCalRingValue = findViewById(R.id.tvCalRingValue)
+        tvCalTitle = findViewById(R.id.tvCalTitle)
+        tvCalDesc = findViewById(R.id.tvCalDesc)
+        // SCRUM-107 Step 2B — F4 "Start anyway" pill
+        layoutCalStartAnyway = findViewById(R.id.layoutCalStartAnyway)
+        btnCalStartAnyway = findViewById(R.id.btnCalStartAnyway)
+        btnCalStartAnyway.setOnClickListener { handleForceStart() }
+        // Programmatic rounded background for the start-anyway pill (subtle amber border)
+        layoutCalStartAnyway.background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = dpToPx(12).toFloat()
+            setColor(android.graphics.Color.parseColor("#0EFFB74D"))
+            setStroke(dpToPx(1), android.graphics.Color.parseColor("#5CFFB74D"))
+        }
         layoutCompassHud = findViewById(R.id.layoutCompassHud)
         ivCompassArrow = findViewById(R.id.ivCompassArrow)
         tvCompassBearing = findViewById(R.id.tvCompassBearing)
@@ -888,12 +963,18 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         setupNavigationUI()
 
 
-        btnForceStart.setOnClickListener { handleForceStart() }
         btnConfirmRoute.setOnClickListener { confirmRouteAndStart() }
 
         // SCRUM-107 — Unified notification system
         notifications = NotificationManager(this, findViewById(android.R.id.content))
+
+        // SCRUM-107 Step 2B — F2 countdown overlay (pre-compass + pre-walk)
+        f2Overlay = F2CountdownOverlay(this, findViewById(android.R.id.content))
     }
+
+    /** SCRUM-107 Step 2B — dp → px helper used by F4 programmatic drawables. */
+    private fun dpToPx(dp: Int): Int =
+        (dp * resources.displayMetrics.density).toInt()
     private fun setupNavigationUI() {
         // Debug toggle button
         btnDebugToggle.setOnClickListener {
@@ -1176,7 +1257,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         calculateRouteOnce()
         Toast.makeText(this, "Route: ${startNode.name} → ${endNode.name}", Toast.LENGTH_LONG).show()
 
-        startCompassCalibrationStep()
+        // SCRUM-107 Step 2B — pre-compass F2 countdown
+        f2Overlay.show(F2CountdownOverlay.Mode.COMPASS_PRE) {
+            startCompassCalibrationStep()
+        }
     }
 
     /**
@@ -1289,7 +1373,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     Toast.LENGTH_SHORT
                 ).show()
 
-                startCompassCalibrationStep()
+                // SCRUM-107 Step 2B — pre-compass F2 countdown
+                f2Overlay.show(F2CountdownOverlay.Mode.COMPASS_PRE) {
+                    startCompassCalibrationStep()
+                }
             }
 
             is PhantomRouteResult.TooFar -> {
@@ -1371,13 +1458,29 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         Toast.makeText(this, "Route: ${selectedStartNode?.name} → ${selectedEndNode?.name}", Toast.LENGTH_SHORT).show()
 
         calculateRouteOnce()
-        startCompassCalibrationStep()
+        // SCRUM-107 Step 2B — pre-compass F2 countdown
+        f2Overlay.show(F2CountdownOverlay.Mode.COMPASS_PRE) {
+            startCompassCalibrationStep()
+        }
     }
 
     private fun startCompassCalibrationStep() {
         updateStateUI(AppState.STEP_1_COMPASS_CALIBRATION)
 
+        // SCRUM-107 Step 2B (Risk #1 fix): track the Runnable + Handler so that
+        // skipping the compass step or transitioning to STEP_2 cancels the poll.
+        // Previously, the Runnable continued firing every 4s for up to 40s even
+        // after skip — could trigger a stale "Compass ready" success notification
+        // while the user was already in STEP_2.
+        cancelCompassPolling()  // Defensive: clear any previous Runnable
+
+        // SCRUM-107 Step 2B follow-up (IMPORTANT 10 fix): reset WALK_PRE re-entry
+        // guard for this fresh calibration flow. All 3 route-entry sites
+        // (named/phantom/manual) converge here, so this is the single reset point.
+        f2WalkPreFired = false
+
         val handler = Handler(Looper.getMainLooper())
+        compassPollingHandler = handler
         val calibrationChecker = object : Runnable {
             var attempts = 0
 
@@ -1387,6 +1490,8 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 if (lastKnownAccuracy >= SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM) {
                     minCalibrationTimePassed = true
                     notifications.showSuccess(getString(R.string.notif_compass_ready))
+                    compassPollingRunnable = null  // self-cleared on success path
+                    compassPollingHandler = null
                     updateStateUI(AppState.STEP_2_GPS_COLLECTION)
                 } else if (attempts < 10) {
                     handler.postDelayed(this, 4000)
@@ -1396,12 +1501,26 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                         title = getString(R.string.notif_compass_timeout_title),
                         description = getString(R.string.notif_compass_timeout_desc)
                     )
+                    compassPollingRunnable = null  // self-cleared on timeout path
+                    compassPollingHandler = null
                     updateStateUI(AppState.STEP_2_GPS_COLLECTION)
                 }
             }
         }
+        compassPollingRunnable = calibrationChecker
 
         handler.postDelayed(calibrationChecker, 4000)
+    }
+
+    /**
+     * SCRUM-107 Step 2B (Risk #1 fix): cancel any in-flight compass-polling
+     * Runnable. Called from [handleForceStart] (skip path) and on STEP_2 entry
+     * in [updateStateUI]. Idempotent — no-op if already cleared.
+     */
+    private fun cancelCompassPolling() {
+        compassPollingRunnable?.let { compassPollingHandler?.removeCallbacks(it) }
+        compassPollingRunnable = null
+        compassPollingHandler = null
     }
 
     private fun handleLocationUpdate(location: Location) {
@@ -1483,16 +1602,28 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
     private fun processGPSSample(location: Location) {
         val state = gpsBufferManager.addSample(location)
-        progressBar.progress = gpsBufferManager.getProgress()
 
         runOnUiThread {
             tvInfo.text = "GPS: ${gpsBufferManager.getSampleCount()}/8\nAccuracy: ${location.accuracy.toInt()}m"
         }
 
+        // SCRUM-107 Step 2B — push GPS accuracy to F4 ring UI (if active)
+        gpsAccuracyListener?.invoke(location.accuracy)
+
         if (state == GPSBufferManager.State.READY) {
             val finalLocation = gpsBufferManager.calculateWeightedAverage()
             if (finalLocation != null) {
-                startARNavigation(finalLocation, isForced = false)
+                // SCRUM-107 Step 2B follow-up (IMPORTANT 10 fix): guard against
+                // GPS-READY oscillation re-firing the WALK_PRE countdown mid-flow.
+                if (!f2WalkPreFired) {
+                    f2WalkPreFired = true
+                    layoutCalibration.visibility = View.GONE  // hide F4 under F2 backdrop
+                    f2Overlay.show(F2CountdownOverlay.Mode.WALK_PRE) {
+                        startARNavigation(finalLocation, isForced = false)
+                    }
+                } else {
+                    android.util.Log.d("AR_NAV", "F2 WALK_PRE already fired, skipping re-entry")
+                }
             }
         }
     }
@@ -1660,12 +1791,8 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             coordinateAligner.resetDualDelta()
 
             FileLogger.d("HEADING_INIT", "Dual-delta wait started — walk to calibrate, compass fallback in ${DUAL_DELTA_TIMEOUT_SECONDS}s")
-            runOnUiThread {
-                notifications.showInstruction(
-                    title = getString(R.string.notif_walk_calibration_title),
-                    description = getString(R.string.notif_walk_calibration_desc)
-                )
-            }
+            // SCRUM-107 Step 2B (Risk #5 fix): showInstruction("Hold phone upright...")
+            // dropped — F2 pre-walk countdown already covered the same hint visually.
         }
 
         smoothedCameraY = Float.NaN
@@ -2374,38 +2501,65 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 AppState.STEP_0_ROUTE_SELECTION -> {
                     layoutRouteSelection.visibility = View.VISIBLE
                     layoutCalibration.visibility = View.GONE
-                    progressBar.visibility = View.GONE
-                    btnForceStart.visibility = View.GONE
+                    // Unregister F4 listeners — no calibration UI active
+                    compassAccuracyListener = null
+                    gpsAccuracyListener = null
                 }
 
                 AppState.STEP_1_COMPASS_CALIBRATION -> {
                     layoutRouteSelection.visibility = View.GONE
                     layoutCalibration.visibility = View.VISIBLE
-                    progressBar.visibility = View.GONE
-                    btnForceStart.visibility = View.VISIBLE
-                    btnForceStart.text = "SKIP"
-                    tvStepTitle.text = "STEP 1: COMPASS"
-                    tvStepDesc.text = getString(R.string.compass_instruction)
-                    ivStepIcon.setImageResource(R.drawable.ic_compass_arrow)
+                    // F4 step strip: Compass active, GPS pending, Walk pending
+                    applyStepStripState(activeIndex = 0)
+                    // Ring icon + label
+                    ivCalRingIcon.setImageResource(R.drawable.ic_compass_arrow)
+                    tvCalRingLabel.text = "STATUS"
+                    // Title + description
+                    tvCalTitle.text = getString(R.string.cal_f4_compass_title)
+                    tvCalDesc.text = getString(R.string.cal_f4_compass_desc)
+                    // No "Start anyway" pill during compass step
+                    layoutCalStartAnyway.visibility = View.GONE
+                    // Drop any prior listener and register compass-accuracy → ring
+                    gpsAccuracyListener = null
+                    compassAccuracyListener = { accuracy ->
+                        runOnUiThread { updateCompassRing(accuracy) }
+                    }
+                    // Initial tick: render current accuracy immediately
+                    updateCompassRing(lastKnownAccuracy)
                 }
 
                 AppState.STEP_2_GPS_COLLECTION -> {
+                    // SCRUM-107 Step 2B (Risk #1 fix): ensure compass polling can't
+                    // fire spurious notifications now that we've left STEP_1.
+                    cancelCompassPolling()
                     layoutRouteSelection.visibility = View.GONE
                     layoutCalibration.visibility = View.VISIBLE
-                    progressBar.visibility = View.VISIBLE
-                    btnForceStart.visibility = View.VISIBLE
-                    btnForceStart.text = "FORCE START"
-                    tvStepTitle.text = "STEP 2: GPS"
-                    tvStepDesc.text = "Acquiring GPS...\nStand in open area"
-                    ivStepIcon.setImageResource(android.R.drawable.ic_menu_mylocation)
+                    // F4 step strip: Compass done, GPS active, Walk pending
+                    applyStepStripState(activeIndex = 1)
+                    // Ring icon + label
+                    ivCalRingIcon.setImageResource(R.drawable.ic_map_pin)
+                    tvCalRingLabel.text = "ACCURACY"
+                    // Title + description
+                    tvCalTitle.text = getString(R.string.cal_f4_gps_title)
+                    tvCalDesc.text = getString(R.string.cal_f4_gps_desc)
+                    // Show "Start anyway" pill for GPS step
+                    layoutCalStartAnyway.visibility = View.VISIBLE
+                    // Drop any prior listener and register GPS-accuracy → ring
+                    compassAccuracyListener = null
+                    gpsAccuracyListener = { accuracy ->
+                        runOnUiThread { updateGpsRing(accuracy) }
+                    }
+                    // Initial tick: render current accuracy (or "searching" if no GPS yet)
+                    val initialAcc = gpsBufferManager.getLastSample()?.accuracy ?: 20f
+                    updateGpsRing(initialAcc)
                 }
 
                 AppState.STEP_3_NAVIGATION -> {
-                    // Hide setup panels
+                    // Hide setup panels + unregister F4 listeners
                     layoutRouteSelection.visibility = View.GONE
                     layoutCalibration.visibility = View.GONE
-                    progressBar.visibility = View.GONE
-                    btnForceStart.visibility = View.GONE
+                    compassAccuracyListener = null
+                    gpsAccuracyListener = null
 
                     // Show navigation UI
                     layoutTopBar.visibility = View.VISIBLE
@@ -2425,6 +2579,103 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 }
             }
         }
+    }
+
+    /**
+     * SCRUM-107 Step 2B — F4 step strip state machine.
+     * @param activeIndex 0=Compass, 1=GPS, 2=Walk. Steps before it = done (green),
+     * step at it = active (amber), steps after = pending (white-22%).
+     */
+    private fun applyStepStripState(activeIndex: Int) {
+        val dots = arrayOf(viewCalStepDot1, viewCalStepDot2, viewCalStepDot3)
+        val lines = arrayOf(viewCalStepLine1, viewCalStepLine2)
+        val labels = arrayOf(tvCalStepLabel1, tvCalStepLabel2, tvCalStepLabel3)
+        val labelStyles = arrayOf(
+            android.graphics.Typeface.BOLD, android.graphics.Typeface.BOLD, android.graphics.Typeface.BOLD
+        )
+
+        for (i in dots.indices) {
+            when {
+                i < activeIndex -> {
+                    dots[i].setBackgroundResource(R.drawable.bg_step_dot_done)
+                    labels[i].setTextColor(android.graphics.Color.parseColor("#80FFFFFF"))
+                    labels[i].setTypeface(null, android.graphics.Typeface.NORMAL)
+                }
+                i == activeIndex -> {
+                    dots[i].setBackgroundResource(R.drawable.bg_step_dot_active)
+                    labels[i].setTextColor(android.graphics.Color.parseColor("#FFFFFFFF"))
+                    labels[i].setTypeface(null, labelStyles[i])
+                }
+                else -> {
+                    dots[i].setBackgroundResource(R.drawable.bg_step_dot_pending)
+                    labels[i].setTextColor(android.graphics.Color.parseColor("#80FFFFFF"))
+                    labels[i].setTypeface(null, android.graphics.Typeface.NORMAL)
+                }
+            }
+        }
+
+        // Connector lines: green if both adjacent steps are done, dim otherwise
+        for (i in lines.indices) {
+            val color = if (i < activeIndex) {
+                androidx.core.content.ContextCompat.getColor(this, R.color.status_success)
+            } else {
+                android.graphics.Color.parseColor("#2EFFFFFF")
+            }
+            lines[i].setBackgroundColor(color)
+        }
+    }
+
+    /**
+     * SCRUM-107 Step 2B — F4 compass ring updater.
+     * Accuracy values from Android sensor framework:
+     *  0 = UNRELIABLE → red, "Keep moving",    progress 10
+     *  1 = LOW        → red, "Keep moving",    progress 33
+     *  2 = MEDIUM     → amber, "Almost there", progress 67
+     *  3 = HIGH       → green, "Good",         progress 100
+     */
+    private fun updateCompassRing(accuracy: Int) {
+        val (colorRes, statusKey, progress) = when {
+            accuracy >= android.hardware.SensorManager.SENSOR_STATUS_ACCURACY_HIGH ->
+                Triple(R.color.status_success, R.string.cal_f4_compass_status_high, 100)
+            accuracy >= android.hardware.SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM ->
+                Triple(R.color.status_warning, R.string.cal_f4_compass_status_med, 67)
+            accuracy >= android.hardware.SensorManager.SENSOR_STATUS_ACCURACY_LOW ->
+                Triple(R.color.orientar_primary, R.string.cal_f4_compass_status_low, 33)
+            else ->
+                Triple(R.color.orientar_primary, R.string.cal_f4_compass_status_low, 10)
+        }
+        val color = androidx.core.content.ContextCompat.getColor(this, colorRes)
+        calProgressRing.setIndicatorColor(color)
+        calProgressRing.progress = progress
+        ivCalRingIcon.imageTintList = android.content.res.ColorStateList.valueOf(color)
+        tvCalRingValue.text = getString(statusKey)
+    }
+
+    /**
+     * SCRUM-107 Step 2B — F4 GPS ring updater.
+     * AR-readiness tiers (3, strict):
+     *  >10m → red,   "Searching"
+     *  5-10m → amber, "{n}m"
+     *  <5m  → green, "{n}m"
+     * Progress scaled: lower meters → higher fill (100 - acc*5, clamped).
+     */
+    private fun updateGpsRing(accuracyM: Float) {
+        val (colorRes, valueText, progress) = when {
+            accuracyM < 5f ->
+                Triple(R.color.status_success, "${accuracyM.toInt()}m",
+                    (100 - accuracyM * 5).toInt().coerceIn(0, 100))
+            accuracyM <= 10f ->
+                Triple(R.color.status_warning, "${accuracyM.toInt()}m",
+                    (100 - accuracyM * 5).toInt().coerceIn(0, 100))
+            else ->
+                Triple(R.color.orientar_primary, getString(R.string.cal_f4_gps_status_search),
+                    (100 - accuracyM * 5).toInt().coerceIn(0, 100))
+        }
+        val color = androidx.core.content.ContextCompat.getColor(this, colorRes)
+        calProgressRing.setIndicatorColor(color)
+        calProgressRing.progress = progress
+        ivCalRingIcon.imageTintList = android.content.res.ColorStateList.valueOf(color)
+        tvCalRingValue.text = valueText
     }
     private fun updateNavigationUI() {
         runOnUiThread {
@@ -2449,12 +2700,25 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         when (currentState) {
             AppState.STEP_1_COMPASS_CALIBRATION -> {
                 minCalibrationTimePassed = true
+                // SCRUM-107 Step 2B (Risk #1 fix): cancel the polling Runnable on skip
+                cancelCompassPolling()
                 updateStateUI(AppState.STEP_2_GPS_COLLECTION)
             }
             AppState.STEP_2_GPS_COLLECTION -> {
                 val location = gpsBufferManager.forceGetBestLocation()
                 if (location != null) {
-                    startARNavigation(location, isForced = true)
+                    // SCRUM-107 Step 2B follow-up (IMPORTANT 10 fix): same re-entry
+                    // guard for the force-start path — also protects against rapid
+                    // double-taps on "Start anyway".
+                    if (!f2WalkPreFired) {
+                        f2WalkPreFired = true
+                        layoutCalibration.visibility = View.GONE  // hide F4 under F2 backdrop
+                        f2Overlay.show(F2CountdownOverlay.Mode.WALK_PRE) {
+                            startARNavigation(location, isForced = true)
+                        }
+                    } else {
+                        android.util.Log.d("AR_NAV", "F2 WALK_PRE already fired, skipping force-start re-entry")
+                    }
                 } else {
                     Toast.makeText(this, "No GPS data", Toast.LENGTH_SHORT).show()
                 }
