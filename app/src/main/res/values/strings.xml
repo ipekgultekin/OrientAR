@@ -115,14 +115,24 @@
     <!-- SCRUM-107 Step 2C — F3 walk calibration overlay          -->
     <!-- ════════════════════════════════════════════════════════ -->
     <string name="f3_title_walk_forward">Walk forward</string>
-    <string name="f3_title_move_open">Move to an open area</string>
+    <!-- f3_subtitle_default still referenced by activity_ar_navigation.xml as the
+         tvF3Subtitle XML default (shown briefly before F3CalibrationOverlay's
+         refreshSubtitle runs). Kept to avoid breaking that reference. -->
     <string name="f3_subtitle_default">Walking helps us align AR direction with the route</string>
-    <string name="f3_subtitle_poor_gps">GPS signal is too weak to calibrate. Try stepping away from buildings or trees</string>
-    <string name="f3_walked_label">WALKED</string>
     <string name="f3_gps_quality_label">GPS quality</string>
     <string name="f3_gps_quality_good">Good</string>
-    <string name="f3_gps_quality_poor">Poor (%1$dm)</string>
     <string name="f3_meters_format">%.1f</string>
+
+    <!-- SCRUM-107 Stage 1: F3 redesign new strings (Stage 3 will consume) -->
+    <string name="f3_title_calibrating_route">Calibrating route</string>
+    <string name="f3_title_calibrated">Calibrated</string>
+    <string name="f3_subtitle_onset">This usually takes a few seconds</string>
+    <string name="f3_subtitle_waiting_for_walk">Walk forward to calibrate</string>
+    <string name="f3_subtitle_walk_active">Keep moving, calibrating as you walk</string>
+    <string name="f3_subtitle_fair_gps">GPS signal weak, try to face the open sky</string>
+    <string name="f3_subtitle_poor_gps_v2">Move to an open area for better GPS</string>
+    <string name="f3_gps_quality_fair">Fair</string>
+    <string name="f3_gps_quality_poor_short">Poor</string>
 
     <!-- Recalibration failed warning (used by NotificationManager Warning) -->
     <string name="notif_recalibrate_failed_title">Recalibration failed</string>

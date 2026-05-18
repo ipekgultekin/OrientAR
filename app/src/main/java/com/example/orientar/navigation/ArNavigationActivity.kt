@@ -755,7 +755,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                         FileLogger.d("HEADING_INIT", "Compass shortcut: compass=${currentTrueBearing.toInt()}° " +
                             "agrees with route=${routeBearing.toInt()}° (diff=${compassDiff.toInt()}°) — using compass immediately")
                         // SCRUM-107 Step 2C — diagnostic + fire ShortcutSuccess (F3 cancels pending show)
-                        android.util.Log.d("WALK_CAL", "shortcut, compass agrees with route diff=${compassDiff.toInt()}deg")
+                        FileLogger.d("WALK_CAL", "shortcut, compass agrees with route diff=${compassDiff.toInt()}deg")
                         walkCalibrationListener?.invoke(WalkCalState.ShortcutSuccess)
                         coordinateAligner.initialize(currentTrueBearing.toDouble(), arYaw)
                         waitingForDualDelta = false
@@ -763,7 +763,18 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                         isRecalibrating = false
                         if (sphereRefresher == null) initializeSphereRefresher()
                         runOnUiThread {
-                            notifications.showSuccess(getString(R.string.notif_heading_calibrated))
+                            // SCRUM-107 polish (Site 1): mirror the Sites 2/3 guard pattern. Site 1 is reached
+                            // by both the fast-shortcut (F3 never showed) and slow-shortcut (F3 visible in
+                            // ONSET/WAITING_FOR_WALK) paths. The audit assumed only the fast subcase, but the
+                            // slow subcase produces the same redundant double-feedback that Sites 2/3 had.
+                            // Defensive: if F3 isn't initialized or somehow isn't visible, still post so the
+                            // user gets at least one feedback channel.
+                            if (::f3Overlay.isInitialized && f3Overlay.isVisible()) {
+                                FileLogger.d("NOTIFICATION", "skipped: F3 visible (initial shortcut — slow path)")
+                            } else {
+                                FileLogger.d("NOTIFICATION", "posted: notif_heading_calibrated (initial shortcut)")
+                                notifications.showSuccess(getString(R.string.notif_heading_calibrated))
+                            }
                         }
                     } else {
                         val now = System.currentTimeMillis()
@@ -771,6 +782,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                             lastHeadingInitLogTime = now
                             FileLogger.d("HEADING_INIT", "Compass disagrees with route: compass=${currentTrueBearing.toInt()}° " +
                                 "vs route=${routeBearing.toInt()}° (diff=${compassDiff.toInt()}°) — waiting for walk calibration")
+                            // SCRUM-107 Stage 4: notify F3 that walk path is needed (compass persistently disagrees).
+                            // Fires inside the existing 1Hz throttle so we don't flood at AR-frame rate (30-60Hz).
+                            // F3's onWaitingForWalk handler is idempotent; safe to invoke every ~1s.
+                            walkCalibrationListener?.invoke(WalkCalState.WaitingForWalk)
                         }
                     }
                 }
@@ -781,12 +796,13 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     val wasRecalibrating = isRecalibrating
                     FileLogger.w("HEADING_INIT", "Dual-delta timeout (${elapsed / 1000}s) — falling back to compass init")
                     // SCRUM-107 Step 2C — diagnostic + fire TimeoutFallback + gated failure notification
-                    android.util.Log.d("WALK_CAL", "timeout, elapsed=${elapsed / 1000}s, last_walk=${String.format("%.1f", lastKnownWalkDistanceM)}m")
+                    FileLogger.d("WALK_CAL", "timeout, elapsed=${elapsed / 1000}s, last_walk=${String.format("%.1f", lastKnownWalkDistanceM)}m")
                     waitingForDualDelta = false
                     walkCalibrationListener?.invoke(WalkCalState.TimeoutFallback)
                     if (wasRecalibrating) {
                         isRecalibrating = false
                         runOnUiThread {
+                            FileLogger.d("NOTIFICATION", "posted: notif_recalibrate_failed (recalib timeout)")
                             notifications.showWarning(
                                 title = getString(R.string.notif_recalibrate_failed_title),
                                 description = getString(R.string.notif_recalibrate_failed_desc)
@@ -1714,6 +1730,15 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         // SCRUM-107 Step 2B — push GPS accuracy to F4 ring UI (if active)
         gpsAccuracyListener?.invoke(location.accuracy)
 
+        // SCRUM-107 Stage 4 — push GPS accuracy to F3 calibration overlay.
+        // Bypasses gpsAccuracyListener because that listener is null'd at STEP_3_NAVIGATION
+        // (see updateStateUI), but F3 shows DURING STEP_3_NAVIGATION and needs continuous
+        // GPS quality updates. updateGpsQuality is idempotent + safe-when-hidden; calls
+        // before F3 is visible cache the classification for the next ONSET to consume.
+        if (::f3Overlay.isInitialized) {
+            runOnUiThread { f3Overlay.updateGpsQuality(location.accuracy) }
+        }
+
         if (state == GPSBufferManager.State.READY) {
             val finalLocation = gpsBufferManager.calculateWeightedAverage()
             if (finalLocation != null) {
@@ -1755,14 +1780,24 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     FileLogger.d("HEADING_INIT", "Dual-delta alignment succeeded: " +
                         "yawOffset=${coordinateAligner.getYawOffset().toInt()}°")
                     // SCRUM-107 Step 2C — diagnostic + fire Completed + gated success notification
-                    android.util.Log.d("WALK_CAL", "completed, walk=${String.format("%.1f", lastKnownWalkDistanceM)}m, " +
+                    FileLogger.d("WALK_CAL", "completed, walk=${String.format("%.1f", lastKnownWalkDistanceM)}m, " +
                         "time=${String.format("%.1f", elapsedS)}s, offset=${coordinateAligner.getYawOffset().toInt()}deg")
                     walkCalibrationListener?.invoke(WalkCalState.Completed)
                     if (sphereRefresher == null) initializeSphereRefresher()
                     runOnUiThread {
-                        if (wasRecalibrating) {
+                        // SCRUM-107 polish: skip redundant in-app notification when F3 TERMINAL
+                        // is already on screen (audit found Sites 2/3 are the only redundant
+                        // ones — F3 visible + bottom banner shown = double-feedback that
+                        // outlives F3 by ~1.3s and creates the "notification after F3" perception).
+                        // Defensive: if F3 isn't initialized or somehow isn't visible, still post
+                        // so the user gets at least one feedback channel.
+                        if (::f3Overlay.isInitialized && f3Overlay.isVisible()) {
+                            FileLogger.d("NOTIFICATION", "skipped: F3 visible (walk completion, recalib=$wasRecalibrating)")
+                        } else if (wasRecalibrating) {
+                            FileLogger.d("NOTIFICATION", "posted: notif_recalibrated (recalib walk completion)")
                             notifications.showSuccess(getString(R.string.notif_recalibrated))
                         } else {
+                            FileLogger.d("NOTIFICATION", "posted: notif_heading_calibrated (initial walk completion)")
                             notifications.showSuccess(getString(R.string.notif_heading_calibrated))
                         }
                     }
@@ -1922,7 +1957,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         // path re-asserts nav UI VISIBLE, so this single swap is sufficient.
         updateStateUI(AppState.STEP_3_NAVIGATION)
         // SCRUM-107 Step 2C — fire Waiting → F3 shows after 250ms delay
-        android.util.Log.d("WALK_CAL", "started, mode=initial, route_diff=${currentRouteDiffDeg()}deg")
+        FileLogger.d("WALK_CAL", "started, mode=initial, route_diff=${currentRouteDiffDeg()}deg")
         lastKnownWalkDistanceM = 0f  // reset for this calibration session
         walkCalibrationListener?.invoke(WalkCalState.Waiting)
 
@@ -2271,13 +2306,32 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         FileLogger.d("AR_RECALIB", "║ MANUAL RECALIBRATION TRIGGERED")
         FileLogger.d("AR_RECALIB", "╚════════════════════════════════════════════════════════════")
 
-        runOnUiThread {
-            notifications.showWarning(
-                title = getString(R.string.notif_recalibrating_title),
-                description = getString(R.string.notif_recalibrating_desc),
-                dismissable = false
-            )
-        }
+        // SCRUM-107 polish (Site 6): "Recalibrating — Hold phone steady" warning REMOVED
+        // rather than guarded. Three reasons (see Site 6 patch report for full analysis):
+        //
+        // 1. SPATIAL COLLISION: F3 conveys recalibration state at the same top-center
+        //    screen location ("Calibrating route" title + step strip + GPS pill). The
+        //    warning visually collided with F3 (confirmed by 2026-05-18 field-test screenshot).
+        //
+        // 2. TIMING: Site 6 fires synchronously at T+0 of forceRecalibration, BEFORE the
+        //    L2521 `Waiting` fire schedules F3's 250ms show delay. So Sites 1/2/3-style
+        //    `f3Overlay.isVisible()` guard cannot engage at the fire moment (F3 always
+        //    HIDDEN here). The collision arises at T+250ms when F3 shows up alongside
+        //    the persistent dismissable=false warning — a guard at the fire site is moot.
+        //
+        // 3. POLISH 2 REGRESSION: this warning's single-slot replacement used to be the
+        //    Site 3 success notification (notif_recalibrated). Polish 2's Sites 2/3 guard
+        //    now skips that success when F3 is visible — meaning the dismissable=false
+        //    warning would never be auto-replaced, persisting indefinitely on screen.
+        //
+        // Additionally, the warning's "Hold phone steady" copy contradicts F3's new
+        // "Walk forward to calibrate" subtitle (Polish 1's delayed WaitingForWalk fire).
+        // The new F3-driven flow supersedes the legacy pre-F3 "hold steady" UX.
+        //
+        // Orphan strings notif_recalibrating_title / notif_recalibrating_desc remain in
+        // strings.xml for now (Polish 1 discipline: don't touch existing strings unless
+        // necessary). Future cleanup pass can remove them.
+        FileLogger.d("NOTIFICATION", "removed: notif_recalibrating (recalibration entry — F3 conveys state)")
 
         // Get current GPS position for new anchor
         val currentGps = getBestAvailableGps()
@@ -2425,10 +2479,11 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 FileLogger.d("HEADING_INIT", "Recalib compass shortcut: compass=${currentTrueBearing.toInt()}° " +
                     "agrees with route=${routeBearing.toInt()}° (diff=${compassDiff.toInt()}°)")
                 // SCRUM-107 Step 2C — diagnostic + fire ShortcutSuccess + recalibrated notification
-                android.util.Log.d("WALK_CAL", "shortcut, recalib compass agrees with route diff=${compassDiff.toInt()}deg")
+                FileLogger.d("WALK_CAL", "shortcut, recalib compass agrees with route diff=${compassDiff.toInt()}deg")
                 walkCalibrationListener?.invoke(WalkCalState.ShortcutSuccess)
                 if (wasRecalibrating) {
                     runOnUiThread {
+                        FileLogger.d("NOTIFICATION", "posted: notif_recalibrated (recalib shortcut)")
                         notifications.showSuccess(getString(R.string.notif_recalibrated))
                     }
                 }
@@ -2503,9 +2558,20 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         // SCRUM-107 Step 2C — if recalib path ended in dual-delta wait, fire Waiting to show F3.
         // (Compass-shortcut branch already cleared waitingForDualDelta; the gate skips Waiting there.)
         if (waitingForDualDelta) {
-            android.util.Log.d("WALK_CAL", "recalibration triggered, resetting dual-delta (route_diff=${currentRouteDiffDeg()}deg)")
+            FileLogger.d("WALK_CAL", "recalibration triggered, resetting dual-delta (route_diff=${currentRouteDiffDeg()}deg)")
             lastKnownWalkDistanceM = 0f
             walkCalibrationListener?.invoke(WalkCalState.Waiting)
+            // SCRUM-107 polish: recalibration's compass-disagreement is detected one-shot in
+            // forceRecalibration's else-branch above; there is no periodic throttle because
+            // forceReinitialize sets coordinateAligner.isInitialized=true, which makes
+            // handlePlaneDetectionAndAnchor's L770 throttle bypass (its outer guard requires
+            // !isInitialized()). Schedule a single delayed WaitingForWalk so F3 transitions
+            // ONSET → WAITING_FOR_WALK with similar timing to initial calibration. F3's
+            // onWaitingForWalk is idempotent and early-returns on !isVisible / TERMINAL /
+            // WALK_ACTIVE, so worst case is a no-op if F3 has moved on by 350ms.
+            Handler(Looper.getMainLooper()).postDelayed({
+                walkCalibrationListener?.invoke(WalkCalState.WaitingForWalk)
+            }, 350L)
         }
     }
 

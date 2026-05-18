@@ -13,6 +13,9 @@ sealed class WalkCalState {
     /** Calibration started; F3 should show after a brief 250 ms delay (cancellable on ShortcutSuccess). */
     object Waiting : WalkCalState()
 
+    /** Compass disagreed long enough to confirm a walk is needed. F3 subtitle updates to proactive walk hint. Fires every ~1s while compass disagreement persists (handler must be idempotent). */
+    object WaitingForWalk : WalkCalState()
+
     /**
      * Per-sample progress update. F3 updates live numbers + GPS-quality row.
      * Dynamic walk threshold = `max(3.0f, 0.5f * gpsAccuracyM)`.
