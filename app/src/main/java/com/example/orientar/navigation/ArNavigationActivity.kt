@@ -15,6 +15,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.graphics.drawable.GradientDrawable
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -44,7 +45,15 @@ import kotlin.math.abs
 import com.example.orientar.navigation.location.KalmanFilter
 import com.example.orientar.navigation.location.HeadingFusionFilter
 import com.example.orientar.navigation.util.FileLogger
+import com.example.orientar.navigation.util.GpsQuality
+import com.example.orientar.navigation.util.GpsQualityClassifier
 import com.example.orientar.R
+
+// SCRUM-107 F6: ETA constants — closes SCRUM-63 by wiring Kalman velocity to the ETA calc.
+// DEFAULT_WALKING_SPEED_MS is the fallback when KalmanFilter isn't initialized yet (early frames)
+// or when the user is below MIN_VELOCITY_FOR_ETA_MS (stationary — avoids divide-by-near-zero).
+private const val DEFAULT_WALKING_SPEED_MS = 1.4
+private const val MIN_VELOCITY_FOR_ETA_MS = 0.3
 
 enum class AppState {
     STEP_0_ROUTE_SELECTION,
@@ -103,7 +112,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var layoutDebugButtons: LinearLayout  // NEW
     private lateinit var btnDebugToggle: ImageButton
     private lateinit var btnDebugRecalibrate: Button  // NEW
-    private lateinit var btnDebugFlip: Button  // NEW
+    // SCRUM-107 F6: btnDebugFlip removed (Arda confirmed 16 May 2026 — 'neredeyse hiç kullanmadık').
     private lateinit var btnShareLogs: Button  // Share logs button
     private lateinit var btnCloseDebugPanel: ImageButton
     private lateinit var btnRecalibrate: Button
@@ -994,7 +1003,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         layoutDebugButtons = findViewById(R.id.layoutDebugButtons)
         btnDebugToggle = findViewById(R.id.btnDebugToggle)
         btnDebugRecalibrate = findViewById(R.id.btnDebugRecalibrate)
-        btnDebugFlip = findViewById(R.id.btnDebugFlip)
         btnShareLogs = findViewById(R.id.btnShareLogs)
         btnCloseDebugPanel = findViewById(R.id.btnCloseDebugPanel)
         btnRecalibrate = findViewById(R.id.btnRecalibrate)
@@ -1109,11 +1117,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             forceRecalibration()
         }
 
-        // Quick flip 180 button in debug panel
-        btnDebugFlip.setOnClickListener {
-            performHapticFeedback(it)
-            flip180Degrees()
-        }
+        // SCRUM-107 F6: btnDebugFlip listener removed alongside the XML button + flip180Degrees method.
         // Share logs button
         btnShareLogs.setOnClickListener {
             performHapticFeedback(it)
@@ -1739,6 +1743,16 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             runOnUiThread { f3Overlay.updateGpsQuality(location.accuracy) }
         }
 
+        // SCRUM-107 F6: dispatch GPS quality to the main HUD compass ring color
+        // (mirrors the Stage 4 f3Overlay dispatch above — same GpsQualityClassifier,
+        // same processGPSSample channel). Always-on, AppState-agnostic; lateinit guard
+        // protects the early-startup window before findViewById runs.
+        if (::layoutCompassHud.isInitialized) {
+            runOnUiThread {
+                updateCompassRingColor(GpsQualityClassifier.classify(location.accuracy))
+            }
+        }
+
         if (state == GPSBufferManager.State.READY) {
             val finalLocation = gpsBufferManager.calculateWeightedAverage()
             if (finalLocation != null) {
@@ -2191,15 +2205,23 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             // Update remaining distance
             tvRemainingDistance.text = formatDistance(remainingDistance)
 
-            // Update next checkpoint
-            tvNextCheckpoint.text = "Next: $nextCheckpoint"
+            // Update next checkpoint (SCRUM-107 F6: " · " delimiter replaces ": ")
+            tvNextCheckpoint.text = "Next · $nextCheckpoint"
 
-            // Update ETA (assuming 1.4 m/s walking speed)
-            val etaMinutes = (remainingDistance / 1.4 / 60).toInt()
+            // SCRUM-107 F6 (closes SCRUM-63): use Kalman-filtered velocity for ETA when initialized
+            // and above MIN_VELOCITY_FOR_ETA_MS (avoids divide-by-near-zero when stationary). Falls
+            // back to DEFAULT_WALKING_SPEED_MS otherwise. Pattern mirrors the existing
+            // `::kalmanFilter.isInitialized && kalmanFilter.isInitialized()` lateinit + state guard.
+            val effectiveSpeedMs = if (::kalmanFilter.isInitialized && kalmanFilter.isInitialized()) {
+                val (vLat, vLng) = kalmanFilter.getVelocity()
+                val speed = kotlin.math.sqrt(vLat * vLat + vLng * vLng)
+                if (speed >= MIN_VELOCITY_FOR_ETA_MS) speed else DEFAULT_WALKING_SPEED_MS
+            } else DEFAULT_WALKING_SPEED_MS
+            val etaMinutes = (remainingDistance / effectiveSpeedMs / 60).toInt()
             tvETA.text = when {
-                etaMinutes < 1 -> "ETA: <1 min"
-                etaMinutes == 1 -> "ETA: 1 min"
-                else -> "ETA: $etaMinutes min"
+                etaMinutes < 1 -> "ETA · <1 min"
+                etaMinutes == 1 -> "ETA · 1 min"
+                else -> "ETA · $etaMinutes min"
             }
 
             // Update debug panel if visible
@@ -2584,70 +2606,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
      * NOTE: This keeps the same anchor - only rotates sphere positions.
      * Use forceRecalibration() if you need a completely new anchor.
      */
-    private fun flip180Degrees() {
-        FileLogger.d("AR_RECALIB", "╔════════════════════════════════════════════════════════════")
-        FileLogger.d("AR_RECALIB", "║ 180° FLIP TRIGGERED")
-        FileLogger.d("AR_RECALIB", "╚════════════════════════════════════════════════════════════")
-        FileLogger.nav("180° FLIP triggered")
-
-        // Check if we have an anchor to work with
-        if (lastAnchorLocation == null) {
-            FileLogger.e("AR_RECALIB", "❌ No anchor location - cannot flip")
-            FileLogger.e("RECALIB", "Flip failed: no anchor location")
-            runOnUiThread {
-                Toast.makeText(this, "❌ No anchor - try full recalibration", Toast.LENGTH_LONG).show()
-            }
-            return
-        }
-
-        // Check if aligner is initialized (needed for flip)
-        if (!coordinateAligner.isInitialized()) {
-            FileLogger.e("AR_RECALIB", "❌ Aligner not initialized - cannot flip")
-            runOnUiThread {
-                Toast.makeText(this, "❌ Not initialized - try full recalibration", Toast.LENGTH_LONG).show()
-            }
-            return
-        }
-
-        runOnUiThread {
-            notifications.showWarning(
-                title = getString(R.string.notif_flipping_title),
-                description = getString(R.string.notif_flipping_desc),
-                dismissable = false
-            )
-        }
-
-        // Get current offset and flip it by 180°
-        val currentOffset = coordinateAligner.getYawOffset()
-        val newOffset = ArUtils.normalizeAngleDeg(currentOffset + 180.0)
-
-        FileLogger.d("AR_RECALIB", "Yaw offset flip:")
-        FileLogger.d("AR_RECALIB", "  Before: $currentOffset°")
-        FileLogger.d("AR_RECALIB", "  After: $newOffset°")
-        FileLogger.d("RECALIB", "Flip: $currentOffset° -> $newOffset°")
-
-        // Apply the flipped offset
-        coordinateAligner.setYawOffset(newOffset)
-
-        // ============================================================================
-        // PHASE 2: Sync heading fusion filter with new offset
-        // ============================================================================
-        if (useSensorFusion && ::headingFusionFilter.isInitialized) {
-            // Update the fused heading to match the flip
-            val currentFusedHeading = headingFusionFilter.getFusedHeading()
-            val newFusedHeading = (currentFusedHeading + 180f) % 360f
-            headingFusionFilter.setHeading(newFusedHeading)
-            FileLogger.d("AR_RECALIB", "HeadingFusion synced: $currentFusedHeading° → $newFusedHeading°")
-        }
-
-        // SphereRefresher will use the flipped offset on next refresh() call
-        sphereRefresher?.clearForRecalibration()  // Fresh render with new heading, preserve progress
-        FileLogger.d("AR_RECALIB", "SphereRefresher cleared — will recreate with flipped offset on next GPS")
-
-        runOnUiThread {
-            notifications.showSuccess(getString(R.string.notif_flipped))
-        }
-    }
+    // SCRUM-107 F6: flip180Degrees() method removed alongside btnDebugFlip.
+    // Only btnDebugRecalibrate remains as the quick debug action in the debug panel.
+    // Orphan strings notif_flipping_title / notif_flipping_desc / notif_flipped stay in
+    // strings.xml per the Polish-1 discipline (future cleanup pass can remove them).
 
     // ========================================================================================
     // GPS FALLBACK HELPER
@@ -2896,6 +2858,30 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         ivCalRingIcon.imageTintList = android.content.res.ColorStateList.valueOf(color)
         tvCalRingValue.text = valueText
     }
+    /**
+     * SCRUM-107 F6: binds main HUD compass ring stroke color to live GPS quality.
+     * Reuses the F3 redesign's [GpsQualityClassifier] (5m / 10m thresholds) so HUD compass +
+     * F3 pill + F4 ring all classify GPS consistently. Dispatched from [processGPSSample]
+     * (mirrors Stage 4's f3Overlay channel).
+     *
+     * The compass ring background is a `<shape>` drawable (bg_compass.xml) which inflates to a
+     * [GradientDrawable]; we mutate its stroke via [GradientDrawable.setStroke]. If the cast
+     * fails (theme override, future refactor), the call no-ops harmlessly.
+     */
+    private fun updateCompassRingColor(quality: GpsQuality) {
+        val colorRes = when (quality) {
+            GpsQuality.GOOD -> R.color.status_success
+            GpsQuality.FAIR -> R.color.status_warning
+            GpsQuality.POOR -> R.color.status_error
+        }
+        val color = ContextCompat.getColor(this, colorRes)
+        val drawable = layoutCompassHud.background as? GradientDrawable
+        if (drawable != null) {
+            val strokePx = (2 * resources.displayMetrics.density).toInt()
+            drawable.setStroke(strokePx, color)
+        }
+    }
+
     private fun updateNavigationUI() {
         runOnUiThread {
             // Set destination name
@@ -2903,15 +2889,24 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 tvDestinationName.text = endNode.name
             }
 
-            // Set route info with fusion status indicator (Optional Improvement 1)
-            val startName = selectedStartNode?.name ?: "Start"
-            val endName = selectedEndNode?.name ?: "End"
+            // SCRUM-107 F6 (6g): whisper-style breadcrumb shows origin only — destination
+            // lives in tvDestinationName hero, so the prior "$startName → $endName$emoji"
+            // pattern duplicated the destination. New format: "from $origin{ emoji}".
+            //
+            // SCRUM-107 F6 polish (2026-05-18): when origin is GPS-derived (no named start node),
+            // show "Your Location" instead of the generic "Start" placeholder sentinel. The full
+            // F8 Your-Location flow (with explicit GO button) will supersede this interim mapping.
+            val rawStartName = selectedStartNode?.name
+            val displayStartName = when {
+                rawStartName.isNullOrBlank() || rawStartName == "Start" -> "Your Location"
+                else -> rawStartName
+            }
             val fusionIndicator = when {
                 !useSensorFusion -> ""  // Fusion disabled entirely
                 fusionDisabledByAdaptive -> " ⚠️"  // Temporarily disabled by adaptive
                 else -> " 🔬"  // Fusion active
             }
-            tvRouteInfo.text = "$startName → $endName$fusionIndicator"
+            tvRouteInfo.text = "from $displayStartName$fusionIndicator"
         }
     }
 

@@ -15,6 +15,14 @@
     <color name="orientar_primary">#E31837</color>
     <color name="orientar_primary_dark">#B71C1C</color>
     <color name="orientar_primary_light">#FF5252</color>
+    <!-- SCRUM-107 F6: Nav HUD palette refinement.
+         red_action is the F6 distance + End-button base (warmer, brighter than orientar_primary).
+         Field test 2026-05-18: original #E24B4A + 78%-alpha muted variant looked washed out;
+         switched to vibrant solid #FF3B47 (full opacity) for stronger destructive-action impact.
+         orientar_primary stays unchanged so screens outside the HUD aren't affected. -->
+    <color name="red_action">#FF3B47</color>
+    <color name="red_action_warm">#FF7A59</color>
+    <color name="status_error">#F44336</color>
     <color name="glass_dark">#CC1A1A2E</color>
     <color name="glass_dark_solid">#E6000000</color>
     <color name="glass_border">#33FFFFFF</color>

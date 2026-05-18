@@ -31,7 +31,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:src="@android:drawable/ic_menu_mylocation"
-            app:tint="#E31837" />
+            app:tint="@color/red_action" />
 
         <!-- Destination Info -->
         <LinearLayout
@@ -52,13 +52,17 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
+            <!-- SCRUM-107 F6: whisper-style route info ("from {origin} {emoji}").
+                 11sp/45%-white/uppercase/0.08 letterSpacing per F6 design 6g. -->
             <TextView
                 android:id="@+id/tvRouteInfo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Calculating..."
-                android:textColor="#B3FFFFFF"
-                android:textSize="12sp" />
+                android:textColor="#73FFFFFF"
+                android:textSize="11sp"
+                android:textAllCaps="true"
+                android:letterSpacing="0.08" />
         </LinearLayout>
 
         <!-- Distance -->
@@ -67,7 +71,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="--m"
-            android:textColor="#E31837"
+            android:textColor="@color/red_action"
             android:textSize="22sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -102,7 +106,7 @@
                 android:layout_weight="1"
                 android:max="100"
                 android:progress="0"
-                android:progressDrawable="@drawable/progress_red" />
+                android:progressDrawable="@drawable/bg_progress_fill" />
 
             <TextView
                 android:id="@+id/tvProgressPercent"
@@ -128,10 +132,10 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:drawableStart="@android:drawable/ic_menu_directions"
+                android:drawableStart="@drawable/ic_arrow_bear_right"
                 android:drawablePadding="8dp"
-                android:drawableTint="#E31837"
-                android:text="Next: --"
+                android:drawableTint="@color/red_action"
+                android:text="Next · --"
                 android:textColor="#B3FFFFFF"
                 android:textSize="14sp" />
 
@@ -139,7 +143,7 @@
                 android:id="@+id/tvETA"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="ETA: --"
+                android:text="ETA · --"
                 android:textColor="#B3FFFFFF"
                 android:textSize="14sp" />
         </LinearLayout>
@@ -151,14 +155,23 @@
             android:layout_marginTop="16dp"
             android:orientation="horizontal">
 
+            <!-- SCRUM-107 F6: Recalibrate (glass-secondary) + End Navigation (muted danger).
+                 Vector icons replace inline emoji ("🔄") for visual polish. -->
+            <!-- SCRUM-107 F6 polish (2026-05-18 field test): gravity=center + paddingHorizontal=12dp
+                 + drawablePadding=8dp fixes the drawableStart icon vertical alignment with the text label. -->
             <Button
                 android:id="@+id/btnRecalibrate"
                 android:layout_width="0dp"
                 android:layout_height="44dp"
                 android:layout_marginEnd="8dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_button_outline"
-                android:text="🔄 Recalibrate"
+                android:background="@drawable/bg_button_outline_glass"
+                android:drawableStart="@drawable/ic_refresh"
+                android:drawablePadding="8dp"
+                android:drawableTint="#FFFFFF"
+                android:gravity="center"
+                android:paddingHorizontal="12dp"
+                android:text="Recalibrate"
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
                 android:textSize="13sp" />
@@ -169,7 +182,12 @@
                 android:layout_height="44dp"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_button_red"
+                android:background="@drawable/bg_button_red_action"
+                android:drawableStart="@drawable/ic_notification_close"
+                android:drawablePadding="8dp"
+                android:drawableTint="#FFFFFF"
+                android:gravity="center"
+                android:paddingHorizontal="12dp"
                 android:text="End Navigation"
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
@@ -196,7 +214,7 @@
             android:layout_height="32dp"
             android:layout_gravity="center"
             android:src="@drawable/ic_compass_arrow"
-            app:tint="#E31837" />
+            app:tint="@color/red_action" />
 
         <TextView
             android:id="@+id/tvCompassBearing"
@@ -294,21 +312,10 @@
                 android:minWidth="0dp"
                 android:minHeight="0dp" />
 
-            <!-- Quick Flip 180 Button -->
-            <Button
-                android:id="@+id/btnDebugFlip"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:layout_marginStart="4dp"
-                android:background="@drawable/bg_button_small"
-                android:paddingHorizontal="8dp"
-                android:text="↩️ Flip"
-                android:textColor="#FFFFFF"
-                android:textSize="10sp"
-                android:minWidth="0dp"
-                android:minHeight="0dp" />
+            <!-- SCRUM-107 F6: btnDebugFlip removed (Arda confirmed 16 May 2026 — 'neredeyse hiç kullanmadık').
+                 flip180Degrees() method also removed; only btnDebugRecalibrate remains as quick debug action. -->
 
-            <Button
+<Button
                 android:id="@+id/btnShareLogs"
                 android:layout_width="wrap_content"
                 android:layout_height="28dp"

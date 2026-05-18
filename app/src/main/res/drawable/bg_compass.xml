@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    SCRUM-107 F6: compass ring background.
+    Single <shape> so it inflates to GradientDrawable, enabling programmatic
+    setStroke(width, color) from updateCompassRingColor(GpsQuality) in ArNavigationActivity.
+    Default stroke is status_success (green) — overwritten on the first GPS sample dispatched
+    via processGPSSample (mirrors Stage 4's f3Overlay.updateGpsQuality channel).
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
-
-    <solid android:color="#CC1A1A2E" />
+    <solid android:color="#94000000" />
     <stroke
         android:width="2dp"
-        android:color="#E31837" />
+        android:color="@color/status_success" />
     <size
         android:width="70dp"
         android:height="70dp" />

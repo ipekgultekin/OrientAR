@@ -1,10 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-
-    <solid android:color="#CC1A1A2E" />
-    <corners android:radius="16dp" />
-    <stroke
-        android:width="1dp"
-        android:color="#33FFFFFF" />
-</shape>
+<!--
+    SCRUM-107 F6: premium glass card background.
+    Layer 1 — base color rgba(10,10,25,0.82) ≈ #D10A0A19 with 1px rgba(255,255,255,0.12) border.
+    Layer 2 — top-down specular highlight gradient rgba(255,255,255,0.05) → rgba(255,255,255,0.018).
+    Backdrop blur intentionally omitted (XML drawable limitation + locked per K1 — base color simulates dark glass).
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#D10A0A19" />
+            <corners android:radius="16dp" />
+            <stroke
+                android:width="1dp"
+                android:color="#1FFFFFFF" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#0DFFFFFF"
+                android:endColor="#05FFFFFF"
+                android:type="linear" />
+            <corners android:radius="16dp" />
+        </shape>
+    </item>
+</layer-list>
