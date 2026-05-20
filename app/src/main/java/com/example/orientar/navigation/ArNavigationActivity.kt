@@ -2893,12 +2893,17 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             // lives in tvDestinationName hero, so the prior "$startName → $endName$emoji"
             // pattern duplicated the destination. New format: "from $origin{ emoji}".
             //
-            // SCRUM-107 F6 polish (2026-05-18): when origin is GPS-derived (no named start node),
-            // show "Your Location" instead of the generic "Start" placeholder sentinel. The full
-            // F8 Your-Location flow (with explicit GO button) will supersede this interim mapping.
+            // SCRUM-107 F8 (D6, 2026-05-19): supersedes the F6 polish string-match sentinel
+            // ("Start" → "Your Location") with an explicit intent-extra check. The virtual-start
+            // flow (chip → FAB → startArActivityFromVirtual) puts START_MODE=VIRTUAL in the
+            // launch intent, and handleVirtualStartNavigation's documented invariant
+            // (ArNavigationActivity.kt L1391 KDoc) confirms selectedStartNode stays null on
+            // that path — so the intent extra is the authoritative source.
+            val isVirtualStart = intent.getStringExtra("START_MODE") == "VIRTUAL"
             val rawStartName = selectedStartNode?.name
             val displayStartName = when {
-                rawStartName.isNullOrBlank() || rawStartName == "Start" -> "Your Location"
+                isVirtualStart -> "Your Location"
+                rawStartName.isNullOrBlank() -> "Unknown"  // defensive — named flow always sets a non-blank name
                 else -> rawStartName
             }
             val fusionIndicator = when {

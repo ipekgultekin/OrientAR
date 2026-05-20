@@ -74,7 +74,15 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     // State
     private var isARMode = false // default 2D (Map)
 
-    // --- My Location chip state (SCRUM-56 Phase 2) ---
+    // SCRUM-107 F8: indicates that the user has chosen "current GPS location" as the start
+    // origin via the My Location chip. When true, selectedFromNode stays null and inputFrom
+    // displays "Current Location" placeholder. The actual GPS fetch is deferred until FAB
+    // press (lazy fetch per V6=Lazy decision). Cleared by: chip toggle-off (C4),
+    // search-dialog item-click on From (C1), and map-marker "Set as Start" (C2). The swap
+    // path (C3) cannot reach a flag-clear because swap is disabled while flag is true (D3).
+    private var useCurrentLocationAsStart: Boolean = false
+
+    // --- My Location chip state (SCRUM-56 Phase 2; refactored for SCRUM-107 F8 — lazy fetch) ---
     private val fusedLocationClient: FusedLocationProviderClient by lazy {
         LocationServices.getFusedLocationProviderClient(this)
     }
@@ -331,42 +339,133 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     /**
-     * Validates selections and launches the appropriate navigation flow (AR or 2D Map).
+     * Validates selections and launches the appropriate navigation flow.
+     *
+     * SCRUM-107 F8: 4-branch matrix based on (isARMode × useCurrentLocationAsStart):
+     *   - false × false: 2D + named   → launchExternalMap(named-origin lat/lng, dest)
+     *   - true  × false: AR  + named  → startArActivity(startNode.id, targetNode.id)
+     *   - false × true:  2D + current → fetch GPS → launchExternalMap(gps lat/lng, dest)
+     *   - true  × true:  AR  + current → fetch GPS → startArActivityFromVirtual(...)
+     *
+     * The current-location branches share startNavigationFromCurrentLocation() which owns the
+     * lazy GPS fetch (V6=Lazy) and the 4 existing guards (fetching flag, permission, services-on,
+     * accuracy gate). Per F8 D1 the destination precondition lives only here (not on chip tap).
      */
     private fun handleNavigationStart() {
-        val fromText = inputFrom.text.toString().trim()
         val toText = inputTo.text.toString().trim()
-
-        if (fromText.isEmpty() || toText.isEmpty()) {
-            Toast.makeText(this, "Please select both start and destination", Toast.LENGTH_SHORT).show()
+        if (toText.isEmpty()) {
+            Toast.makeText(this, "Please select a destination", Toast.LENGTH_SHORT).show()
             return
         }
-
-        if (fromText == toText) {
-            Toast.makeText(this, "Start and destination must be different", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // Validate that text matches an actual destination
-        val startNode = selectedFromNode ?: destinationList.find { (it.name ?: "") == fromText }
         val targetNode = selectedToNode ?: destinationList.find { (it.name ?: "") == toText }
-
-        if (startNode == null) {
-            Toast.makeText(this, "Invalid starting point: \"$fromText\"", Toast.LENGTH_SHORT).show()
-            return
-        }
         if (targetNode == null) {
             Toast.makeText(this, "Invalid destination: \"$toText\"", Toast.LENGTH_SHORT).show()
             return
         }
 
-        if (isARMode) {
-            // Launch AR Activity with selected Node IDs
-            startArActivity(startNode.id, targetNode.id)
+        if (useCurrentLocationAsStart) {
+            // Current-location branches (AR or 2D) — fetch GPS lazily then dispatch.
+            startNavigationFromCurrentLocation(targetNode)
         } else {
-            // Launch Google Maps (External Intent)
-            launchExternalMap(startNode, targetNode)
+            // Named-origin branches (AR or 2D) — validate From + dispatch immediately.
+            val fromText = inputFrom.text.toString().trim()
+            if (fromText.isEmpty()) {
+                Toast.makeText(this, "Please select a starting point or tap My Location", Toast.LENGTH_SHORT).show()
+                return
+            }
+            if (fromText == toText) {
+                Toast.makeText(this, "Start and destination must be different", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val startNode = selectedFromNode ?: destinationList.find { (it.name ?: "") == fromText }
+            if (startNode == null) {
+                Toast.makeText(this, "Invalid starting point: \"$fromText\"", Toast.LENGTH_SHORT).show()
+                return
+            }
+            if (isARMode) {
+                startArActivity(startNode.id, targetNode.id)
+            } else {
+                launchExternalMap(startNode.lat, startNode.lng, targetNode)
+            }
         }
+    }
+
+    /**
+     * SCRUM-107 F8: lazy GPS fetch for the current-location branches of the FAB matrix.
+     * Runs the 4 guards previously inside handleMyLocationTap (fetching flag, permission,
+     * services-on, accuracy gate), then dispatches to startArActivityFromVirtual (AR mode)
+     * or launchExternalMap with GPS-derived origin (2D mode).
+     */
+    @SuppressLint("MissingPermission")
+    private fun startNavigationFromCurrentLocation(targetNode: Node) {
+        // Guard 2: double-tap / parallel-fetch protection.
+        if (isFetchingLocation) {
+            Toast.makeText(this, "Already fetching location...", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // Guard 3: permission (FINE or COARSE).
+        val hasFine = ActivityCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarse = ActivityCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasFine && !hasCoarse) {
+            // Queue a re-invocation after permission grant — capture targetNode so the FAB
+            // press isn't lost across the permission round-trip.
+            pendingLocationAction = { startNavigationFromCurrentLocation(targetNode) }
+            locationPermissionRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+            return
+        }
+        // Guard 4: device-level location services on.
+        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val gpsEnabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        val netEnabled = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        if (!gpsEnabled && !netEnabled) {
+            Toast.makeText(this, "Please enable location services in device settings", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        isFetchingLocation = true
+        Toast.makeText(this, "Getting your location...", Toast.LENGTH_SHORT).show()
+        locationCancellationSource?.cancel()
+        val source = CancellationTokenSource()
+        locationCancellationSource = source
+
+        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, source.token)
+            .addOnSuccessListener { location ->
+                if (isFinishing || isDestroyed) return@addOnSuccessListener
+                isFetchingLocation = false
+                if (location == null) {
+                    Toast.makeText(this, "Could not get your location, please try again", Toast.LENGTH_SHORT).show()
+                    return@addOnSuccessListener
+                }
+                // Accuracy gate (D11) — refuse if GPS uncertainty exceeds snap-tolerance cap.
+                if (location.accuracy > GeoProjection.MAX_ACCURACY_M) {
+                    Toast.makeText(
+                        this,
+                        "GPS signal too weak (${location.accuracy.toInt()}m). Please move to an open area and try again.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@addOnSuccessListener
+                }
+                if (isARMode) {
+                    startArActivityFromVirtual(
+                        lat = location.latitude,
+                        lng = location.longitude,
+                        accuracy = location.accuracy,
+                        endId = targetNode.id
+                    )
+                } else {
+                    launchExternalMap(location.latitude, location.longitude, targetNode)
+                }
+            }
+            .addOnFailureListener { e ->
+                if (isFinishing || isDestroyed) return@addOnFailureListener
+                isFetchingLocation = false
+                android.util.Log.w("CampusTour", "getCurrentLocation failed", e)
+                Toast.makeText(this, "Could not get your location, please try again", Toast.LENGTH_SHORT).show()
+            }
     }
 
     /**
@@ -382,9 +481,14 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     /**
      * Opens an external map application (Google Maps) to show walking directions.
      * Uses a universal URL scheme.
+     *
+     * SCRUM-107 F8: signature refactored from (from: Node, to: Node) to
+     * (originLat, originLng, dest: Node). The named-origin call site extracts lat/lng from
+     * its Node; the new current-location call site passes raw GPS coordinates. Destination
+     * stays a Node because the route-selection screen always picks named destinations.
      */
-    private fun launchExternalMap(from: Node, to: Node) {
-        val uriString = "https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}&travelmode=walking"
+    private fun launchExternalMap(originLat: Double, originLng: Double, dest: Node) {
+        val uriString = "https://www.google.com/maps/dir/?api=1&origin=$originLat,$originLng&destination=${dest.lat},${dest.lng}&travelmode=walking"
 
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString))
         intent.setPackage("com.google.android.apps.maps")
@@ -441,6 +545,9 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
             dialog.window?.setBackgroundDrawableResource(R.drawable.bg_campus_dialog)
 
             dialogView.findViewById<LinearLayout>(R.id.btnSetStart).setOnClickListener {
+                // SCRUM-107 F8 (C2): user picked a real Node for From via map marker →
+                // exit current-location mode if active.
+                if (useCurrentLocationAsStart) clearCurrentLocationFlag()
                 inputFrom.setText(markerTitle, false)
                 selectedFromNode = selectedNode
                 Toast.makeText(this, "Start: $markerTitle", Toast.LENGTH_SHORT).show()
@@ -539,6 +646,9 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
             val selectedNode = destinationList.find { (it.name ?: "") == selectedName }
 
             if (isFromField) {
+                // SCRUM-107 F8 (C1): user picked a real Node for From via search dialog →
+                // exit current-location mode if active.
+                if (useCurrentLocationAsStart) clearCurrentLocationFlag()
                 inputFrom.setText(selectedName, false)
                 selectedFromNode = selectedNode
             } else {
@@ -568,38 +678,46 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     // ============================================================================================
 
     /**
-     * Entry point for the My Location chip tap. Fetches the user's current GPS position,
-     * validates accuracy, and launches AR with a virtual start intent.
+     * SCRUM-107 F8: chip tap is now a pure visual toggle. Pre-F8, this method launched AR
+     * directly via virtual-start intent (Phase 2 of SCRUM-56). F8 reverts to a Phase-1-style
+     * "fill From field" behavior, but with explicit "Current Location" sentinel rather than
+     * the prior "nearest named destination" approximation.
      *
-     * Unlike Phase 1 (which populated the From field with the nearest named destination), this
-     * handler launches AR directly — the phantom-node routing in [ArNavigationActivity] projects
-     * the user's GPS onto the nearest path edge and begins the route there.
+     * - Tap when flag=false → activate (set flag, fill From, update visuals, request permission)
+     * - Tap when flag=true  → deactivate (clear flag, empty From, restore visuals)
      *
-     * Required precondition: the user must have picked a destination first (selectedToNode
-     * non-null). Otherwise we show a clear, actionable Toast.
+     * GPS fetch is deferred until FAB press (lazy fetch per F8 V6 decision). The actual fetch
+     * lives in [startNavigationFromCurrentLocation] and runs only when the user commits via the
+     * GO button.
+     *
+     * Per F8 D1 the destination precondition is removed — chip can be tapped at any time.
      */
     @SuppressLint("MissingPermission")
     private fun handleMyLocationTap() {
-        // Guard 1: destination must be picked before we can route.
-        val targetNode = selectedToNode
-        if (targetNode == null) {
-            Toast.makeText(
-                this,
-                "Please select a destination first, then tap My Location.",
-                Toast.LENGTH_LONG
-            ).show()
-            return
+        if (useCurrentLocationAsStart) {
+            deactivateCurrentLocationFlag()
+        } else {
+            activateCurrentLocationFlag()
         }
+    }
 
-        // Guard 2: double-tap / parallel-fetch protection.
-        if (isFetchingLocation) {
-            Toast.makeText(this, "Already fetching location...", Toast.LENGTH_SHORT).show()
-            return
-        }
+    /**
+     * SCRUM-107 F8: enters current-location mode. Visual state activates immediately. Permission
+     * is requested eagerly (UX: avoid surprise at FAB press) but no GPS fetch yet.
+     */
+    private fun activateCurrentLocationFlag() {
+        useCurrentLocationAsStart = true
+        selectedFromNode = null
+        inputFrom.setText("Current Location")
+        chipMyLocation.isSelected = true
+        btnSwap.isEnabled = false
+        btnSwap.alpha = 0.4f
 
-        // Guard 3: permission — accept FINE or COARSE. FINE is preferred for high accuracy;
-        // COARSE is sufficient to avoid a permission-request loop if the user only granted
-        // approximate location.
+        // Request permission eagerly so the FAB press doesn't surprise the user with a dialog.
+        // We clear pendingLocationAction here because the chip activation does not need a
+        // post-permission re-invocation — visual state is already applied. The FAB-press path
+        // (startNavigationFromCurrentLocation) installs its own pendingLocationAction lambda
+        // when it actually needs the GPS.
         val hasFine = ActivityCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
@@ -607,75 +725,35 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
             this, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
         if (!hasFine && !hasCoarse) {
-            pendingLocationAction = { handleMyLocationTap() }
+            pendingLocationAction = null
             locationPermissionRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
-            return
         }
+    }
 
-        // Guard 4: device-level location services must be on (at least one provider).
-        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val gpsEnabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
-        val netEnabled = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-        if (!gpsEnabled && !netEnabled) {
-            Toast.makeText(
-                this,
-                "Please enable location services in device settings",
-                Toast.LENGTH_LONG
-            ).show()
-            return
-        }
+    /**
+     * SCRUM-107 F8: exits current-location mode via explicit chip toggle-off (D5). Clears flag,
+     * empties From, force-clears selectedFromNode (per V9 decision), restores chip + swap visuals.
+     */
+    private fun deactivateCurrentLocationFlag() {
+        useCurrentLocationAsStart = false
+        selectedFromNode = null
+        inputFrom.setText("")
+        chipMyLocation.isSelected = false
+        btnSwap.isEnabled = true
+        btnSwap.alpha = 1f
+    }
 
-        // Kick off the fetch.
-        isFetchingLocation = true
-        Toast.makeText(this, "Getting your location...", Toast.LENGTH_SHORT).show()
-
-        // Cancel any previous in-flight fetch; start a fresh cancellation source.
-        locationCancellationSource?.cancel()
-        val source = CancellationTokenSource()
-        locationCancellationSource = source
-
-        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, source.token)
-            .addOnSuccessListener { location ->
-                if (isFinishing || isDestroyed) return@addOnSuccessListener
-                isFetchingLocation = false
-
-                if (location == null) {
-                    Toast.makeText(
-                        this,
-                        "Could not get your location, please try again",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@addOnSuccessListener
-                }
-
-                // D11: accuracy gate — refuse if GPS uncertainty exceeds the snap tolerance cap.
-                if (location.accuracy > GeoProjection.MAX_ACCURACY_M) {
-                    Toast.makeText(
-                        this,
-                        "GPS signal too weak (${location.accuracy.toInt()}m). Please move to an open area and try again.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return@addOnSuccessListener
-                }
-
-                // All gates passed — launch AR with virtual-start intent.
-                startArActivityFromVirtual(
-                    lat = location.latitude,
-                    lng = location.longitude,
-                    accuracy = location.accuracy,
-                    endId = targetNode.id
-                )
-            }
-            .addOnFailureListener { e ->
-                if (isFinishing || isDestroyed) return@addOnFailureListener
-                isFetchingLocation = false
-                android.util.Log.w("CampusTour", "getCurrentLocation failed", e)
-                Toast.makeText(
-                    this,
-                    "Could not get your location, please try again",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+    /**
+     * SCRUM-107 F8: shared helper invoked by C1 (search-dialog item-click on From) and C2
+     * (map-marker "Set as Start"). Both paths replace the current-location sentinel with a real
+     * Node, so the caller is responsible for setting inputFrom and selectedFromNode AFTER this.
+     * This helper only resets the flag + visuals.
+     */
+    private fun clearCurrentLocationFlag() {
+        useCurrentLocationAsStart = false
+        chipMyLocation.isSelected = false
+        btnSwap.isEnabled = true
+        btnSwap.alpha = 1f
     }
 
     /**

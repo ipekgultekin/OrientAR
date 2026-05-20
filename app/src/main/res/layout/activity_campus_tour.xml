@@ -85,9 +85,10 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="5dp"
                     android:text="My location"
-                    android:textColor="@color/campus_chip_green_text"
+                    android:textColor="@color/chip_text_selector"
                     android:textSize="11sp"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:duplicateParentState="true" />
             </LinearLayout>
         </LinearLayout>
 
