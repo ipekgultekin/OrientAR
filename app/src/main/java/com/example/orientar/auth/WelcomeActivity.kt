@@ -144,7 +144,7 @@ fun WelcomeScreen() {
 
             Spacer(Modifier.height(36.dp))
 
-            // ── Student button ───────────────────────────────────────────
+            // Student button
             AnimatedVisibility(
                 visible = visible,
                 enter = fadeIn(tween(600, delayMillis = 700)) + slideInVertically(tween(600, delayMillis = 700)) { 40 }
@@ -165,7 +165,7 @@ fun WelcomeScreen() {
 
             Spacer(Modifier.height(12.dp))
 
-            // ── Leader button ────────────────────────────────────────────
+            // Leader button
             AnimatedVisibility(
                 visible = visible,
                 enter = fadeIn(tween(600, delayMillis = 800)) + slideInVertically(tween(600, delayMillis = 800)) { 40 }
@@ -183,7 +183,7 @@ fun WelcomeScreen() {
 
             Spacer(Modifier.height(12.dp))
 
-            // ── Guest button ─────────────────────────────────────────────
+            // Guest button
             AnimatedVisibility(
                 visible = visible,
                 enter = fadeIn(tween(600, delayMillis = 900)) + slideInVertically(tween(600, delayMillis = 900)) { 40 }

@@ -1,4 +1,5 @@
 package com.example.orientar.auth
+
 import android.util.Log
 import android.content.Intent
 import android.os.Bundle
@@ -38,7 +39,7 @@ class LeaderLoginActivity : ComponentActivity() {
     }
 }
 
-// ── Screens
+//Screens
 enum class LeaderLoginStep { LOGIN, CHANGE_PASSWORD }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -100,7 +101,7 @@ fun LeaderLoginScreen() {
     }
 }
 
-// ── Step 1: Login form
+//Login form
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LeaderLoginForm(
@@ -264,7 +265,7 @@ fun LeaderLoginForm(
     }
 }
 
-// ── Step 2: Change password screen
+//Change password screen
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChangePasswordScreen(
