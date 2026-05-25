@@ -123,7 +123,7 @@ fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
         Column(
             modifier = Modifier.fillMaxSize().padding(padding)
         ) {
-            // ── Hero header ───────────────────────────────────────────────────
+            //Hero header
             Box(
                 modifier = Modifier.fillMaxWidth()
                     .background(Brush.verticalGradient(listOf(MetuRedDark, MetuRed)))
@@ -157,7 +157,7 @@ fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
                 }
             }
 
-            // ── Content ───────────────────────────────────────────────────────
+            // Content
             Column(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp, vertical = 20.dp),

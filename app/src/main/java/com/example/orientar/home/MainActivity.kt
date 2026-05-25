@@ -1,4 +1,5 @@
 package com.example.orientar.home
+
 import android.util.Log
 import android.content.Intent
 import android.os.Bundle
@@ -216,7 +217,6 @@ fun HomeContent(userRole: String = "student", leaderDocId: String = "") {
             color = Color(0xFF999999), letterSpacing = 1.2.sp)
         Spacer(Modifier.height(12.dp))
 
-        // ── 2x2 grid for everyone ──────────────────────────────────────────────
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)

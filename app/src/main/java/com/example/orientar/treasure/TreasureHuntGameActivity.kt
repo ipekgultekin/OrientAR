@@ -34,7 +34,7 @@ import io.github.sceneview.loaders.ModelLoader
 import io.github.sceneview.math.Rotation
 import io.github.sceneview.node.ModelNode
 import kotlinx.coroutines.*
-import java.util.Locale
+
 
 class TreasureHuntGameActivity : AppCompatActivity() {
     private lateinit var arSceneView: ARSceneView
@@ -53,7 +53,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
     // Intervals
     private var lastCloudCheckTime = 0L
-    private val cloudCheckIntervalMs = 10000L
+    private val cloudCheckIntervalMs = 2000L
     private var lastOcrTime = 0L
     private val ocrIntervalMs = 1500L
 
@@ -259,7 +259,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
             Toast.makeText(this, "Hosting Cloud Anchor...", Toast.LENGTH_SHORT).show()
 
-            latestSession.hostCloudAnchorAsync(anchor, 60) { cloudAnchorId, state ->
+            latestSession.hostCloudAnchorAsync(anchor, 1) { cloudAnchorId, state ->
                 runOnUiThread {
                     isHosting = false
 
@@ -341,29 +341,23 @@ class TreasureHuntGameActivity : AppCompatActivity() {
             if (state == Anchor.CloudAnchorState.SUCCESS) {
                 runOnUiThread {
                     if (!modelPlaced) {
-                        Log.d(
-                            TAG_TRIGGER,
-                            "Triggered by Cloud Anchor for Q=${currentQuestion.id}"
-                        )
+                        Log.d(TAG_TRIGGER, "Triggered by Cloud Anchor for Q=${currentQuestion.id}")
                         placeModelOnAnchor(anchor, currentQuestion)
                     }
                 }
                 isResolving = false
 
+            } else if (state.isError) {
+                Log.e(TAG_RESOLVE, "Anchor failed. state=$state. Trying next...")
+
+                resolveAnchorListSequentially(
+                    session,
+                    anchorIds,
+                    index + 1
+                )
+
             } else {
-                if (state.isError) {
-                    Log.e(
-                        TAG_RESOLVE,
-                        "Anchor failed. Trying next..."
-                    )
-                }
-                runOnUiThread {
-                    resolveAnchorListSequentially(
-                        session,
-                        anchorIds,
-                        index + 1
-                    )
-                }
+                Log.d(TAG_RESOLVE, "Anchor still resolving. state=$state")
             }
         }
     }
