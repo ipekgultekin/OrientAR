@@ -10,9 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- ============================================================ -->
     <!-- NAVIGATION UI - Top Bar (Shown during navigation) -->
-    <!-- ============================================================ -->
     <LinearLayout
         android:id="@+id/layoutTopBar"
         android:layout_width="match_parent"
@@ -72,9 +70,7 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- ============================================================ -->
     <!-- NAVIGATION UI - Bottom Card (Shown during navigation) -->
-    <!-- ============================================================ -->
     <LinearLayout
         android:id="@+id/layoutBottomCard"
         android:layout_width="match_parent"
@@ -177,9 +173,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- ============================================================ -->
     <!-- COMPASS HUD (Left side during navigation) -->
-    <!-- ============================================================ -->
     <FrameLayout
         android:id="@+id/layoutCompassHud"
         android:layout_width="70dp"
@@ -210,9 +204,7 @@
             android:textStyle="bold" />
     </FrameLayout>
 
-    <!-- ============================================================ -->
     <!-- DEBUG TOGGLE BUTTON (Right side) -->
-    <!-- ============================================================ -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -249,9 +241,7 @@
             app:tint="#FFFFFF" />
     </LinearLayout>
 
-    <!-- ============================================================ -->
     <!-- DEBUG PANEL (Toggleable - Hidden by default) -->
-    <!-- ============================================================ -->
     <LinearLayout
         android:id="@+id/layoutDebugPanel"
         android:layout_width="match_parent"
@@ -359,9 +349,8 @@
                 android:textSize="11sp" />
         </ScrollView>
     </LinearLayout>
-    <!-- ============================================================ -->
+
     <!-- RECALCULATING BANNER (Center - shown during drift correction) -->
-    <!-- ============================================================ -->
     <TextView
         android:id="@+id/tvRecalculating"
         android:layout_width="wrap_content"
@@ -376,9 +365,7 @@
         android:textStyle="bold"
         android:visibility="gone" />
 
-    <!-- ============================================================ -->
     <!-- CALIBRATION PANEL (Center - shown during calibration steps) -->
-    <!-- ============================================================ -->
     <LinearLayout
         android:id="@+id/layoutCalibration"
         android:layout_width="300dp"
@@ -442,9 +429,7 @@
             android:visibility="gone" />
     </LinearLayout>
 
-    <!-- ============================================================ -->
     <!-- ROUTE SELECTION PANEL (Fallback - rarely shown) -->
-    <!-- ============================================================ -->
     <LinearLayout
         android:id="@+id/layoutRouteSelection"
         android:layout_width="320dp"
@@ -509,9 +494,7 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- ============================================================ -->
     <!-- OLD DEBUG PANEL (Keep for backward compatibility, hidden) -->
-    <!-- ============================================================ -->
     <ScrollView
         android:id="@+id/debugPanel"
         android:layout_width="match_parent"
@@ -531,9 +514,7 @@
             android:textSize="12sp" />
     </ScrollView>
 
-    <!-- ============================================================ -->
     <!-- ARRIVAL CELEBRATION OVERLAY -->
-    <!-- ============================================================ -->
     <include
         android:id="@+id/layoutArrivalCelebration"
         layout="@layout/layout_arrival_celebration"

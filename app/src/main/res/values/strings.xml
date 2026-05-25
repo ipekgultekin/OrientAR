@@ -1,13 +1,11 @@
 <resources>
 
-    <!-- ════════════════════════════════════════════════════════ -->
-    <!-- APP                                                      -->
-    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- APP -->
     <string name="app_name">OrientAR</string>
 
-    <!-- ════════════════════════════════════════════════════════ -->
-    <!-- AR NAVIGATION — Route Selection Screen                   -->
-    <!-- ════════════════════════════════════════════════════════ -->
+
+    <!-- AR NAVIGATION — Route Selection Screen -->
+
     <string name="create_route_title">CREATE A ROUTE</string>
     <string name="starting_point_label">Starting Point:</string>
     <string name="destination_point_label">Destination Point:</string>

@@ -57,9 +57,8 @@ android {
 
 dependencies {
 
-    // ══════════════════════════════════════════════════════════════
+
     // CORE ANDROID
-    // ══════════════════════════════════════════════════════════════
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
@@ -68,9 +67,8 @@ dependencies {
     implementation(libs.androidx.junit.ktx)
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
 
-    // ══════════════════════════════════════════════════════════════
+
     // JETPACK COMPOSE
-    // ══════════════════════════════════════════════════════════════
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
@@ -86,36 +84,27 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
 
-    // ══════════════════════════════════════════════════════════════
     // ARCORE & SCENEVIEW (single version — used by Treasure Hunt + AR Navigation)
-    // ══════════════════════════════════════════════════════════════
     implementation("com.google.ar:core:1.48.0")
     implementation("io.github.sceneview:arsceneview:2.3.0")
     implementation("io.github.sceneview:sceneview:2.3.0")
 
-    // ══════════════════════════════════════════════════════════════
     // GOOGLE PLAY SERVICES (Maps + Location for AR Navigation)
-    // ══════════════════════════════════════════════════════════════
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.android.gms:play-services-location:21.1.0")
 
-    // ══════════════════════════════════════════════════════════════
     // ML KIT (OCR - Text Recognition)
-    // ══════════════════════════════════════════════════════════════
     implementation("com.google.mlkit:text-recognition:16.0.0")
     implementation(libs.play.services.mlkit.text.recognition.common)
     implementation(libs.androidx.espresso.core)
 
-    // ══════════════════════════════════════════════════════════════
     // NETWORKING (Retrofit + OkHttp)
-    // ══════════════════════════════════════════════════════════════
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // ══════════════════════════════════════════════════════════════
+
     // FIREBASE
-    // ══════════════════════════════════════════════════════════════
     implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-auth-ktx")
@@ -123,9 +112,8 @@ dependencies {
     implementation("com.google.firebase:firebase-common-ktx")
     implementation("com.google.firebase:firebase-appcheck-debug")
 
-    // ══════════════════════════════════════════════════════════════
+
     // TESTING
-    // ══════════════════════════════════════════════════════════════
     testImplementation("junit:junit:4.13.2")
     testImplementation("io.mockk:mockk:1.13.13")
     testImplementation("org.json:json:20240303")
