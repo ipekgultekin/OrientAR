@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SCRUM-107 F7: circular badge behind the arrival check icon.
+     status_success (#4CAF50) at 15% alpha fill (#264CAF50) + 2dp 45%-alpha border (#734CAF50). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#264CAF50" />
+    <stroke
+        android:width="2dp"
+        android:color="#734CAF50" />
+</shape>

@@ -88,6 +88,25 @@
     <string name="notif_flipped">Heading flipped 180°</string>
 
     <!-- ════════════════════════════════════════════════════════ -->
+    <!-- SCRUM-107 F7 — error cards + exit dialog + arrival          -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- F7 error cards -->
+    <string name="notif_too_far_title">Too far from any path</string>
+    <string name="notif_too_far_desc">Walk closer to a campus walkway and try again.</string>
+    <string name="notif_no_route_title">No route available</string>
+    <string name="notif_no_route_desc">Couldn\'t find a path to this destination.</string>
+    <string name="notif_gps_weak_title">GPS signal too weak</string>
+    <string name="notif_gps_weak_desc">Accuracy %1$dm. Move to an open area and try again.</string>
+    <string name="action_ok">OK</string>
+    <!-- F7 exit dialog -->
+    <string name="exit_dialog_title">End navigation?</string>
+    <string name="exit_dialog_subtitle">You\'ll return to the map.</string>
+    <string name="exit_dialog_confirm">End navigation</string>
+    <string name="exit_dialog_cancel">Keep navigating</string>
+    <!-- F7 arrival -->
+    <string name="arrival_title">You\'ve arrived!</string>
+
+    <!-- ════════════════════════════════════════════════════════ -->
     <!-- SCRUM-107 Step 2B — Calibration overlay strings (F2 + F4) -->
     <!-- ════════════════════════════════════════════════════════ -->
     <string name="cal_f2_compass_kicker">Compass calibration in</string>

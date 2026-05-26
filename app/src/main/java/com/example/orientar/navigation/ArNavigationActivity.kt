@@ -16,6 +16,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.graphics.drawable.GradientDrawable
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -1133,13 +1134,21 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         // End navigation button
         btnEndNavigation.setOnClickListener {
             performHapticFeedback(it)
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("End Navigation?")
-                .setMessage("Are you sure you want to stop navigating?")
-                .setPositiveButton("End") { _, _ -> finish() }
-                .setNegativeButton("Cancel", null)
-                .show()
+            showExitConfirmation()
         }
+
+        // SCRUM-107 F7: back button / gesture now routes through the SAME exit confirmation
+        // (symmetry — previously back silently finished the activity). Gated out of the
+        // arrival-celebration state, where back should close directly without confirming.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (layoutArrivalCelebration.visibility == View.VISIBLE) {
+                    finish()
+                } else {
+                    showExitConfirmation()
+                }
+            }
+        })
         // Arrival close button
         btnArrivalClose.setOnClickListener {
             performHapticFeedback(it)
@@ -1150,6 +1159,30 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             performHapticFeedback(it)
             FileLogger.shareLogFile(this)
         }
+    }
+
+    /**
+     * SCRUM-107 F7: glass-aesthetic exit confirmation. Shared by the End Navigation button
+     * and the OnBackPressedCallback (Part 2 symmetry). Mirrors CampusTour's setView + transparent
+     * window pattern so bg_glass_card's rounded corners show without platform dialog chrome.
+     * finish() is sufficient for teardown — onPause/onDestroy handle sensor + GPS + overlay cleanup.
+     */
+    private fun showExitConfirmation() {
+        val view = layoutInflater.inflate(R.layout.dialog_exit_confirmation, null)
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setView(view)
+            .create()
+        dialog.window?.setBackgroundDrawable(
+            android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+        )
+        view.findViewById<View>(R.id.btnExitConfirm).setOnClickListener {
+            dialog.dismiss()
+            finish()
+        }
+        view.findViewById<View>(R.id.btnExitCancel).setOnClickListener {
+            dialog.dismiss()
+        }
+        dialog.show()
     }
 
     private fun performHapticFeedback(view: View) {
@@ -1504,30 +1537,32 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             }
 
             is PhantomRouteResult.TooFar -> {
-                Toast.makeText(
-                    this,
-                    "You're too far from any path. Please walk closer.",
-                    Toast.LENGTH_LONG
-                ).show()
-                finish()
+                // SCRUM-107 F7: blocking error → persistent red card. finish() deferred to the
+                // OK button so the user actually reads the reason before the screen tears down.
+                notifications.showError(
+                    title = getString(R.string.notif_too_far_title),
+                    description = getString(R.string.notif_too_far_desc),
+                    action = NotificationManager.ErrorAction.Single(getString(R.string.action_ok)) { finish() }
+                )
             }
 
             is PhantomRouteResult.AccuracyTooLow -> {
-                Toast.makeText(
-                    this,
-                    "GPS signal too weak (${result.accuracy.toInt()}m). Please move to an open area.",
-                    Toast.LENGTH_LONG
-                ).show()
-                finish()
+                // SCRUM-107 F7: fixable warning → persistent amber card. The × dismiss fires finish().
+                notifications.showWarning(
+                    title = getString(R.string.notif_gps_weak_title),
+                    description = getString(R.string.notif_gps_weak_desc, result.accuracy.toInt()),
+                    dismissable = true,
+                    onDismiss = { finish() }
+                )
             }
 
             is PhantomRouteResult.NoPath -> {
-                Toast.makeText(
-                    this,
-                    "No route available to destination.",
-                    Toast.LENGTH_LONG
-                ).show()
-                finish()
+                // SCRUM-107 F7: blocking error → persistent red card; finish() deferred to OK.
+                notifications.showError(
+                    title = getString(R.string.notif_no_route_title),
+                    description = getString(R.string.notif_no_route_desc),
+                    action = NotificationManager.ErrorAction.Single(getString(R.string.action_ok)) { finish() }
+                )
             }
         }
     }
