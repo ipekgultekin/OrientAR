@@ -4,7 +4,6 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- AR kamera -->
     <io.github.sceneview.ar.ARSceneView
         android:id="@+id/sceneView"
         android:layout_width="0dp"
@@ -14,7 +13,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Üstte "Question X" -->
     <TextView
         android:id="@+id/tvQuestionTitle"
         android:layout_width="wrap_content"
@@ -29,7 +27,6 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- Timer: 00:00'dan sayan Chronometer -->
     <Chronometer
         android:id="@+id/chronoTimer"
         android:layout_width="wrap_content"
@@ -46,7 +43,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Kapatma butonu -->
     <Button
         android:id="@+id/btnClose"
         android:layout_width="36dp"
@@ -58,7 +54,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_margin="16dp" />
 
-    <!-- Alt taraftaki soru text alanı -->
     <LinearLayout
         android:id="@+id/questionContainer"
         android:layout_width="0dp"
@@ -92,7 +87,6 @@
             android:layout_marginStart="8dp" />
     </LinearLayout>
 
-    <!-- En alttaki nav bar (şimdilik statik) -->
     <LinearLayout
         android:id="@+id/bottomNav"
         android:layout_width="0dp"

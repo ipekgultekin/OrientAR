@@ -16,8 +16,7 @@ private val MetuRed = Color(0xFF8B0000)
 
 /**
  * Shared bottom navigation bar used across all activities.
- * Usage:
- *   SharedBottomBar(userRole = userRole)
+ * Usage: SharedBottomBar(userRole = userRole)
  */
 @Composable
 fun SharedBottomBar(userRole: String = "student") {

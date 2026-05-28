@@ -1,4 +1,5 @@
 package com.example.orientar.auth
+
 import android.util.Log
 import android.content.Intent
 import android.os.Bundle
@@ -32,7 +33,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 
-// ─── Which step the student is on ───────────────────────────────────────────
+//Which step the student is on
 private enum class StudentScreen { INVITATION, LOGIN, REGISTER }
 
 class StudentLoginActivity : ComponentActivity() {
@@ -54,7 +55,7 @@ fun StudentLoginScreen() {
 
     var currentScreen by remember { mutableStateOf(StudentScreen.INVITATION) }
 
-    // ── Invitation state ─────────────────────────────────────────────────────
+    // Invitation state
     var invitationCode    by remember { mutableStateOf("") }
     var invitationError   by remember { mutableStateOf("") }
     var invitationLoading by remember { mutableStateOf(false) }
@@ -63,14 +64,14 @@ fun StudentLoginScreen() {
     var verifiedGroupId       by remember { mutableStateOf("") }
     var verifiedStudentNumber by remember { mutableStateOf("") }
     var verifiedEmail         by remember { mutableStateOf("") }
-    // ── Login state ──────────────────────────────────────────────────────────
+    // Login state
     var loginEmail           by remember { mutableStateOf("") }
     var loginPassword        by remember { mutableStateOf("") }
     var loginPasswordVisible by remember { mutableStateOf(false) }
     var loginError           by remember { mutableStateOf("") }
     var loginLoading         by remember { mutableStateOf(false) }
 
-    // ── Register state ───────────────────────────────────────────────────────
+    // Register state
     var regFirstName       by remember { mutableStateOf("") }
     var regLastName        by remember { mutableStateOf("") }
     var regEmail           by remember { mutableStateOf("") }
@@ -79,7 +80,7 @@ fun StudentLoginScreen() {
     var regError           by remember { mutableStateOf("") }
     var regLoading         by remember { mutableStateOf(false) }
 
-    // ── Password validation: min 8 chars, 1 digit, no . , * ─────────────────
+    // Password validation: min 8 chars, 1 digit, no . , *
     fun validatePassword(pw: String): String? = when {
         pw.length < 8                              -> "Password must be at least 8 characters."
         !pw.any { it.isDigit() }                   -> "Password must contain at least one number."
@@ -87,7 +88,7 @@ fun StudentLoginScreen() {
         else                                       -> null
     }
 
-    // ── Step 1: Verify invitation code in Firestore ──────────────────────────
+    // Verify invitation code in Firestore
     // Looks up invitation_codes/{CODE}, checks it exists and hasn't been used yet
     fun verifyCode() {
         if (invitationCode.trim().isEmpty()) {
@@ -151,7 +152,7 @@ fun StudentLoginScreen() {
             }
     }
 
-    // ── Step 2a: Sign in existing student via Firebase Auth ──────────────────
+    // Sign in existing student via Firebase Auth
     fun signIn() {
         if (loginEmail.trim().isEmpty() || loginPassword.isEmpty()) {
             loginError = "Please fill in all fields."
@@ -180,9 +181,8 @@ fun StudentLoginScreen() {
             }
     }
 
-    // ── Step 2b: Register new student ────────────────────────────────────────
-    // Flow: validate fields → Firebase Auth createUser
-    //       → mark code as used → save user doc in Firestore → add to group
+    // Register new student
+    // Flow: validate fields → Firebase Auth createUser → mark code as used → save user doc in Firestore → add to group
     fun register() {
         when {
             regFirstName.trim().isEmpty() -> {
@@ -390,9 +390,6 @@ fun StudentLoginScreen() {
             }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // UI
-    // ─────────────────────────────────────────────────────────────────────────
     Scaffold(
         topBar = {
             TopAppBar(
@@ -423,7 +420,7 @@ fun StudentLoginScreen() {
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
 
-            // ── SCREEN 1: INVITATION CODE ────────────────────────────────
+            // Invitation code screen
             AnimatedVisibility(
                 visible = currentScreen == StudentScreen.INVITATION,
                 enter = fadeIn(tween(300)) + slideInHorizontally { it },
@@ -492,7 +489,7 @@ fun StudentLoginScreen() {
                 }
             }
 
-            // ── SCREEN 2: LOGIN ──────────────────────────────────────────
+            // Login screen
             AnimatedVisibility(
                 visible = currentScreen == StudentScreen.LOGIN,
                 enter = fadeIn(tween(300)) + slideInHorizontally { it },
@@ -562,7 +559,7 @@ fun StudentLoginScreen() {
                 }
             }
 
-            // ── SCREEN 3: REGISTER ───────────────────────────────────────
+            // Register screen
             AnimatedVisibility(
                 visible = currentScreen == StudentScreen.REGISTER,
                 enter = fadeIn(tween(300)) + slideInHorizontally { it },

@@ -1,8 +1,6 @@
 package com.example.orientar.treasure
 
-import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -23,7 +21,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orientar.R
-import com.example.orientar.home.MainActivity
 import com.google.firebase.firestore.FirebaseFirestore
 import java.util.Locale
 

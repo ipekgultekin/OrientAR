@@ -10,7 +10,6 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Üst bar: logo + başlık -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="56dp"
@@ -36,7 +35,6 @@
                 android:textColor="#B30000" />
         </LinearLayout>
 
-        <!-- Üst görsel (mockuptaki foto) -->
         <ImageView
             android:id="@+id/imgHero"
             android:layout_width="match_parent"
@@ -45,7 +43,6 @@
             android:src="@drawable/campus_banner"
             android:contentDescription="Campus banner" />
 
-        <!-- Welcome yazısı -->
         <TextView
             android:id="@+id/tvWelcome"
             android:layout_width="match_parent"
@@ -58,14 +55,12 @@
             android:textColor="#FFFFFF"
             android:background="#B30000" />
 
-        <!-- Kartlar -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- 1. satır: Campus Tour, FAQ, Treasure Hunt -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -109,7 +104,6 @@
                         android:textStyle="bold" />
                 </LinearLayout>
 
-                <!-- Treasure Hunt kartı - TIKLANACAK -->
                 <LinearLayout
                     android:id="@+id/cardTreasureHunt"
                     android:layout_width="0dp"
@@ -133,7 +127,6 @@
 
             </LinearLayout>
 
-            <!-- 2. satır: Student Societies, Announcements -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -178,7 +171,6 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Alt navigation (şimdilik sadece text) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="64dp"
