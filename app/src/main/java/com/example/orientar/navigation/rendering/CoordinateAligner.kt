@@ -114,6 +114,15 @@ class CoordinateAligner {
     private var dualDeltaCompleted = false
     private var lastDualDeltaProgressLog = 0L
 
+    /**
+     * SCRUM-107 Step 2C — fired during dual-delta wait to report progress to F3.
+     * Args: (gpsDistanceM, arDistanceM, gpsAccuracyM, weight).
+     * Called from the throttled-progress block AND from the weight-below-threshold block.
+     * NOT called after `dualDeltaCompleted = true` (early-returns at L203).
+     * Cleared in ArNavigationActivity.onDestroy phase 7b for safety.
+     */
+    var progressCallback: ((Float, Float, Float, Float) -> Unit)? = null
+
 
     /**
      * Initializes the yaw offset using compass bearing and AR camera orientation.
@@ -239,6 +248,13 @@ class CoordinateAligner {
                     "arDisp=${String.format("%.1f", arDistance)}m/${MIN_AR_DISPLACEMENT_FOR_ALIGNMENT}m, " +
                     "accuracy=${String.format("%.1f", gpsAccuracy)}m, weight=${String.format("%.2f", gpsDistance / gpsAccuracy)}")
             }
+            // SCRUM-107 Step 2C — push live progress to F3 (no throttle: F3 updates every sample)
+            progressCallback?.invoke(
+                gpsDistance.toFloat(),
+                arDistance.toFloat(),
+                gpsAccuracy,
+                if (gpsAccuracy > 0f) (gpsDistance / gpsAccuracy).toFloat() else 0f
+            )
             return false
         }
 
@@ -288,6 +304,13 @@ class CoordinateAligner {
         }
 
         FileLogger.d(TAG, "Dual-delta: weight ${String.format("%.2f", weight)} below threshold $MIN_ALIGNMENT_WEIGHT, waiting for more displacement")
+        // SCRUM-107 Step 2C — push live progress to F3 (weight-below-threshold path)
+        progressCallback?.invoke(
+            gpsDistance.toFloat(),
+            arDistance.toFloat(),
+            gpsAccuracy,
+            weight.toFloat()
+        )
         return false
     }
 

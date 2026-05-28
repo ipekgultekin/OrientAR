@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    F2 pre-phase countdown overlay (3 → 2 → 1 → fade out).
+    Full-screen translucent backdrop; centered countdown stack with kicker,
+    big number, hint icon area, hint title/sub, and an optional ready pill
+    (shown only in WALK_PRE mode).
+    SCRUM-107 Step 2B — inflated by F2CountdownOverlay.kt.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#9F000000"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:layout_gravity="center"
+        android:padding="24dp"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <TextView
+            android:id="@+id/tvF2Kicker"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#BDFFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:letterSpacing="-0.01"/>
+
+        <TextView
+            android:id="@+id/tvF2Number"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_white"
+            android:textSize="70sp"
+            android:textStyle="bold"
+            android:letterSpacing="-0.06"
+            android:layout_marginTop="8dp"/>
+
+        <FrameLayout
+            android:layout_width="140dp"
+            android:layout_height="100dp"
+            android:layout_marginTop="14dp"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+            <ImageView
+                android:id="@+id/ivF2Icon"
+                android:layout_width="40dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_phone_flat"
+                android:contentDescription="@null"/>
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/tvF2HintTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_white"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:letterSpacing="-0.01"
+            android:layout_marginTop="14dp"/>
+
+        <TextView
+            android:id="@+id/tvF2HintSub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_white_secondary"
+            android:textSize="10sp"
+            android:textStyle="italic"
+            android:layout_marginTop="4dp"/>
+
+        <LinearLayout
+            android:id="@+id/layoutF2ReadyPill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="9dp"
+            android:layout_marginTop="14dp"
+            android:visibility="gone">
+            <ImageView
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:src="@drawable/ic_notification_check"
+                android:tint="@color/status_success"
+                android:contentDescription="@null"/>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#E0FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:layout_marginStart="6dp"
+                android:text="@string/cal_f2_ready_pill"/>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

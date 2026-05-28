@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Instruction notification — neutral guidance ("Hold phone upright...").
+    SCRUM-107 Hot Fix #3: premium pattern. Glass card with white tint overlay,
+    36dp icon container with 18dp icon, unified 13sp/bold title + 11sp description.
+    IDs preserved: notification_icon, notification_title, notification_description
+    (read by NotificationManager.kt).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:background="@drawable/bg_notification_instruction"
+    android:paddingHorizontal="15dp"
+    android:paddingVertical="13dp"
+    android:gravity="center_vertical">
+
+    <FrameLayout
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:background="@drawable/bg_icon_container_instruction"
+        android:layout_marginEnd="12dp">
+        <ImageView
+            android:id="@+id/notification_icon"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:src="@drawable/ic_notification_info"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:tint="#FFFFFF"/>
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/notification_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_white"
+            android:letterSpacing="-0.01"/>
+        <TextView
+            android:id="@+id/notification_description"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:textColor="@color/text_white_secondary"
+            android:lineSpacingMultiplier="1.4"
+            android:layout_marginTop="4dp"
+            android:visibility="gone"/>
+    </LinearLayout>
+</LinearLayout>

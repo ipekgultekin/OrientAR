@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SCRUM-107 F7: glass-aesthetic exit confirmation dialog.
+    Inflated via AlertDialog.Builder(this).setView(...) with a transparent window background
+    so bg_glass_card's rounded corners + glass surface show (mirrors CampusTour's setView pattern).
+    Button IDs (btnExitConfirm / btnExitCancel) wired in ArNavigationActivity.showExitConfirmation().
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="300dp"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_glass_card"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:padding="24dp">
+
+    <!-- Icon badge -->
+    <FrameLayout
+        android:layout_width="46dp"
+        android:layout_height="46dp"
+        android:background="@drawable/bg_exit_icon_badge">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_flag_off"
+            android:contentDescription="@null"
+            android:tint="@color/red_action" />
+    </FrameLayout>
+
+    <!-- Title -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="@string/exit_dialog_title"
+        android:textColor="@color/text_white"
+        android:textSize="17sp"
+        android:textStyle="bold" />
+
+    <!-- Subtitle -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="@string/exit_dialog_subtitle"
+        android:textColor="@color/text_white_secondary"
+        android:textSize="12sp" />
+
+    <!-- Primary: End navigation -->
+    <Button
+        android:id="@+id/btnExitConfirm"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="20dp"
+        android:background="@drawable/bg_button_red_action"
+        android:text="@string/exit_dialog_confirm"
+        android:textAllCaps="false"
+        android:textColor="@color/text_white"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <!-- Secondary: Keep navigating -->
+    <Button
+        android:id="@+id/btnExitCancel"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_button_outline_glass"
+        android:text="@string/exit_dialog_cancel"
+        android:textAllCaps="false"
+        android:textColor="@color/text_white"
+        android:textSize="15sp" />
+</LinearLayout>

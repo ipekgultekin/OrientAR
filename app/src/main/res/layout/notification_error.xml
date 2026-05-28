@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Error notification — blocker with optional action buttons.
+    SCRUM-107 Hot Fix #3: premium vertical layout. 36dp red icon container,
+    header row (icon + title + description), action row (end-aligned).
+    IDs preserved: notification_icon, notification_title, notification_description,
+    notification_actions (read by NotificationManager.kt — buttons added dynamically
+    via addActionButton()).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_notification_error"
+    android:paddingHorizontal="15dp"
+    android:paddingVertical="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="top">
+
+        <FrameLayout
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_icon_container_error"
+            android:layout_marginEnd="12dp">
+            <ImageView
+                android:id="@+id/notification_icon"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:src="@drawable/ic_notification_error"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:tint="@color/orientar_primary"/>
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/notification_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_white"
+                android:letterSpacing="-0.01"/>
+            <TextView
+                android:id="@+id/notification_description"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textColor="@color/text_white_secondary"
+                android:lineSpacingMultiplier="1.4"
+                android:layout_marginTop="4dp"
+                android:visibility="gone"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!--
+        Action container — populated programmatically by NotificationManager.addActionButton().
+        Buttons currently use bg_button_red (primary) and bg_button_outline (secondary)
+        via the existing addActionButton() helper. The new bg_button_error_primary.xml
+        gradient drawable is available for a future patch that wires it in.
+    -->
+    <LinearLayout
+        android:id="@+id/notification_actions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end"
+        android:layout_marginTop="13dp"
+        android:visibility="gone"/>
+</LinearLayout>

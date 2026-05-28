@@ -65,4 +65,125 @@
     <string name="compass_instruction">Hold phone flat and rotate slowly\nCalibrating compass…</string>
     <string name="gps_instruction">Acquiring GPS signal…\nStand in open area.</string>
 
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- SCRUM-107 — Unified Notification Strings                 -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <string name="notif_compass_ready">Compass ready</string>
+    <string name="notif_compass_timeout_title">Compass calibration timed out</string>
+    <string name="notif_compass_timeout_desc">Proceeding with reduced accuracy</string>
+    <string name="notif_heading_calibrated">Heading calibrated</string>
+    <string name="notif_walk_calibration_title">Hold phone upright</string>
+    <string name="notif_walk_calibration_desc">Walk forward to calibrate orientation</string>
+    <string name="notif_position_drift_title">Position drift detected</string>
+    <string name="notif_position_drift_desc">Recalibrating route alignment (%1$dm offset)</string>
+    <string name="notif_recalibrating_title">Recalibrating</string>
+    <string name="notif_recalibrating_desc">Hold phone steady</string>
+    <string name="notif_no_gps_title">No GPS signal</string>
+    <string name="notif_no_gps_desc">Cannot recalibrate without GPS — move to an open area</string>
+    <string name="notif_recalibrated">Recalibrated</string>
+    <string name="notif_flipping_title">Flipping 180°</string>
+    <string name="notif_flipping_desc">Reorienting your view</string>
+    <string name="notif_flipped">Heading flipped 180°</string>
+
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- SCRUM-107 F7 — error cards + exit dialog + arrival          -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- F7 error cards -->
+    <string name="notif_too_far_title">Too far from any path</string>
+    <string name="notif_too_far_desc">Walk closer to a campus walkway and try again.</string>
+    <string name="notif_no_route_title">No route available</string>
+    <string name="notif_no_route_desc">Couldn\'t find a path to this destination.</string>
+    <string name="notif_gps_weak_title">GPS signal too weak</string>
+    <string name="notif_gps_weak_desc">Accuracy %1$dm. Move to an open area and try again.</string>
+    <string name="action_ok">OK</string>
+    <!-- F7 exit dialog -->
+    <string name="exit_dialog_title">End navigation?</string>
+    <string name="exit_dialog_subtitle">You\'ll return to the map.</string>
+    <string name="exit_dialog_confirm">End navigation</string>
+    <string name="exit_dialog_cancel">Keep navigating</string>
+    <!-- F7 arrival -->
+    <string name="arrival_title">You\'ve arrived!</string>
+
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- SCRUM-107 Step 2B — Calibration overlay strings (F2 + F4) -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <string name="cal_f2_compass_kicker">Compass calibration in</string>
+    <string name="cal_f2_compass_hint_title">Hold phone flat</string>
+    <string name="cal_f2_compass_hint_sub">Rotate slowly while waiting</string>
+    <string name="cal_f2_walk_kicker">AR guidance starts in</string>
+    <string name="cal_f2_walk_hint_title">Hold phone upright</string>
+    <string name="cal_f2_walk_hint_sub">Start walking when countdown ends</string>
+    <string name="cal_f2_ready_pill">Compass + GPS ready</string>
+    <string name="cal_f4_compass_title">Calibrate compass</string>
+    <string name="cal_f4_compass_desc">Keep the phone flat and move it in small circles</string>
+    <string name="cal_f4_compass_status_low">Keep moving</string>
+    <string name="cal_f4_compass_status_med">Almost there</string>
+    <string name="cal_f4_compass_status_high">Good</string>
+    <string name="cal_f4_gps_title">Acquiring GPS</string>
+    <string name="cal_f4_gps_desc">Stand in an open area</string>
+    <string name="cal_f4_gps_status_search">Searching</string>
+    <string name="cal_f4_gps_start_anyway">Start anyway</string>
+    <string name="cal_f4_gps_caveat">Accuracy may vary</string>
+    <string name="cal_step_compass">Compass</string>
+    <string name="cal_step_gps">GPS</string>
+    <string name="cal_step_walk">Walk</string>
+
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- SCRUM-107 Step 2C — F3 walk calibration overlay          -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <string name="f3_title_walk_forward">Walk forward</string>
+    <!-- f3_subtitle_default still referenced by activity_ar_navigation.xml as the
+         tvF3Subtitle XML default (shown briefly before F3CalibrationOverlay's
+         refreshSubtitle runs). Kept to avoid breaking that reference. -->
+    <string name="f3_subtitle_default">Walking helps us align AR direction with the route</string>
+    <string name="f3_gps_quality_label">GPS quality</string>
+    <string name="f3_gps_quality_good">Good</string>
+    <string name="f3_meters_format">%.1f</string>
+
+    <!-- SCRUM-107 Stage 1: F3 redesign new strings (Stage 3 will consume) -->
+    <string name="f3_title_calibrating_route">Calibrating route</string>
+    <string name="f3_title_calibrated">Calibrated</string>
+    <string name="f3_subtitle_onset">This usually takes a few seconds</string>
+    <string name="f3_subtitle_waiting_for_walk">Walk forward to calibrate</string>
+    <string name="f3_subtitle_walk_active">Keep moving, calibrating as you walk</string>
+    <string name="f3_subtitle_fair_gps">GPS signal weak, try to face the open sky</string>
+    <string name="f3_subtitle_poor_gps_v2">Move to an open area for better GPS</string>
+    <string name="f3_gps_quality_fair">Fair</string>
+    <string name="f3_gps_quality_poor_short">Poor</string>
+
+    <!-- Recalibration failed warning (used by NotificationManager Warning) -->
+    <string name="notif_recalibrate_failed_title">Recalibration failed</string>
+    <string name="notif_recalibrate_failed_desc">Using compass only</string>
+
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- SCRUM-107 F10 — AR Help Sheet                            -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <string name="help_sheet_title">AR Navigation Guide</string>
+    <string name="help_sheet_subtitle">Learn what the route markers mean and how to keep AR tracking steady.</string>
+    <string name="help_sheet_markers_header">Route markers</string>
+    <string name="help_sheet_marker_blue_title">Blue spheres</string>
+    <string name="help_sheet_marker_blue_desc">Follow these to stay on the route.</string>
+    <string name="help_sheet_marker_yellow_title">Yellow checkpoints</string>
+    <string name="help_sheet_marker_yellow_desc">Turns or important points where direction may change.</string>
+    <string name="help_sheet_drift_header">If markers drift or look offset</string>
+    <string name="help_sheet_drift_1">Keep walking slowly for a few seconds.</string>
+    <string name="help_sheet_drift_2">Hold the phone upright and avoid sudden turns.</string>
+    <string name="help_sheet_drift_3">Use the Recalibrate button if the route stays clearly wrong.</string>
+    <string name="help_sheet_visibility_header">If you cannot see the spheres</string>
+    <string name="help_sheet_visibility_1">Slowly look toward your walking direction.</string>
+    <string name="help_sheet_visibility_2">Move to a brighter, open outdoor area.</string>
+    <string name="help_sheet_visibility_3">Wait a moment for AR tracking to stabilize.</string>
+    <string name="help_sheet_practices_header">Best practices</string>
+    <string name="help_sheet_tip_upright_title">Hold upright</string>
+    <string name="help_sheet_tip_upright_desc">Keep the camera facing your path.</string>
+    <string name="help_sheet_tip_slow_title">Start slow</string>
+    <string name="help_sheet_tip_slow_desc">Give AR a few seconds to align.</string>
+    <string name="help_sheet_tip_light_title">Good light</string>
+    <string name="help_sheet_tip_light_desc">Tracking works better outdoors.</string>
+    <string name="help_sheet_tip_aware_title">Stay aware</string>
+    <string name="help_sheet_tip_aware_desc">Watch your surroundings as you walk.</string>
+    <string name="help_sheet_got_it">Got it</string>
+    <string name="help_sheet_export_logs">Export logs</string>
+    <string name="help_sheet_close">Close help</string>
+
 </resources>

@@ -10,7 +10,9 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- ============================================================ -->
     <!-- NAVIGATION UI - Top Bar (Shown during navigation) -->
+    <!-- ============================================================ -->
     <LinearLayout
         android:id="@+id/layoutTopBar"
         android:layout_width="match_parent"
@@ -29,7 +31,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:src="@android:drawable/ic_menu_mylocation"
-            app:tint="#E31837" />
+            app:tint="@color/red_action" />
 
         <!-- Destination Info -->
         <LinearLayout
@@ -50,13 +52,17 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
+            <!-- SCRUM-107 F6: whisper-style route info ("from {origin} {emoji}").
+                 11sp/45%-white/uppercase/0.08 letterSpacing per F6 design 6g. -->
             <TextView
                 android:id="@+id/tvRouteInfo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Calculating..."
-                android:textColor="#B3FFFFFF"
-                android:textSize="12sp" />
+                android:textColor="#73FFFFFF"
+                android:textSize="11sp"
+                android:textAllCaps="true"
+                android:letterSpacing="0.08" />
         </LinearLayout>
 
         <!-- Distance -->
@@ -65,12 +71,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="--m"
-            android:textColor="#E31837"
+            android:textColor="@color/red_action"
             android:textSize="22sp"
             android:textStyle="bold" />
     </LinearLayout>
 
+    <!-- ============================================================ -->
     <!-- NAVIGATION UI - Bottom Card (Shown during navigation) -->
+    <!-- ============================================================ -->
     <LinearLayout
         android:id="@+id/layoutBottomCard"
         android:layout_width="match_parent"
@@ -98,7 +106,7 @@
                 android:layout_weight="1"
                 android:max="100"
                 android:progress="0"
-                android:progressDrawable="@drawable/progress_red" />
+                android:progressDrawable="@drawable/bg_progress_fill" />
 
             <TextView
                 android:id="@+id/tvProgressPercent"
@@ -124,10 +132,10 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:drawableStart="@android:drawable/ic_menu_directions"
+                android:drawableStart="@drawable/ic_arrow_bear_right"
                 android:drawablePadding="8dp"
-                android:drawableTint="#E31837"
-                android:text="Next: --"
+                android:drawableTint="@color/red_action"
+                android:text="Next · --"
                 android:textColor="#B3FFFFFF"
                 android:textSize="14sp" />
 
@@ -135,7 +143,7 @@
                 android:id="@+id/tvETA"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="ETA: --"
+                android:text="ETA · --"
                 android:textColor="#B3FFFFFF"
                 android:textSize="14sp" />
         </LinearLayout>
@@ -147,14 +155,23 @@
             android:layout_marginTop="16dp"
             android:orientation="horizontal">
 
+            <!-- SCRUM-107 F6: Recalibrate (glass-secondary) + End Navigation (muted danger).
+                 Vector icons replace inline emoji ("🔄") for visual polish. -->
+            <!-- SCRUM-107 F6 polish (2026-05-18 field test): gravity=center + paddingHorizontal=12dp
+                 + drawablePadding=8dp fixes the drawableStart icon vertical alignment with the text label. -->
             <Button
                 android:id="@+id/btnRecalibrate"
                 android:layout_width="0dp"
                 android:layout_height="44dp"
                 android:layout_marginEnd="8dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_button_outline"
-                android:text="🔄 Recalibrate"
+                android:background="@drawable/bg_button_outline_glass"
+                android:drawableStart="@drawable/ic_refresh"
+                android:drawablePadding="8dp"
+                android:drawableTint="#FFFFFF"
+                android:gravity="center"
+                android:paddingHorizontal="12dp"
+                android:text="Recalibrate"
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
                 android:textSize="13sp" />
@@ -165,7 +182,12 @@
                 android:layout_height="44dp"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_button_red"
+                android:background="@drawable/bg_button_red_action"
+                android:drawableStart="@drawable/ic_notification_close"
+                android:drawablePadding="8dp"
+                android:drawableTint="#FFFFFF"
+                android:gravity="center"
+                android:paddingHorizontal="12dp"
                 android:text="End Navigation"
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
@@ -173,7 +195,9 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- ============================================================ -->
     <!-- COMPASS HUD (Left side during navigation) -->
+    <!-- ============================================================ -->
     <FrameLayout
         android:id="@+id/layoutCompassHud"
         android:layout_width="70dp"
@@ -190,7 +214,7 @@
             android:layout_height="32dp"
             android:layout_gravity="center"
             android:src="@drawable/ic_compass_arrow"
-            app:tint="#E31837" />
+            app:tint="@color/red_action" />
 
         <TextView
             android:id="@+id/tvCompassBearing"
@@ -204,7 +228,9 @@
             android:textStyle="bold" />
     </FrameLayout>
 
+    <!-- ============================================================ -->
     <!-- DEBUG TOGGLE BUTTON (Right side) -->
+    <!-- ============================================================ -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -214,19 +240,6 @@
         android:orientation="vertical"
         android:visibility="gone"
         android:id="@+id/layoutDebugButtons">
-
-        <!-- Phase 3 Toggle Button -->
-        <ImageButton
-            android:id="@+id/btnPhase3Toggle"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/bg_debug_toggle"
-            android:contentDescription="Toggle Phase 3"
-            android:src="@android:drawable/ic_menu_manage"
-            android:scaleType="centerInside"
-            android:padding="10dp"
-            app:tint="#FFFFFF" />
 
         <!-- Debug Toggle Button -->
         <ImageButton
@@ -241,195 +254,424 @@
             app:tint="#FFFFFF" />
     </LinearLayout>
 
-    <!-- DEBUG PANEL (Toggleable - Hidden by default) -->
+    <!-- ============================================================ -->
+    <!-- SCRUM-107 F10: layoutDebugPanel removed.                     -->
+    <!-- The circular "i" button now opens the AR help sheet          -->
+    <!-- (dialog_help_sheet.xml) via showHelpSheet().                 -->
+    <!-- ============================================================ -->
+    <!-- (SCRUM-107: tvRecalculating banner removed — migrated to NotificationManager Warnings) -->
+    <!-- ============================================================ -->
+
+    <!-- ============================================================ -->
+    <!-- CALIBRATION PANEL (Center - shown during STEP_1 + STEP_2) -->
+    <!-- SCRUM-107 Step 2B: F4 redesign — step strip + accuracy ring + -->
+    <!-- title/desc + optional "Start anyway" pill. Single shared view; -->
+    <!-- updateStateUI() rebinds children per STEP_1 / STEP_2.          -->
+    <!-- ============================================================ -->
     <LinearLayout
-        android:id="@+id/layoutDebugPanel"
-        android:layout_width="match_parent"
-        android:layout_height="280dp"
-        android:layout_gravity="bottom"
-        android:layout_marginHorizontal="8dp"
-        android:layout_marginBottom="180dp"
-        android:background="@drawable/bg_glass_card"
+        android:id="@+id/layoutCalibration"
+        android:layout_width="320dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_calibration_card"
+        android:elevation="0dp"
         android:orientation="vertical"
-        android:padding="8dp"
+        android:padding="20dp"
         android:visibility="gone">
 
-        <!-- Debug Panel Header -->
+        <!-- Step strip: Compass • GPS • Walk -->
+        <LinearLayout
+            android:id="@+id/layoutCalStepStrip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <View
+                android:id="@+id/viewCalStepDot1"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:background="@drawable/bg_step_dot_active"/>
+
+            <TextView
+                android:id="@+id/tvCalStepLabel1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:letterSpacing="-0.01"
+                android:text="@string/cal_step_compass"
+                android:textColor="@color/text_white"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+
+            <View
+                android:id="@+id/viewCalStepLine1"
+                android:layout_width="18dp"
+                android:layout_height="1dp"
+                android:layout_marginStart="7dp"
+                android:layout_marginEnd="7dp"
+                android:background="#2EFFFFFF"/>
+
+            <View
+                android:id="@+id/viewCalStepDot2"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:background="@drawable/bg_step_dot_pending"/>
+
+            <TextView
+                android:id="@+id/tvCalStepLabel2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:text="@string/cal_step_gps"
+                android:textColor="#80FFFFFF"
+                android:textSize="10sp"/>
+
+            <View
+                android:id="@+id/viewCalStepLine2"
+                android:layout_width="18dp"
+                android:layout_height="1dp"
+                android:layout_marginStart="7dp"
+                android:layout_marginEnd="7dp"
+                android:background="#2EFFFFFF"/>
+
+            <View
+                android:id="@+id/viewCalStepDot3"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:background="@drawable/bg_step_dot_pending"/>
+
+            <TextView
+                android:id="@+id/tvCalStepLabel3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:text="@string/cal_step_walk"
+                android:textColor="#80FFFFFF"
+                android:textSize="10sp"/>
+        </LinearLayout>
+
+        <!-- Accuracy ring (134dp container, 126dp indicator for clip-safe margin) -->
+        <FrameLayout
+            android:layout_width="134dp"
+            android:layout_height="134dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="14dp"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:id="@+id/calProgressRing"
+                android:layout_width="134dp"
+                android:layout_height="134dp"
+                android:layout_gravity="center"
+                android:indeterminate="false"
+                android:max="100"
+                android:progress="50"
+                app:indicatorColor="@color/status_warning"
+                app:indicatorSize="126dp"
+                app:trackColor="#14FFFFFF"
+                app:trackCornerRadius="2dp"
+                app:trackThickness="4dp"/>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/ivCalRingIcon"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_compass_arrow"
+                    android:tint="@color/status_warning"/>
+
+                <TextView
+                    android:id="@+id/tvCalRingLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:letterSpacing="0.07"
+                    android:text="STATUS"
+                    android:textColor="#6BFFFFFF"
+                    android:textSize="9sp"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:id="@+id/tvCalRingValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:letterSpacing="-0.02"
+                    android:textColor="@color/text_white"
+                    android:textSize="13sp"
+                    android:textStyle="bold"/>
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Title + description -->
+        <TextView
+            android:id="@+id/tvCalTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="5dp"
+            android:letterSpacing="-0.015"
+            android:textColor="@color/text_white"
+            android:textSize="13sp"
+            android:textStyle="bold"/>
+
+        <TextView
+            android:id="@+id/tvCalDesc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:lineSpacingMultiplier="1.55"
+            android:textColor="@color/text_white_secondary"
+            android:textSize="11sp"/>
+
+        <!-- Start anyway pill (GPS step only). Background set programmatically. -->
+        <LinearLayout
+            android:id="@+id/layoutCalStartAnyway"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:padding="10dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="13dp"
+                android:layout_height="13dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_notification_check"
+                android:tint="#E0FFFFFF"/>
+
+            <TextView
+                android:id="@+id/btnCalStartAnyway"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:text="@string/cal_f4_gps_start_anyway"
+                android:textColor="#EAFFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="@string/cal_f4_gps_caveat"
+                android:textColor="#8DFFFFFF"
+                android:textSize="9sp"
+                android:textStyle="italic"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ============================================================ -->
+    <!-- F3 WALK CALIBRATION OVERLAY (Bottom card - STEP_3 dual-delta wait) -->
+    <!-- SCRUM-107 Step 2C Plan B: F3 migrated from dynamic inflate to    -->
+    <!-- static embedding matching F4's pattern. F3CalibrationOverlay.kt -->
+    <!-- now resolves this view via findViewById(R.id.layoutF3Overlay)   -->
+    <!-- and toggles visibility + alpha. Reuses bg_calibration_card.xml. -->
+    <!-- ============================================================ -->
+    <LinearLayout
+        android:id="@+id/layoutF3Overlay"
+        android:layout_width="320dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="95dp"
+        android:background="@drawable/bg_calibration_card"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:elevation="0dp"
+        android:orientation="vertical"
+        android:padding="18dp"
+        android:visibility="gone">
+
+        <!-- Step strip: Compass done • GPS done • Walk active -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="14dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <View
+                android:id="@+id/dotF3Compass"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:background="@drawable/bg_step_dot_done"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:letterSpacing="-0.01"
+                android:text="@string/cal_step_compass"
+                android:textColor="#B8FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+
+            <View
+                android:layout_width="18dp"
+                android:layout_height="1dp"
+                android:layout_marginStart="7dp"
+                android:layout_marginEnd="7dp"
+                android:background="@color/status_success"/>
+
+            <View
+                android:id="@+id/dotF3Gps"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:background="@drawable/bg_step_dot_done"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:letterSpacing="-0.01"
+                android:text="@string/cal_step_gps"
+                android:textColor="#B8FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+
+            <View
+                android:layout_width="18dp"
+                android:layout_height="1dp"
+                android:layout_marginStart="7dp"
+                android:layout_marginEnd="7dp"
+                android:background="@color/status_success"/>
+
+            <View
+                android:id="@+id/dotF3Walk"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:background="@drawable/bg_step_dot_active"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:letterSpacing="-0.01"
+                android:text="@string/cal_step_walk"
+                android:textColor="@color/text_white"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+        </LinearLayout>
+
+        <!-- Title row: spinner + dynamic title + terminal check icon.
+             Spinner and check are visibility=gone; Stage 3 toggles them based on state. -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ProgressBar
+                android:id="@+id/progressF3TitleSpinner"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginEnd="6dp"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/text_white"
+                android:visibility="gone"/>
+
+            <TextView
+                android:id="@+id/tvF3Title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:letterSpacing="-0.015"
+                android:text="@string/f3_title_walk_forward"
+                android:textColor="@color/text_white"
+                android:textSize="14sp"
+                android:textStyle="bold"/>
+
+            <ImageView
+                android:id="@+id/ivF3TerminalCheck"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginStart="6dp"
+                android:src="@drawable/bg_step_dot_check"
+                android:visibility="gone"/>
+        </LinearLayout>
+
+        <!-- Subtitle (dynamic) -->
+        <TextView
+            android:id="@+id/tvF3Subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="10dp"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.45"
+            android:paddingHorizontal="4dp"
+            android:text="@string/f3_subtitle_default"
+            android:textColor="@color/text_white_secondary"
+            android:textSize="11sp"/>
+
+        <!-- SCRUM-107 Stage 2: big-number row + WALKED label removed.
+             Stage 3 will replace with pulse + spinner indicators in the title row. -->
+
+        <!-- GPS quality row: divider above, label + value -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#14FFFFFF"/>
+
+        <!-- GPS quality row: label + Space spacer + compact pill TextView (wrap_content
+             so the Stage 1 pill background drawable hugs just the text + padding).
+             The Space view uses explicit layout_height="1dp" to avoid the Hot Fix #6
+             measurement bug, which was specifically triggered by the combination of
+             layout_height="wrap_content" + layout_weight="1" (measured to 1754px on
+             Samsung A26, inflating the parent F3 LinearLayout to 2272px). With a
+             fixed height the weight expansion is well-defined and safe. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingBottom="4dp">
+            android:paddingHorizontal="2dp"
+            android:paddingTop="9dp">
 
             <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/f3_gps_quality_label"
+                android:textColor="#99FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"/>
+
+            <Space
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="🔧 Debug Panel"
-                android:textColor="#4CAF50"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-            <!-- Close Debug Panel Button -->
-            <ImageButton
-                android:id="@+id/btnCloseDebugPanel"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/bg_button_small"
-                android:contentDescription="Close"
-                android:src="@android:drawable/ic_menu_close_clear_cancel"
-                android:scaleType="centerInside"
-                android:padding="4dp"
-                app:tint="#FF5252" />
-
-            <!-- Quick Recalibrate Button -->
-            <Button
-                android:id="@+id/btnDebugRecalibrate"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:background="@drawable/bg_button_small"
-                android:paddingHorizontal="8dp"
-                android:text="🔄 Recalib"
-                android:textColor="#FFFFFF"
-                android:textSize="10sp"
-                android:minWidth="0dp"
-                android:minHeight="0dp" />
-
-            <!-- Quick Flip 180 Button -->
-            <Button
-                android:id="@+id/btnDebugFlip"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:layout_marginStart="4dp"
-                android:background="@drawable/bg_button_small"
-                android:paddingHorizontal="8dp"
-                android:text="↩️ Flip"
-                android:textColor="#FFFFFF"
-                android:textSize="10sp"
-                android:minWidth="0dp"
-                android:minHeight="0dp" />
-
-            <Button
-                android:id="@+id/btnShareLogs"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:layout_marginStart="4dp"
-                android:background="@drawable/bg_button_small"
-                android:paddingHorizontal="8dp"
-                android:text="📤 Logs"
-                android:textColor="#FFFFFF"
-                android:textSize="10sp"
-                android:minWidth="0dp"
-                android:minHeight="0dp" />
-
-        </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#33FFFFFF" />
-
-        <!-- Scrollable Debug Content -->
-        <ScrollView
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:layout_marginTop="4dp">
+                android:layout_height="1dp"
+                android:layout_weight="1"/>
 
             <TextView
-                android:id="@+id/tvDebugInfo"
-                android:layout_width="match_parent"
+                android:id="@+id/tvF3GpsQuality"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
-                android:lineSpacingExtra="2dp"
-                android:text="Debug info loading..."
-                android:textColor="#4CAF50"
-                android:textSize="11sp" />
-        </ScrollView>
+                android:gravity="center"
+                android:text="@string/f3_gps_quality_good"
+                android:textColor="@color/status_success"
+                android:textSize="11sp"
+                android:textStyle="bold"/>
+        </LinearLayout>
     </LinearLayout>
 
-    <!-- RECALCULATING BANNER (Center - shown during drift correction) -->
-    <TextView
-        android:id="@+id/tvRecalculating"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:background="@drawable/bg_glass_card"
-        android:paddingHorizontal="24dp"
-        android:paddingVertical="16dp"
-        android:text="⚠️ Recalibrating..."
-        android:textColor="#FF9800"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:visibility="gone" />
-
-    <!-- CALIBRATION PANEL (Center - shown during calibration steps) -->
-    <LinearLayout
-        android:id="@+id/layoutCalibration"
-        android:layout_width="300dp"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:background="@drawable/bg_glass_card"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:padding="24dp"
-        android:visibility="gone">
-
-        <ImageView
-            android:id="@+id/ivStepIcon"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
-            android:src="@drawable/ic_infinite"
-            app:tint="#E31837" />
-
-        <TextView
-            android:id="@+id/tvStepTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Calibrating..."
-            android:textColor="#FFFFFF"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/tvStepDesc"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="center"
-            android:text="Please wait"
-            android:textColor="#B3FFFFFF"
-            android:textSize="14sp" />
-
-        <ProgressBar
-            android:id="@+id/progressBar"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="8dp"
-            android:layout_marginTop="20dp"
-            android:max="100"
-            android:progress="0"
-            android:progressDrawable="@drawable/progress_red"
-            android:visibility="gone" />
-
-        <Button
-            android:id="@+id/btnForceStart"
-            android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/bg_button_outline"
-            android:paddingHorizontal="24dp"
-            android:text="Skip"
-            android:textAllCaps="false"
-            android:textColor="#B3FFFFFF"
-            android:textSize="14sp"
-            android:visibility="gone" />
-    </LinearLayout>
-
+    <!-- ============================================================ -->
     <!-- ROUTE SELECTION PANEL (Fallback - rarely shown) -->
+    <!-- ============================================================ -->
     <LinearLayout
         android:id="@+id/layoutRouteSelection"
         android:layout_width="320dp"
@@ -494,27 +736,15 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- OLD DEBUG PANEL (Keep for backward compatibility, hidden) -->
-    <ScrollView
-        android:id="@+id/debugPanel"
-        android:layout_width="match_parent"
-        android:layout_height="180dp"
-        android:layout_gravity="bottom"
-        android:background="#90000000"
-        android:padding="10dp"
-        android:visibility="gone">
+    <!-- ============================================================ -->
+    <!-- SCRUM-107 F10: legacy debugPanel + tvInfo ScrollView removed -->
+    <!-- (was visibility="gone" by default; writes redirected to      -->
+    <!-- FileLogger or deleted alongside the new debug panel).        -->
+    <!-- ============================================================ -->
 
-        <TextView
-            android:id="@+id/tvInfo"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:text="Waiting..."
-            android:textColor="#00FF00"
-            android:textSize="12sp" />
-    </ScrollView>
-
+    <!-- ============================================================ -->
     <!-- ARRIVAL CELEBRATION OVERLAY -->
+    <!-- ============================================================ -->
     <include
         android:id="@+id/layoutArrivalCelebration"
         layout="@layout/layout_arrival_celebration"

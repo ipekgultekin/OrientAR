@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SCRUM-107 F7: circular badge behind the exit-dialog flag icon.
+     red_action (#FF3B47) at 15% alpha = #26FF3B47. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#26FF3B47" />
+</shape>

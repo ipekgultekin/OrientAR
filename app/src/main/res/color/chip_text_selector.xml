@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SCRUM-107 F8: color state list for the My Location chip's inner TextView.
+    Paired with the bg_campus_location_chip selector — when chipMyLocation.isSelected = true,
+    the TextView (which has android:duplicateParentState="true") inherits state_selected
+    and renders white on the solid-green background. Default state renders the brand green
+    text on the outline background.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true" android:color="#FFFFFF" />
+    <item android:color="@color/campus_chip_green_text" />
+</selector>

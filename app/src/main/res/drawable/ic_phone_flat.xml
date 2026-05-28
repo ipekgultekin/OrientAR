@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Top-down phone outline for F2 compass-pre countdown hint. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="40dp"
+    android:height="26dp"
+    android:viewportWidth="40"
+    android:viewportHeight="26">
+    <path
+        android:pathData="M2,2 L38,2 Q40,2 40,4 L40,22 Q40,24 38,24 L2,24 Q0,24 0,22 L0,4 Q0,2 2,2 Z"
+        android:fillColor="#F2FFFFFF"
+        android:strokeColor="#4DFFFFFF"
+        android:strokeWidth="1"/>
+    <path
+        android:pathData="M5,6 L35,6 Q36,6 36,7 L36,19 Q36,20 35,20 L5,20 Q4,20 4,19 L4,7 Q4,6 5,6 Z"
+        android:fillColor="#4D282828"/>
+</vector>

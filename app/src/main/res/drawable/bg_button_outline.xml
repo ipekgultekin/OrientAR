@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Original outline button (route selection spinners, NotificationManager error secondary action).
+    F6 HUD uses bg_button_outline_glass.xml instead — kept here for non-HUD callers.
+-->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="#33FFFFFF">
-
     <item>
         <shape android:shape="rectangle">
             <solid android:color="#33FFFFFF" />
