@@ -157,4 +157,35 @@
     <string name="notif_recalibrate_failed_title">Recalibration failed</string>
     <string name="notif_recalibrate_failed_desc">Using compass only</string>
 
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- SCRUM-107 F10 — AR Help Sheet                            -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <string name="help_sheet_title">AR Navigation Guide</string>
+    <string name="help_sheet_subtitle">Learn what the route markers mean and how to keep AR tracking steady.</string>
+    <string name="help_sheet_markers_header">Route markers</string>
+    <string name="help_sheet_marker_blue_title">Blue spheres</string>
+    <string name="help_sheet_marker_blue_desc">Follow these to stay on the route.</string>
+    <string name="help_sheet_marker_yellow_title">Yellow checkpoints</string>
+    <string name="help_sheet_marker_yellow_desc">Turns or important points where direction may change.</string>
+    <string name="help_sheet_drift_header">If markers drift or look offset</string>
+    <string name="help_sheet_drift_1">Keep walking slowly for a few seconds.</string>
+    <string name="help_sheet_drift_2">Hold the phone upright and avoid sudden turns.</string>
+    <string name="help_sheet_drift_3">Use the Recalibrate button if the route stays clearly wrong.</string>
+    <string name="help_sheet_visibility_header">If you cannot see the spheres</string>
+    <string name="help_sheet_visibility_1">Slowly look toward your walking direction.</string>
+    <string name="help_sheet_visibility_2">Move to a brighter, open outdoor area.</string>
+    <string name="help_sheet_visibility_3">Wait a moment for AR tracking to stabilize.</string>
+    <string name="help_sheet_practices_header">Best practices</string>
+    <string name="help_sheet_tip_upright_title">Hold upright</string>
+    <string name="help_sheet_tip_upright_desc">Keep the camera facing your path.</string>
+    <string name="help_sheet_tip_slow_title">Start slow</string>
+    <string name="help_sheet_tip_slow_desc">Give AR a few seconds to align.</string>
+    <string name="help_sheet_tip_light_title">Good light</string>
+    <string name="help_sheet_tip_light_desc">Tracking works better outdoors.</string>
+    <string name="help_sheet_tip_aware_title">Stay aware</string>
+    <string name="help_sheet_tip_aware_desc">Watch your surroundings as you walk.</string>
+    <string name="help_sheet_got_it">Got it</string>
+    <string name="help_sheet_export_logs">Export logs</string>
+    <string name="help_sheet_close">Close help</string>
+
 </resources>

@@ -77,7 +77,8 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     // UI COMPONENTS
     // ========================================================================================
     private lateinit var arView: ARSceneView
-    private lateinit var tvInfo: TextView
+    // SCRUM-107 F10: tvInfo removed — was tied to a permanently-hidden legacy ScrollView;
+    // the only production-relevant write (handleTrackingFailure) now goes to FileLogger.
     private lateinit var layoutRouteSelection: LinearLayout
     private lateinit var spinnerStartNode: Spinner
     private lateinit var spinnerEndNode: Spinner
@@ -109,13 +110,13 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     // Navigation UI elements
     private lateinit var layoutTopBar: LinearLayout
     private lateinit var layoutBottomCard: LinearLayout
-    private lateinit var layoutDebugPanel: LinearLayout  // Changed from ScrollView
-    private lateinit var layoutDebugButtons: LinearLayout  // NEW
+    // SCRUM-107 F10: layoutDebugPanel + btnDebugRecalibrate + btnShareLogs + btnCloseDebugPanel
+    // removed alongside the debug panel. btnDebugToggle stays (repurposed as help-sheet trigger);
+    // layoutDebugButtons stays (its visibility lifecycle via navUIViews keeps the help button hidden
+    // outside navigation).
+    private lateinit var layoutDebugButtons: LinearLayout
     private lateinit var btnDebugToggle: ImageButton
-    private lateinit var btnDebugRecalibrate: Button  // NEW
     // SCRUM-107 F6: btnDebugFlip removed (Arda confirmed 16 May 2026 — 'neredeyse hiç kullanmadık').
-    private lateinit var btnShareLogs: Button  // Share logs button
-    private lateinit var btnCloseDebugPanel: ImageButton
     private lateinit var btnRecalibrate: Button
     private lateinit var btnEndNavigation: Button
     private lateinit var tvDestinationName: TextView
@@ -125,7 +126,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var tvProgressPercent: TextView
     private lateinit var tvNextCheckpoint: TextView
     private lateinit var tvETA: TextView
-    private lateinit var tvDebugInfo: TextView
+    // SCRUM-107 F10: tvDebugInfo removed — debug panel deleted.
 
     // SCRUM-107 — Unified notification system
     private lateinit var notifications: NotificationManager
@@ -158,7 +159,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
 
     // UI State
-    private var isDebugMode = false
+    // SCRUM-107 F10: isDebugMode flag removed — the debug panel it gated is gone.
     private var hasArrivedAtDestination = false
     private var navigationStartTime: Long = 0L
 
@@ -947,9 +948,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             else -> "⚠️ AR tracking lost"
         }
 
-        runOnUiThread {
-            tvInfo.text = message
-        }
+        // SCRUM-107 F10: tvInfo write replaced with FileLogger so tracking-failure diagnostics
+        // still persist (the prior view sink was a permanently-hidden legacy ScrollView).
+        FileLogger.d("AR_TRACKING", "Tracking failure: $message")
     }
 
     // (Legacy anchor creation functions removed — SphereRefresher handles anchors)
@@ -959,8 +960,8 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     // ========================================================================================
     private fun initializeUI() {
         arView = findViewById(R.id.arView)
-        tvInfo = findViewById(R.id.tvInfo)
-        // SCRUM-107: tvRecalculating gesture (single-tap flip / double-tap recalib) dropped — actions accessible via debug panel
+        // SCRUM-107 F10: tvInfo findViewById removed — view no longer exists in the layout.
+        // (Old gesture comment about tvRecalculating dropped too — recalibrate sits on the HUD bottom card.)
         layoutRouteSelection = findViewById(R.id.layoutRouteSelection)
         spinnerStartNode = findViewById(R.id.spinnerStartNode)
         spinnerEndNode = findViewById(R.id.spinnerEndNode)
@@ -1000,12 +1001,11 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         // Navigation UI
         layoutTopBar = findViewById(R.id.layoutTopBar)
         layoutBottomCard = findViewById(R.id.layoutBottomCard)
-        layoutDebugPanel = findViewById(R.id.layoutDebugPanel)
+        // SCRUM-107 F10: layoutDebugPanel / btnDebugRecalibrate / btnShareLogs /
+        // btnCloseDebugPanel / tvDebugInfo findViewIds removed — those views no longer
+        // exist in the layout (debug panel deleted, replaced by the help sheet).
         layoutDebugButtons = findViewById(R.id.layoutDebugButtons)
         btnDebugToggle = findViewById(R.id.btnDebugToggle)
-        btnDebugRecalibrate = findViewById(R.id.btnDebugRecalibrate)
-        btnShareLogs = findViewById(R.id.btnShareLogs)
-        btnCloseDebugPanel = findViewById(R.id.btnCloseDebugPanel)
         btnRecalibrate = findViewById(R.id.btnRecalibrate)
         btnEndNavigation = findViewById(R.id.btnEndNavigation)
         tvDestinationName = findViewById(R.id.tvDestinationName)
@@ -1015,7 +1015,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         tvProgressPercent = findViewById(R.id.tvProgressPercent)
         tvNextCheckpoint = findViewById(R.id.tvNextCheckpoint)
         tvETA = findViewById(R.id.tvETA)
-        tvDebugInfo = findViewById(R.id.tvDebugInfo)
         // Arrival celebration views
         layoutArrivalCelebration = findViewById(R.id.layoutArrivalCelebration)
         tvArrivalDestination = findViewById(R.id.tvArrivalDestination)
@@ -1093,36 +1092,13 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         return Math.abs(ArUtils.normalizeAngleDeg(currentTrueBearing.toDouble() - routeBearing)).toInt()
     }
     private fun setupNavigationUI() {
-        // Debug toggle button
+        // SCRUM-107 F10: the circular "i" button now opens the AR help sheet.
+        // Previous behavior (toggle debug panel + isDebugMode flag + close button + quick
+        // recalibrate + share logs) is gone — the debug panel was removed and Export logs
+        // moved into the help sheet (Recalibrate stays on the HUD bottom card).
         btnDebugToggle.setOnClickListener {
             performHapticFeedback(it)
-            isDebugMode = !isDebugMode
-            btnDebugToggle.isSelected = isDebugMode
-            layoutDebugPanel.visibility = if (isDebugMode) View.VISIBLE else View.GONE
-
-            // Force immediate UI update when debug is shown
-            if (isDebugMode) {
-                currentUserLocation?.let { updateLiveUI(it) }
-            }
-        }
-        btnCloseDebugPanel.setOnClickListener {
-            performHapticFeedback(it)
-            isDebugMode = false
-            btnDebugToggle.isSelected = false
-            layoutDebugPanel.visibility = View.GONE
-        }
-
-        // Quick recalibrate button in debug panel
-        btnDebugRecalibrate.setOnClickListener {
-            performHapticFeedback(it)
-            forceRecalibration()
-        }
-
-        // SCRUM-107 F6: btnDebugFlip listener removed alongside the XML button + flip180Degrees method.
-        // Share logs button
-        btnShareLogs.setOnClickListener {
-            performHapticFeedback(it)
-            FileLogger.shareLogFile(this)
+            showHelpSheet()
         }
 
         // Recalibrate button
@@ -1181,6 +1157,41 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         }
         view.findViewById<View>(R.id.btnExitCancel).setOnClickListener {
             dialog.dismiss()
+        }
+        dialog.show()
+    }
+
+    /**
+     * SCRUM-107 F10: glass-aesthetic AR help sheet, bottom-anchored.
+     * Triggered by the circular "i" button (btnDebugToggle) in layoutDebugButtons.
+     * Mirrors F7's showExitConfirmation pattern (setView + transparent window background),
+     * adds Gravity.BOTTOM + MATCH_PARENT width so the glass sheet docks to the bottom edge.
+     * Replaces the removed debug panel: Export logs migrated here; Recalibrate intentionally
+     * stays on the HUD bottom card (btnRecalibrate) since the drift tip references it.
+     */
+    private fun showHelpSheet() {
+        val view = layoutInflater.inflate(R.layout.dialog_help_sheet, null)
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setView(view)
+            .create()
+        dialog.window?.setBackgroundDrawable(
+            android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+        )
+        dialog.window?.attributes = dialog.window!!.attributes.apply {
+            gravity = android.view.Gravity.BOTTOM
+            width = android.view.WindowManager.LayoutParams.MATCH_PARENT
+        }
+        view.findViewById<View>(R.id.btnHelpGotIt).setOnClickListener {
+            performHapticFeedback(it)
+            dialog.dismiss()
+        }
+        view.findViewById<View>(R.id.btnHelpClose).setOnClickListener {
+            performHapticFeedback(it)
+            dialog.dismiss()
+        }
+        view.findViewById<View>(R.id.btnHelpExportLogs).setOnClickListener {
+            performHapticFeedback(it)
+            FileLogger.shareLogFile(this)
         }
         dialog.show()
     }
@@ -1263,7 +1274,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             layoutBottomCard.visibility = View.GONE
             layoutCompassHud.visibility = View.GONE
             layoutDebugButtons.visibility = View.GONE
-            layoutDebugPanel.visibility = View.GONE
+            // SCRUM-107 F10: layoutDebugPanel visibility line removed (panel deleted).
 
             // Show celebration with animation
             layoutArrivalCelebration.alpha = 0f
@@ -1762,9 +1773,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private fun processGPSSample(location: Location) {
         val state = gpsBufferManager.addSample(location)
 
-        runOnUiThread {
-            tvInfo.text = "GPS: ${gpsBufferManager.getSampleCount()}/8\nAccuracy: ${location.accuracy.toInt()}m"
-        }
+        // SCRUM-107 F10: tvInfo GPS-debug write removed (view sink was permanently hidden).
 
         // SCRUM-107 Step 2B — push GPS accuracy to F4 ring UI (if active)
         gpsAccuracyListener?.invoke(location.accuracy)
@@ -2022,7 +2031,8 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         routeNodePath = campusGraph.findNodePath(startNode.id, endNode.id)
 
         if (routeCoords.isEmpty()) {
-            runOnUiThread { tvInfo.text = "❌ No route found!" }
+            // SCRUM-107 F10: tvInfo write removed; log the failure for diagnostics.
+            FileLogger.d("ROUTE", "No route found from ${startNode.id} to ${endNode.id}")
             return
         }
 
@@ -2217,17 +2227,13 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun updateLiveUI(currentLocation: Location) {
-        val arYaw = getArYaw()
-
-        val alignmentError = coordinateAligner.getAlignmentError(currentTrueBearing.toDouble(), arYaw)
+        // SCRUM-107 F10: arYaw / alignmentError / distanceToNext computations dropped —
+        // they were only ever consumed by the now-removed debug-panel buildString.
 
         // Calculate progress — use SphereRefresher's monotonic progress (furthestReachedIndex)
         val progress = sphereRefresher?.getProgressPercent() ?: 0
         val remainingDistance = sphereRefresher?.getRemainingDistanceMeters()
             ?: calculateRemainingDistance(currentLocation)
-
-        // Calculate distance to next checkpoint
-        val distanceToNext = calculateDistanceToNext(currentLocation)
 
         // Find next checkpoint
         val nextCheckpoint = findNextCheckpoint()
@@ -2259,43 +2265,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 else -> "ETA · $etaMinutes min"
             }
 
-            // Update debug panel if visible
-            if (isDebugMode) {
-                val debugText = buildString {
-                    appendLine("🛠️ DEBUG MODE")
-                    appendLine("═══════════════════════")
-                    appendLine("📍 Position: ${currentRouteIndex()}/${routeCoords.size}")
-                    appendLine("🎯 Next: ${"%.1f".format(distanceToNext)}m")
-                    appendLine("🧭 Align error: ${"%.1f".format(alignmentError)}°")
-                    appendLine("📡 GPS: ${currentLocation.accuracy.toInt()}m")
-                    appendLine("═══════════════════════")
-                    appendLine("🔬 SENSOR FUSION (Phase 2)")
-                    if (useSensorFusion) {
-                        // Show adaptive fusion status (Optional Improvement 3)
-                        if (fusionDisabledByAdaptive) {
-                            appendLine("   ⚠️ PAUSED (poor GPS)")
-                            appendLine("   Waiting for accuracy < ${ADAPTIVE_FUSION_RECOVERY_THRESHOLD.toInt()}m")
-                        } else {
-                            if (::kalmanFilter.isInitialized && kalmanFilter.isInitialized()) {
-                                appendLine("   Kalman: Active ✅")
-                                appendLine("   Gain: ${"%.3f".format(kalmanFilter.getApproximateGain())}")
-                            }
-                            if (::headingFusionFilter.isInitialized && headingFusionFilter.isInitialized()) {
-                                appendLine("   Heading Fusion: Active ✅")
-                                appendLine("   Compass diff: ${headingFusionFilter.getCompassDifference().toInt()}°")
-                            }
-                        }
-                        // Show adaptive thresholds
-                        appendLine("   Adaptive: ${if (adaptiveFusionEnabled) "ON" else "OFF"}")
-                    } else {
-                        appendLine("   Disabled (manual)")
-                    }
-                }
-                tvDebugInfo.text = debugText
-            }
-
-            // Also update old tvInfo for backward compatibility
-            tvInfo.text = "Navigation active - Debug: ${if (isDebugMode) "ON" else "OFF"}"
+            // SCRUM-107 F10: debug-panel buildString + tvDebugInfo / tvInfo writes removed
+            // along with the debug panel. The metrics this surfaced (position, alignment error,
+            // GPS, fusion status) are already covered by FileLogger output through the regular
+            // navigation pipeline.
         }
     }
 
@@ -2601,9 +2574,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
         FileLogger.d("AR_RECALIB", "Compass reinit complete — SphereRefresher will recreate on next GPS at (${currentGps.latitude}, ${currentGps.longitude})")
 
-        runOnUiThread {
-            tvInfo.text = "🔄 Recalibrating...\n👉 Point at ground"
-        }
+        // SCRUM-107 F10: tvInfo "Recalibrating…" prompt removed (view sink deleted).
+        // User-facing recalibration feedback is already provided by NotificationManager
+        // (start/success/failure notifications) — no UI write needed here.
 
         FileLogger.d("RECALIB", "State after recalib: alignerInit=${coordinateAligner.isInitialized()}, dualDeltaDone=${coordinateAligner.isDualDeltaCompleted()}, waitingDD=$waitingForDualDelta, pendingAnchor=$pendingAnchorCreation")
 
@@ -2642,7 +2615,8 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
      * Use forceRecalibration() if you need a completely new anchor.
      */
     // SCRUM-107 F6: flip180Degrees() method removed alongside btnDebugFlip.
-    // Only btnDebugRecalibrate remains as the quick debug action in the debug panel.
+    // SCRUM-107 F10: the entire debug panel (including btnDebugRecalibrate) is now removed too —
+    // recalibration is reached via the HUD bottom card's btnRecalibrate.
     // Orphan strings notif_flipping_title / notif_flipping_desc / notif_flipped stay in
     // strings.xml per the Polish-1 discipline (future cleanup pass can remove them).
 
@@ -2781,14 +2755,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     layoutTopBar.visibility = View.VISIBLE
                     layoutBottomCard.visibility = View.VISIBLE
                     layoutCompassHud.visibility = View.VISIBLE
-                    layoutDebugButtons.visibility = View.VISIBLE  // FIXED: Show button container
+                    layoutDebugButtons.visibility = View.VISIBLE  // contains the help-sheet button (btnDebugToggle)
 
-                    // Hide debug panel by default (user can toggle)
-                    layoutDebugPanel.visibility = View.GONE
-                    isDebugMode = false
-
-                    // Hide old debug panel
-                    findViewById<ScrollView>(R.id.debugPanel).visibility = View.GONE
+                    // SCRUM-107 F10: legacy debug panels (layoutDebugPanel + R.id.debugPanel) +
+                    // isDebugMode flag all removed; nothing to reset here.
 
                     // Update destination info
                     updateNavigationUI()

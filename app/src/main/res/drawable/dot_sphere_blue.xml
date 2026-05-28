@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SCRUM-107 F10: legend dot for blue route spheres.
+    Color #0080FF matches the actual material color used by the path-sphere renderer.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#0080FF" />
+</shape>
