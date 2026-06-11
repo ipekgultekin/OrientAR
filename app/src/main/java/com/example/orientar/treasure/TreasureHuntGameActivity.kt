@@ -50,6 +50,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     private var isResolving = false
     private var ocrRunning = false
     private var popupShown = false
+    private var isExitingActivity = false
 
     // Intervals
     private var lastCloudCheckTime = 0L
@@ -93,7 +94,10 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
         modelLoader = ModelLoader(arSceneView.engine, this, lifecycleScope)
 
-        btnClose.setOnClickListener { finish() }
+        btnClose.setOnClickListener {
+            safeExitToMenu()
+        }
+
         btnNext.setOnClickListener { skipToNextQuestion() }
 
         // Admin trigger: tap question title to start hosting for current question
@@ -154,6 +158,7 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         }
 
         arSceneView.onSessionUpdated = onSessionUpdated@{ session, frame ->
+            if (isExitingActivity || isFinishing || isDestroyed) return@onSessionUpdated
             lastFrame = frame
 
             if (modelPlaced) return@onSessionUpdated
@@ -311,6 +316,10 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         anchorIds: List<String>,
         index: Int
     ) {
+        if (isExitingActivity || isFinishing || isDestroyed) {
+            isResolving = false
+            return
+        }
 
         if (modelPlaced) {
             isResolving = false
@@ -333,6 +342,11 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         )
 
         session.resolveCloudAnchorAsync(anchorId) { anchor, state ->
+
+            if (isExitingActivity || isFinishing || isDestroyed) {
+                isResolving = false
+                return@resolveCloudAnchorAsync
+            }
 
             Log.d(
                 TAG_RESOLVE,
@@ -360,6 +374,23 @@ class TreasureHuntGameActivity : AppCompatActivity() {
                 Log.d(TAG_RESOLVE, "Anchor still resolving. state=$state")
             }
         }
+    }
+    private fun safeExitToMenu() {
+        isExitingActivity = true
+        modelPlaced = true
+        isResolving = false
+        ocrRunning = false
+
+        mainHandler.removeCallbacksAndMessages(null)
+
+        val intent = Intent(this, ScoreboardActivity::class.java)
+        intent.putExtra("forcedSolved", GameState.totalSolved)
+        intent.putExtra("forcedTotal", GameState.totalQuestions())
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
+        startActivity(intent)
+        overridePendingTransition(0, 0)
+        finish()
     }
 
     private fun runOcrTask(session: Session, frame: Frame) {
@@ -414,9 +445,11 @@ class TreasureHuntGameActivity : AppCompatActivity() {
 
     private fun cleanupCurrentAnchor() {
         currentAnchorNode?.let {
-            arSceneView.removeChildNode(it)
-            it.anchor?.detach()
-            it.destroy()
+            try {
+                it.destroy()
+            } catch (e: Exception) {
+                Log.w(TAG_MODEL, "Cleanup ignored: ${e.message}")
+            }
         }
         currentAnchorNode = null
     }
@@ -432,15 +465,29 @@ class TreasureHuntGameActivity : AppCompatActivity() {
     }
 
     private fun placeModelInFrontOfCamera(session: Session, frame: Frame, q: Question) {
-        Log.d(TAG_MODEL, "Model placement requested from OCR camera-relative anchor. Q=${q.id}")
-        if (modelPlaced) return
+        Log.d(TAG_MODEL, "Model placement requested from OCR hit-test anchor. Q=${q.id}")
+
+        if (modelPlaced || isExitingActivity || isFinishing || isDestroyed) return
         modelPlaced = true
-        val cameraPose = frame.camera.pose
-        val targetPose = cameraPose.compose(Pose.makeTranslation(0f, 0.05f, -0.7f))
-        val anchor = session.createAnchor(targetPose)
+
+        val centerX = arSceneView.width / 2f
+        val centerY = arSceneView.height / 2f
+
+        val hit = frame.hitTest(centerX, centerY).firstOrNull { hitResult ->
+            val trackable = hitResult.trackable
+            (trackable is Plane && trackable.isPoseInPolygon(hitResult.hitPose)) ||
+                    trackable is Point
+        }
+
+        val anchor = hit?.createAnchor()
+            ?: session.createAnchor(
+                frame.camera.pose.compose(Pose.makeTranslation(0f, 0f, -0.8f))
+            )
+
         val anchorNode = AnchorNode(arSceneView.engine, anchor)
         arSceneView.addChildNode(anchorNode)
         currentAnchorNode = anchorNode
+
         loadModel(anchorNode, q)
     }
 
@@ -647,7 +694,9 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         val intent = Intent(this, ScoreboardActivity::class.java)
         intent.putExtra("forcedSolved", GameState.totalSolved)
         intent.putExtra("forcedTotal", GameState.totalQuestions())
+
         startActivity(intent)
+        overridePendingTransition(0, 0)
         finish()
     }
 
@@ -655,9 +704,22 @@ class TreasureHuntGameActivity : AppCompatActivity() {
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
     override fun onDestroy() {
-        recognizer.close()
-        cleanupCurrentAnchor()
-        arSceneView.destroy()
+        try {
+            recognizer.close()
+        } catch (_: Exception) {}
+
+        mainHandler.removeCallbacksAndMessages(null)
+
+        currentAnchorNode = null
+        arSession = null
+        lastFrame = null
+
+        try {
+            arSceneView.destroy()
+        } catch (e: Exception) {
+            Log.w(TAG_MODEL, "ARSceneView destroy ignored: ${e.message}")
+        }
+
         super.onDestroy()
     }
 }

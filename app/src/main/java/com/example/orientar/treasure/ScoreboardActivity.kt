@@ -29,6 +29,10 @@ import com.example.orientar.home.SharedBottomBar
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import java.util.Locale
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 private val MetuRed     = Color(0xFF8B0000)
 private val MetuRedDark = Color(0xFF5C0000)
@@ -60,19 +64,16 @@ fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
     var isOnLeaderboard  by remember { mutableStateOf(false) }
     var leaderboardTimeMs by remember { mutableStateOf(0L) }
 
-    LaunchedEffect(Unit) {
-        GameState.loadQuestionsFromFirestore {
-            GameState.loadProgress(context)
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-            if (forcedSolved < 0) solvedCount = GameState.totalSolved
-            if (forcedTotal < 0) questionCount = GameState.totalQuestions()
+    fun refreshProgress() {
+        GameState.loadProgress(context)
 
-            val uid = FirebaseAuth.getInstance().currentUser?.uid
-            if (uid == null) {
-                isOnLeaderboard = false
-                return@loadQuestionsFromFirestore
-            }
+        solvedCount = GameState.totalSolved
+        questionCount = GameState.totalQuestions()
 
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (uid != null) {
             FirebaseFirestore.getInstance()
                 .collection("leaderboard")
                 .document(uid)
@@ -81,15 +82,58 @@ fun TreasureHuntLandingScreen(forcedSolved: Int = -1, forcedTotal: Int = -1) {
                     isOnLeaderboard = doc.exists()
                     leaderboardTimeMs = if (doc.exists()) doc.getLong("totalTimeMs") ?: 0L else 0L
                 }
-                .addOnFailureListener {
-                    isOnLeaderboard = false
-                }
         }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshProgress()
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(forcedSolved, forcedTotal) {
+        GameState.loadProgress(context)
+
+        if (forcedSolved >= 0) solvedCount = forcedSolved
+        else solvedCount = GameState.totalSolved
+
+        if (forcedTotal >= 0) questionCount = forcedTotal
+        else {
+            GameState.loadQuestionsFromFirestore {
+                questionCount = GameState.totalQuestions()
+            }
+        }
+
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (uid == null) {
+            isOnLeaderboard = false
+            return@LaunchedEffect
+        }
+
+        FirebaseFirestore.getInstance()
+            .collection("leaderboard")
+            .document(uid)
+            .get()
+            .addOnSuccessListener { doc ->
+                isOnLeaderboard = doc.exists()
+                leaderboardTimeMs = if (doc.exists()) doc.getLong("totalTimeMs") ?: 0L else 0L
+            }
+            .addOnFailureListener {
+                isOnLeaderboard = false
+            }
     }
 
     val solved       = solvedCount
     val total        = questionCount
-    val allCompleted = isOnLeaderboard
+    val allCompleted = isOnLeaderboard || (total > 0 && solved == total)
     val hasPartial   = total > 0 && solved > 0 && solved < total && !isOnLeaderboard
     val totalSeconds = leaderboardTimeMs / 1000.0
     var showReplayConfirm by remember { mutableStateOf(false) }
