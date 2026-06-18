@@ -6,54 +6,12 @@ import kotlin.math.sin
 import com.example.orientar.navigation.util.FileLogger
 
 /**
- * HeadingFusionFilter - Gyroscope + Compass Sensor Fusion for Stable Heading
+ * Gyroscope + compass complementary filter for stable heading.
  *
- * ================================================================================================
- * PHASE 2: SENSOR FUSION - HEADING FUSION
- * ================================================================================================
+ * Gyroscope contributes fast short-term updates (no magnetic interference but
+ * drifts over time); compass anchors the long-term heading (absolute but noisy).
  *
- * PROBLEM:
- * - Compass alone is noisy and affected by magnetic interference (metal, electronics)
- * - Gyroscope alone drifts over time (small errors accumulate)
- * - Both sensors have different strengths and weaknesses
- *
- * SOLUTION:
- * Complementary filter combines both sensors:
- * - Use gyroscope for SHORT-TERM changes (fast, accurate, no magnetic interference)
- * - Use compass for LONG-TERM reference (absolute heading, corrects gyro drift)
- *
- * FORMULA (Complementary Filter):
- *   heading = α × (heading + gyro_delta) + (1-α) × compass
- *   where α = 0.98 (trust gyro 98%, compass 2%)
- *
- * EXPECTED IMPROVEMENT: 30% more stable heading, less AR jitter
- *
- * ================================================================================================
- * WHY THIS WORKS
- * ================================================================================================
- *
- * GYROSCOPE:
- * ✅ Fast response (high frequency)
- * ✅ No magnetic interference
- * ✅ Smooth output
- * ❌ Drifts over time (bias)
- *
- * COMPASS:
- * ✅ Absolute heading (no drift)
- * ✅ Long-term accurate
- * ❌ Noisy (jittery)
- * ❌ Affected by metal, electronics
- * ❌ Slow response
- *
- * FUSION:
- * ✅ Fast response from gyro
- * ✅ No drift (compass corrects it)
- * ✅ Smooth output
- * ✅ Reduced magnetic interference
- *
- * ================================================================================================
- * REFERENCE: Complementary filter theory, IEEE sensor fusion papers
- * ================================================================================================
+ *   heading = α × (heading + gyro_delta) + (1 − α) × compass,  α ≈ 0.98
  */
 class HeadingFusionFilter {
     companion object {
@@ -150,10 +108,8 @@ class HeadingFusionFilter {
             return
         }
 
-        // Subtract estimated bias
         val correctedGyroZ = gyroZ - gyroBiasZ
 
-        // Detect motion
         isMoving = abs(correctedGyroZ) > MOTION_THRESHOLD
         if (!isMoving) {
             stationaryCount++
@@ -245,24 +201,21 @@ class HeadingFusionFilter {
     }
 
     /**
-     * Get the current fused heading.
-     *
-     * @return Heading in degrees (0-360, true north)
+     * Current fused heading, in degrees true-north, range [0, 360).
      */
     fun getFusedHeading(): Float {
         return fusedHeading
     }
 
     /**
-     * Get the raw compass heading (for comparison).
+     * Raw compass heading — kept exposed for diagnostic comparison against the fused value.
      */
     fun getCompassHeading(): Float {
         return lastCompassHeading
     }
 
     /**
-     * Get the difference between fused and compass headings.
-     * Useful for detecting magnetic interference.
+     * Signed delta between fused and raw compass — large values flag magnetic interference.
      */
     fun getCompassDifference(): Float {
         var diff = fusedHeading - lastCompassHeading
@@ -271,19 +224,11 @@ class HeadingFusionFilter {
         return diff
     }
 
-    /**
-     * Check if filter is initialized.
-     */
     fun isInitialized(): Boolean = isInitialized
 
-    /**
-     * Check if device is currently moving (rotating).
-     */
+    /** True when the device is currently rotating. */
     fun isMoving(): Boolean = isMoving
 
-    /**
-     * Reset the filter.
-     */
     fun reset() {
         fusedHeading = 0f
         lastGyroTimestamp = 0
@@ -302,7 +247,7 @@ class HeadingFusionFilter {
     }
 
     /**
-     * Force set the fused heading (e.g., after recalibration).
+     * Override the fused heading directly (e.g., after recalibration).
      */
     fun setHeading(heading: Float) {
         fusedHeading = normalizeAngle(heading)
@@ -314,9 +259,7 @@ class HeadingFusionFilter {
     // UTILITY FUNCTIONS
     // ========================================================================================
 
-    /**
-     * Normalize angle to 0-360 range.
-     */
+    /** Normalize angle to [0, 360). */
     private fun normalizeAngle(angle: Float): Float {
         var normalized = angle % 360f
         if (normalized < 0) normalized += 360f
@@ -327,9 +270,7 @@ class HeadingFusionFilter {
     // DIAGNOSTICS
     // ========================================================================================
 
-    /**
-     * Get diagnostic information.
-     */
+    /** Diagnostic snapshot for debug logs. */
     fun getDiagnostics(): String {
         return """
             |╔═══════════════════════════════════════

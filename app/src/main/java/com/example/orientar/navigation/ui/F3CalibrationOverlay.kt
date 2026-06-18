@@ -19,73 +19,65 @@ import com.example.orientar.navigation.util.GpsQuality
 import com.example.orientar.navigation.util.GpsQualityClassifier
 
 /**
- * F3CalibrationOverlay — bottom card shown during dual-delta walk calibration.
+ * Bottom card shown during dual-delta walk calibration.
  *
- * # Plan B refactor (SCRUM-107 Step 2C Hot Fix #4 → Plan B)
+ * # Layout strategy
+ * The container is statically embedded in `activity_ar_navigation.xml` with
+ * `@+id/layoutF3Overlay`. The activity resolves it via `findViewById` and passes
+ * it in. We toggle `visibility` and animate `alpha`; we never inflate, add, or
+ * remove views. An earlier dynamic-inflate approach rendered near-fullscreen due
+ * to a measurement-pass interaction; the static-include pattern (same one F4
+ * uses) avoids that entirely.
  *
- * Previous implementation dynamically inflated `f3_calibration_overlay.xml` and added
- * it to `android.R.id.content` (ContentFrameLayout). Despite Hot Fixes #1-#4 setting
- * correct LayoutParams (verified via runtime diagnostic log: gravity=81,
- * width=MATCH_PARENT, height=WRAP_CONTENT, margins all correct), the view rendered
- * at near-fullscreen size (2138px / 2340px) due to a measurement-pass interaction
- * with the dynamic inflate path I couldn't pinpoint from outside.
+ * # Listener-driven
+ * Single entry point [handleState] dispatches all state changes. The activity
+ * invokes this via its `walkCalibrationListener` field.
  *
- * **Solution**: migrate to F4's proven static-include pattern. F3's layout is now
- * statically embedded in `activity_ar_navigation.xml` with `@+id/layoutF3Overlay`.
- * The activity resolves the container via `findViewById` and passes it to this
- * class's constructor. We toggle `visibility` and animate `alpha`; we never
- * inflate, add, or remove views.
+ * # Show timing
+ * On [WalkCalState.Waiting], schedules show after **250 ms** (cancellable) to
+ * avoid a flash for instant-compass-shortcut users.
  *
- * # Listener-driven model (unchanged)
- * Single entry point [handleState] dispatches all state changes. The activity invokes
- * this via its `walkCalibrationListener` field.
- *
- * # Show timing (unchanged)
- * On [WalkCalState.Waiting], schedules show after **250 ms** (cancellable) to avoid
- * a flash for instant-compass-shortcut users.
- *
- * # Backup timer (unchanged)
+ * # Backup timer
  * On [WalkCalState.Waiting], schedules a **35 s wall-clock** backup that fires
  * [WalkCalState.TimeoutFallback] through the listener — safety net if AR frames stop.
  *
- * # SCRUM-107 Stage 3 — Internal state machine
- *
- * The overlay drives its own 5-state FSM ([InternalState]) distinct from the external
- * [WalkCalState] event stream:
+ * # Internal state machine
+ * The overlay drives its own 5-state FSM ([InternalState]) distinct from the
+ * external [WalkCalState] event stream:
  *
  *  - **HIDDEN** — initial; reached again after fade-out completes
  *  - **ONSET** — F3 just shown; "Calibrating route" title, spinner + walk-dot pulse running
- *  - **WAITING_FOR_WALK** — compass-disagreement throttled-confirmed (audit Q1, fired by Stage 4);
- *    subtitle nudges user to walk
- *  - **WALK_ACTIVE** — Progress event arrived with displacement > [WALK_ACTIVE_THRESHOLD_M]
- *    (audit Risk R2); title swaps to "Walk forward"
- *  - **TERMINAL** — success terminal (Calibrated + check icon + walk-dot becomes green check)
- *    for [TERMINAL_MIN_DURATION_MS] before fade-out
+ *  - **WAITING_FOR_WALK** — compass-disagreement throttled-confirmed; subtitle nudges
+ *    the user to walk
+ *  - **WALK_ACTIVE** — Progress event arrived with displacement > [WALK_ACTIVE_THRESHOLD_M];
+ *    title swaps to "Walk forward"
+ *  - **TERMINAL** — success terminal (Calibrated + check icon + walk-dot becomes
+ *    green check) held for [TERMINAL_MIN_DURATION_MS] before fade-out
  *
- * Failure terminal ([WalkCalState.TimeoutFallback]) skips TERMINAL entirely and fades
- * immediately. Early shortcut (< 250 ms before F3 even appears) cancels timers without
- * showing anything — the success notification suffices (audit Risk R3 Option A).
+ * Failure terminal ([WalkCalState.TimeoutFallback]) skips TERMINAL entirely and
+ * fades immediately. An early shortcut (within the 250 ms show delay) cancels
+ * timers without showing anything — the success notification suffices.
  *
  * # Subtitle precedence
  * Poor GPS > Fair GPS > internal-state-driven copy. See [computeSubtitle].
  *
  * # GPS quality
- * [updateGpsQuality] is public so Stage 4's Activity-level GPS listener can drive the pill
- * before any Progress event fires. Idempotent — repeated equal-quality calls no-op.
+ * [updateGpsQuality] is public so the activity-level GPS listener can drive the
+ * pill before any Progress event fires. Idempotent — repeated equal-quality
+ * calls no-op.
  *
  * # Lifecycle
- * Caller MUST invoke [destroy] from `Activity.onDestroy()` to cancel pending Handler callbacks
- * and the pulse animator. View itself is part of the activity layout — destroyed automatically.
- *
- * SCRUM-107 Step 2C Plan B → Stage 3 state machine.
+ * Caller MUST invoke [destroy] from `Activity.onDestroy()` to cancel pending
+ * Handler callbacks and the pulse animator. The view itself is part of the
+ * activity layout and is destroyed automatically.
  */
 class F3CalibrationOverlay(
     private val activity: Activity,
     private val f3Container: View,
     /**
      * Navigation UI overlays (top route header, bottom nav card, compass HUD,
-     * debug buttons) to hide while F3 is visible. Restored on terminal state.
-     * SCRUM-107 Step 2C Hot Fix #7.
+     * debug buttons) hidden while F3 is visible; restored on terminal state so
+     * F3 owns the screen during calibration.
      */
     private val navUIViews: List<View>
 ) {
@@ -137,10 +129,9 @@ class F3CalibrationOverlay(
     private val tvSubtitle: TextView = f3Container.findViewById(R.id.tvF3Subtitle)
     private val tvGpsQuality: TextView = f3Container.findViewById(R.id.tvF3GpsQuality)
 
-    // SCRUM-107 Stage 2: new view references. dotCompass/dotGps stay as bg_step_dot_done
-    // throughout F3's lifetime (they were "done" by the time F3 shows); only dotWalk is
-    // mutated by Stage 3. They remain declared so the XML refactor stays validated at
-    // construction time.
+    // dotCompass/dotGps stay as bg_step_dot_done throughout F3's lifetime (they were
+    // "done" by the time F3 shows); only dotWalk is ever mutated. They remain declared
+    // so the XML layout stays validated at construction time.
     @Suppress("unused") private val dotCompass: View = f3Container.findViewById(R.id.dotF3Compass)
     @Suppress("unused") private val dotGps: View = f3Container.findViewById(R.id.dotF3Gps)
     private val dotWalk: View = f3Container.findViewById(R.id.dotF3Walk)
@@ -175,15 +166,15 @@ class F3CalibrationOverlay(
     }
 
     /**
-     * SCRUM-107 Stage 3 — GPS quality update channel.
+     * GPS quality update channel.
      *
      * - Classifies via [GpsQualityClassifier] (5m / 10m thresholds shared with F4 GPS ring).
      * - Updates the pill (text + background drawable + text color + padding).
      * - Refreshes subtitle because subtitle precedence is Poor > Fair > state-driven.
      * - Idempotent: equal-quality calls after the first no-op.
      *
-     * Public so Stage 4's Activity-level GPS listener can drive the pill even before any
-     * Progress event fires, and so Progress events themselves can route through here.
+     * Public so the activity-level GPS listener can drive the pill even before any
+     * Progress event fires, and so Progress events can route through here too.
      */
     fun updateGpsQuality(accuracyM: Float) {
         val newQuality = GpsQualityClassifier.classify(accuracyM)
@@ -208,12 +199,11 @@ class F3CalibrationOverlay(
             }
         }
         // Pill padding (8dp horizontal, 3dp vertical) so the text isn't flush against
-        // the rounded edges. Note: because tvF3GpsQuality is layout_width=0dp +
-        // layout_weight=1 (Hot Fix #6), the background drawable will span the full
-        // weighted width with text right-aligned inside; the pill aesthetic is
-        // bounded-on-the-right rather than wrap-around-text. A wrap-around-text pill
-        // requires a small XML refactor (e.g., wrapping tvF3GpsQuality in a FrameLayout
-        // with layout_gravity=end) — out of Stage 3 scope.
+        // the rounded edges. Because tvF3GpsQuality is layout_width=0dp + layout_weight=1,
+        // the background drawable spans the full weighted width with text right-aligned
+        // inside — bounded-on-the-right, not wrap-around-text. A wrap-around-text pill
+        // would need a small XML refactor (e.g., wrap tvF3GpsQuality in a FrameLayout
+        // with layout_gravity=end).
         val density = activity.resources.displayMetrics.density
         val hPx = (8f * density).toInt()
         val vPx = (3f * density).toInt()
@@ -222,11 +212,11 @@ class F3CalibrationOverlay(
     }
 
     /**
-     * SCRUM-107 polish: lets the Activity skip redundant in-app notifications when F3 is on screen.
-     * Returns true while F3 is showing any state (ONSET / WAITING_FOR_WALK / WALK_ACTIVE / TERMINAL,
-     * including the fade-in window after [showNow] is called); returns false when F3 is HIDDEN
-     * (pre-show window or post-fade-out). The internal `isVisible` field is set inside [showNow]
-     * before the fade-in animation begins and cleared inside [startFadeOut]'s onAnimationEnd.
+     * Lets the activity skip redundant in-app notifications when F3 is on screen.
+     * Returns true while F3 is showing any non-HIDDEN state (including the fade-in
+     * window after [showNow]); returns false during pre-show and post-fade-out.
+     * The internal `isVisible` flag is set in [showNow] before fade-in begins and
+     * cleared in [startFadeOut]'s onAnimationEnd.
      */
     fun isVisible(): Boolean = isVisible
 
@@ -248,8 +238,8 @@ class F3CalibrationOverlay(
         currentGpsQuality = GpsQuality.GOOD
         gpsQualityApplied = false
         tvSubtitle.alpha = 1f
-        // SCRUM-107 Step 2C Hot Fix #7: restore nav UI on destroy in case F3 was visible
-        // when activity died (e.g., user backed out mid-calibration). Harmless if already VISIBLE.
+        // Restore nav UI on destroy in case F3 was visible when the activity died
+        // (e.g., user backed out mid-calibration). Harmless if already VISIBLE.
         navUIViews.forEach { it.visibility = View.VISIBLE }
         android.util.Log.d("AR_LIFECYCLE", "F3CalibrationOverlay cleaned up")
     }
@@ -263,15 +253,14 @@ class F3CalibrationOverlay(
         // Cancel any prior pending show (defensive — should be no-op in typical flow)
         cancelAllTimers()
 
-        // SCRUM-107 Step 2C Hot Fix #8: hide nav UI IMMEDIATELY (before the 250ms show
-        // delay) to prevent a flash of route header / Recalibrate / EndNav / compass HUD
-        // between F2 fade-out completion and F3 fade-in start. Previously this lived in
-        // showNow() which only fires after the 250ms delay — too late.
+        // Hide nav UI IMMEDIATELY (before the 250ms show delay) to prevent a flash of
+        // route header / Recalibrate / EndNav / compass HUD between F2 fade-out and F3
+        // fade-in. Doing this only in showNow() — after the 250ms delay — is too late.
         //
-        // Shortcut edge case: if ShortcutSuccess fires within 33ms (~2 frames at 60fps)
-        // before F3 shows, onTerminalSuccess's early-return bails (isVisible=false) and
-        // nav UI is never re-shown via F3 fade-out — but Activity-level state updates
-        // restore it naturally.
+        // Shortcut edge case: if ShortcutSuccess fires within ~2 frames (33ms) before
+        // F3 shows, onTerminalSuccess's early-return bails (isVisible=false) and nav UI
+        // is never re-shown via F3 fade-out — but activity-level state updates restore
+        // it naturally.
         navUIViews.forEach { it.visibility = View.GONE }
 
         pendingShowRunnable = Runnable {
@@ -331,8 +320,8 @@ class F3CalibrationOverlay(
     private fun onProgress(p: WalkCalState.Progress) {
         if (!isVisible || internalState == InternalState.TERMINAL) return
 
-        // SCRUM-107 Step 2C Hot Fix #9 (preserved): defensive — keep nav UI hidden while
-        // F3 is visible. Progress fires every ~1-3 s; catches any unexpected VISIBLE override.
+        // Defensive — keep nav UI hidden while F3 is visible. Progress fires every
+        // ~1-3 s; catches any unexpected VISIBLE override.
         navUIViews.forEach { it.visibility = View.GONE }
 
         updateGpsQuality(p.gpsAccuracyM)
@@ -398,9 +387,9 @@ class F3CalibrationOverlay(
                     currentFadeAnimator = null
                     tvSubtitle.alpha = 1f  // reset for next session
                     stopWalkDotPulse()  // defensive in case failure path skipped TERMINAL
-                    // SCRUM-107 Step 2C Hot Fix #7: restore navigation UI after F3 fully fades.
-                    // Restoring AFTER fade-out completes (not before) prevents a visual flash
-                    // of overlapping F3 + nav UI during the 200ms fade.
+                    // Restore navigation UI AFTER F3 fully fades — restoring before
+                    // would cause a visual flash of overlapping F3 + nav UI during
+                    // the 200ms fade.
                     navUIViews.forEach { it.visibility = View.VISIBLE }
                 }
             })
@@ -468,12 +457,11 @@ class F3CalibrationOverlay(
     private fun showNow() {
         if (isVisible) return  // already showing, no-op
 
-        // SCRUM-107 Step 2C Hot Fix #9: re-hide nav UI to overcome the VISIBLE override
-        // from updateStateUI(STEP_3_NAVIGATION) that fires ~1ms after onWaiting (between
-        // Waiting and showNow). startARNavigation invokes the listener BEFORE the state
-        // transition, so updateStateUI's STEP_3 branch sets nav UI VISIBLE again right
-        // after our onWaiting GONE. This re-hide ensures nav UI stays GONE during F3.
-        // (Hot Fix #8's onWaiting GONE is still needed to kill the F2→F3 flash.)
+        // Re-hide nav UI to overcome the VISIBLE override from updateStateUI(STEP_3_NAVIGATION),
+        // which fires ~1ms after onWaiting (between Waiting and showNow). startARNavigation
+        // invokes the listener BEFORE the state transition, so updateStateUI's STEP_3 branch
+        // sets nav UI VISIBLE again right after onWaiting's GONE. This re-hide ensures nav UI
+        // stays GONE during F3. (The earlier onWaiting GONE is still needed to kill the F2→F3 flash.)
         navUIViews.forEach { it.visibility = View.GONE }
 
         f3Container.alpha = 0f
@@ -493,7 +481,7 @@ class F3CalibrationOverlay(
         currentFadeAnimator?.start()
         FileLogger.d("WALK_CAL", "F3 show")
 
-        // Hot Fix #7 diagnostic — confirm upper-center positioning + measurement
+        // Diagnostic — confirm upper-center positioning + measurement.
         f3Container.post {
             FileLogger.d(
                 "WALK_CAL",

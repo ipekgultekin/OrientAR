@@ -4,29 +4,18 @@ import com.example.orientar.navigation.util.FileLogger
 import kotlin.math.abs
 
 /**
- * RouteProgressTracker — owns route-progress and node-visitation state.
+ * Owns route-progress and node-visitation state. Extracted from the activity so
+ * arrival-detection logic is JVM-testable; callback lambdas keep all UI dispatch
+ * in the caller.
  *
- * Extracted from ArNavigationActivity (SCRUM-120 Step 2) to enable JVM unit
- * testing of the arrival-detection logic. Constructor copies references to
- * the route data and accepts callback lambdas for arrival / checkpoint
- * side-effects, keeping all UI dispatch in the caller.
+ * [markVisitedNodes] runs on every [updateProgress] call regardless of whether
+ * `lastClosestRouteIndex` advanced — gating on advancement previously suppressed
+ * visitation once the index saturated at the last coordinate, so a user within
+ * `arrivalThreshold` of the destination never triggered `onArrival`. The PROGRESS
+ * log line stays rate-limited and still only emits on advance.
  *
- * SCRUM-120 FIX (Step 3):
- *   [markVisitedNodes] now runs on EVERY [updateProgress] call, regardless
- *   of whether `lastClosestRouteIndex` advanced. Previously the gate
- *   `if (bestIdx != lastClosestRouteIndex)` suppressed the visitation check
- *   once the index saturated at `routeCoords.size - 1`, meaning the user
- *   could be within `arrivalThreshold` of the destination but never trigger
- *   `onArrival`. Field reproduction: walk5_noshi_a2_extended.log (980m route,
- *   ~+938s onwards) and the May-2026 Prep → Rectory 167.5m walk both showed
- *   index saturation without arrival.
- *
- *   The PROGRESS log line is still rate-limited and still only emits on
- *   index advance — only the visitation check was de-gated.
- *
- * Threading: not thread-safe. The Activity always calls [updateProgress]
- * from the GPS-update path on the main thread, so this matches the
- * pre-extraction guarantees.
+ * Not thread-safe — the activity always calls [updateProgress] from the GPS-update
+ * path on the main thread.
  */
 class RouteProgressTracker(
     private val routeCoords: List<Coordinate>,
@@ -38,12 +27,10 @@ class RouteProgressTracker(
 ) {
     companion object {
         private const val TAG = "RouteProgressTracker"
-        // Search-window sizing — mirrors the pre-extraction values at
-        // ArNavigationActivity.kt:1716-1717.
+        // Index-search window around the last known position.
         private const val SEARCH_WINDOW_BEHIND = 50
         private const val SEARCH_WINDOW_AHEAD = 200
-        // Rate-limit for the PROGRESS log line — mirrors the constant
-        // previously at ArNavigationActivity.kt:196 (RERENDER_PROGRESS_DELTA = 12).
+        // Minimum index advance before re-emitting the PROGRESS log line.
         private const val RERENDER_PROGRESS_DELTA = 12
     }
 
@@ -52,10 +39,8 @@ class RouteProgressTracker(
     private val visitedNodeIds = HashSet<Int>()
 
     /**
-     * Update progress for the given user position.
-     *
-     * Primitive-input entry point (no Android Location dependency) — follows
-     * the pattern established by CoordinateAligner.addAlignmentSample.
+     * Update progress for the given user position. Primitive inputs (no Android
+     * Location dependency) keep this JVM-testable.
      */
     fun updateProgress(userLat: Double, userLng: Double) {
         if (routeCoords.isEmpty()) return
@@ -75,9 +60,9 @@ class RouteProgressTracker(
             }
         }
 
-        // SCRUM-120 fix: markVisitedNodes runs on every update regardless of
-        // index advance. The PROGRESS log stays rate-limited (delta >= 12) and
-        // still only fires on advance; only the visitation check was de-gated.
+        // markVisitedNodes runs on every update regardless of index advance — the
+        // visitation check must not be gated on movement. PROGRESS log stays
+        // rate-limited (delta >= 12) and still only fires on advance.
         val indexAdvanced = (bestIdx != lastClosestRouteIndex)
         if (indexAdvanced) {
             lastClosestRouteIndex = bestIdx

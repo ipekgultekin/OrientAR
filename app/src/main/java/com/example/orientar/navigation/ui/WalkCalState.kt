@@ -1,13 +1,11 @@
 package com.example.orientar.navigation.ui
 
 /**
- * Walk calibration state events fired by [com.example.orientar.navigation.ArNavigationActivity]
+ * Walk-calibration state events fired by [com.example.orientar.navigation.ArNavigationActivity]
  * to subscribers (currently [F3CalibrationOverlay]).
  *
- * Listener-driven UI pattern — no polling, no isInitialized() gate. The activity decides when
- * each event fires based on the dual-delta state machine; F3 reacts via [F3CalibrationOverlay.handleState].
- *
- * SCRUM-107 Step 2C.
+ * Listener-driven — the activity decides when each event fires from the dual-delta state
+ * machine and F3 reacts via [F3CalibrationOverlay.handleState]. No polling, no isInitialized() gate.
  */
 sealed class WalkCalState {
     /** Calibration started; F3 should show after a brief 250 ms delay (cancellable on ShortcutSuccess). */

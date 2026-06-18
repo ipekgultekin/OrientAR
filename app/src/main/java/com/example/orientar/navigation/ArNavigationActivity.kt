@@ -50,9 +50,9 @@ import com.example.orientar.navigation.util.GpsQuality
 import com.example.orientar.navigation.util.GpsQualityClassifier
 import com.example.orientar.R
 
-// SCRUM-107 F6: ETA constants — closes SCRUM-63 by wiring Kalman velocity to the ETA calc.
-// DEFAULT_WALKING_SPEED_MS is the fallback when KalmanFilter isn't initialized yet (early frames)
-// or when the user is below MIN_VELOCITY_FOR_ETA_MS (stationary — avoids divide-by-near-zero).
+// ETA constants. DEFAULT_WALKING_SPEED_MS is the fallback used when KalmanFilter isn't
+// initialized yet (early frames) or when the user is below MIN_VELOCITY_FOR_ETA_MS
+// (stationary — avoids divide-by-near-zero).
 private const val DEFAULT_WALKING_SPEED_MS = 1.4
 private const val MIN_VELOCITY_FOR_ETA_MS = 0.3
 
@@ -77,14 +77,14 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     // UI COMPONENTS
     // ========================================================================================
     private lateinit var arView: ARSceneView
-    // SCRUM-107 F10: tvInfo removed — was tied to a permanently-hidden legacy ScrollView;
-    // the only production-relevant write (handleTrackingFailure) now goes to FileLogger.
+    // tvInfo removed — was tied to a permanently-hidden legacy ScrollView; the only
+    // production-relevant write (handleTrackingFailure) now goes to FileLogger.
     private lateinit var layoutRouteSelection: LinearLayout
     private lateinit var spinnerStartNode: Spinner
     private lateinit var spinnerEndNode: Spinner
     private lateinit var btnConfirmRoute: Button
     private lateinit var layoutCalibration: LinearLayout
-    // SCRUM-107 Step 2B — F4 calibration step strip
+    // F4 calibration step strip.
     private lateinit var viewCalStepDot1: View
     private lateinit var viewCalStepDot2: View
     private lateinit var viewCalStepDot3: View
@@ -93,14 +93,14 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var tvCalStepLabel1: TextView
     private lateinit var tvCalStepLabel2: TextView
     private lateinit var tvCalStepLabel3: TextView
-    // SCRUM-107 Step 2B — F4 calibration ring + content
+    // F4 calibration ring + content.
     private lateinit var calProgressRing: com.google.android.material.progressindicator.CircularProgressIndicator
     private lateinit var ivCalRingIcon: ImageView
     private lateinit var tvCalRingLabel: TextView
     private lateinit var tvCalRingValue: TextView
     private lateinit var tvCalTitle: TextView
     private lateinit var tvCalDesc: TextView
-    // SCRUM-107 Step 2B — F4 "Start anyway" pill
+    // F4 "Start anyway" pill.
     private lateinit var layoutCalStartAnyway: View
     private lateinit var btnCalStartAnyway: TextView
     private lateinit var layoutCompassHud: FrameLayout
@@ -110,13 +110,13 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     // Navigation UI elements
     private lateinit var layoutTopBar: LinearLayout
     private lateinit var layoutBottomCard: LinearLayout
-    // SCRUM-107 F10: layoutDebugPanel + btnDebugRecalibrate + btnShareLogs + btnCloseDebugPanel
-    // removed alongside the debug panel. btnDebugToggle stays (repurposed as help-sheet trigger);
-    // layoutDebugButtons stays (its visibility lifecycle via navUIViews keeps the help button hidden
-    // outside navigation).
+    // layoutDebugPanel + btnDebugRecalibrate + btnShareLogs + btnCloseDebugPanel were removed
+    // alongside the debug panel. btnDebugToggle stays (repurposed as help-sheet trigger);
+    // layoutDebugButtons stays so its visibility lifecycle via navUIViews keeps the help
+    // button hidden outside navigation.
     private lateinit var layoutDebugButtons: LinearLayout
     private lateinit var btnDebugToggle: ImageButton
-    // SCRUM-107 F6: btnDebugFlip removed (Arda confirmed 16 May 2026 — 'neredeyse hiç kullanmadık').
+    // btnDebugFlip removed — confirmed unused in practice.
     private lateinit var btnRecalibrate: Button
     private lateinit var btnEndNavigation: Button
     private lateinit var tvDestinationName: TextView
@@ -126,32 +126,32 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var tvProgressPercent: TextView
     private lateinit var tvNextCheckpoint: TextView
     private lateinit var tvETA: TextView
-    // SCRUM-107 F10: tvDebugInfo removed — debug panel deleted.
+    // tvDebugInfo removed — debug panel deleted.
 
-    // SCRUM-107 — Unified notification system
+    // Unified in-app notification system.
     private lateinit var notifications: NotificationManager
 
-    // SCRUM-107 Step 2B — F2 countdown overlay (pre-compass + pre-walk)
+    // F2 countdown overlay (pre-compass + pre-walk).
     private lateinit var f2Overlay: F2CountdownOverlay
 
-    // SCRUM-107 Step 2C — F3 walk calibration overlay
+    // F3 walk-calibration overlay.
     private lateinit var f3Overlay: F3CalibrationOverlay
     private var walkCalibrationListener: ((WalkCalState) -> Unit)? = null
     // Tracks last-known walked distance from Progress events (for completed-log diagnostic)
     private var lastKnownWalkDistanceM: Float = 0f
 
-    // SCRUM-107 Step 2B — F4 dynamic update listeners (unregistered on state exit)
+    // F4 dynamic update listeners — unregistered on state exit.
     private var compassAccuracyListener: ((Int) -> Unit)? = null
     private var gpsAccuracyListener: ((Float) -> Unit)? = null
 
-    // SCRUM-107 Step 2B — Risk #1 fix: track polling Runnable to cancel on skip/transition
+    // Track the compass-polling Runnable + Handler so we can cancel it on skip or state
+    // transition — otherwise stale ticks fire spurious "Compass ready" notifications.
     private var compassPollingRunnable: Runnable? = null
     private var compassPollingHandler: Handler? = null
 
-    // SCRUM-107 Step 2B follow-up (IMPORTANT 10 fix): prevent F2 WALK_PRE re-entry
-    // when GPS oscillates READY/COLLECTING during the 3-second countdown window.
-    // Reset at every new calibration flow (startCompassCalibrationStep) so each
-    // session gets a fresh trigger.
+    // Prevent F2 WALK_PRE re-entry when GPS oscillates READY/COLLECTING during the
+    // 3-second countdown window. Reset at every new calibration flow
+    // (startCompassCalibrationStep) so each session gets a fresh trigger.
     private var f2WalkPreFired = false
 
     //LOG
@@ -159,7 +159,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
 
     // UI State
-    // SCRUM-107 F10: isDebugMode flag removed — the debug panel it gated is gone.
+    // isDebugMode flag removed — the debug panel it gated is gone.
     private var hasArrivedAtDestination = false
     private var navigationStartTime: Long = 0L
 
@@ -182,7 +182,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     // AR SESSION & PLANE DETECTION
     // ========================================================================================
     private var isARConfigured = false
-    private var planeDetectionStartTime: Long = 0
 
     // ========================================================================================
     // SENSORS & ORIENTATION
@@ -196,7 +195,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private var lastRemapLogTime = 0L  // Throttle COMPASS_REMAP diagnostic log
     private var smoothedAzimuth: Float = 0f
     private var magneticDeclination: Float = 0f
-    // SCRUM-107 Step 2B — property setter pushes compass accuracy changes to F4 ring UI
+    // Property setter pushes compass-accuracy changes to the F4 ring UI.
     private var lastKnownAccuracy: Int = 0
         set(value) {
             field = value
@@ -237,22 +236,18 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private var lastAnchorLocation: Location? = null
     private var pendingGpsForAnchor: Location? = null  // GPS to use when anchor is created
     private var currentUserLocation: Location? = null  // Latest GPS for segment updates
-    private var staticRouteReport: String = ""
     private var selectedStartNode: Node? = null
     private var selectedEndNode: Node? = null
     private var routeCoords: List<Coordinate> = emptyList()
     private var routeNodePath: List<Node> = emptyList()
-    // Route progress + visitation tracker (SCRUM-120: extracted to RouteProgressTracker)
+    // Route progress + visitation tracker (extracted into RouteProgressTracker for testability).
     // Recreated on each route launch / recalibration via initRouteProgressTracker().
     private var routeProgressTracker: RouteProgressTracker? = null
 
     // ========================================================================================
     // CONFIGURATION
     // ========================================================================================
-    private val REANCHOR_THRESHOLD_METERS = 8.0f
-    private val REANCHOR_COOLDOWN_MS = 5000L
     private val VISITATION_DISTANCE_THRESHOLD = 5.0f
-    private var lastReAnchorTime: Long = 0
     @Volatile
     private var pendingAnchorCreation = false
     private var minCalibrationTimePassed = false
@@ -265,11 +260,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     @Volatile
     private var isRouteRenderingPending = false  // True when route should render after anchor
     private var anchorCreationAttempts = 0       // Track retry attempts
-
-    private var lastPlaneLogTime: Long = 0
-
-    // Track which anchor strategy was used (for debugging/UI)
-    private var lastAnchorStrategy: String = "None"
 
     // Flag to use outdoor-optimized anchoring (can be toggled for testing)
     private var useOutdoorAnchoring = true
@@ -290,17 +280,15 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private var sphereRefresher: SphereRefresher? = null  // Periodic full-recreate renderer
     private var pendingCompassInit = false  // Deferred compass init until phone is upright
     private var isRecalibrating = false  // Guard: prevent refresh during recalibration
-    private var pendingCompassInitLocation: Location? = null
     private var lastGoodArYaw: Double = 0.0  // Cached yaw for low xzMagnitude frames
 
     // Diagnostic fields
     private var lastTrackingState: TrackingState? = null
     private var trackingStateChangeTime = 0L
-    private var lastFusionLogTime = 0L
     private var frameCount = 0
     private var lastFpsLogTime = 0L
 
-    // HEAP sampler instrumentation (Patch C / D5 deviation)
+    // HEAP sampler instrumentation.
     private val heapSamplerHandler = Handler(Looper.getMainLooper())
     private var heapSamplerActive = false
     private val heapSamplerRunnable = object : Runnable {
@@ -434,7 +422,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
             // 1. SphereRefresher reference clear only (no native cleanup)
             //
-            // SCRUM-121: Do NOT call sphereRefresher.clearAll() in onDestroy.
+            // Do NOT call sphereRefresher.clearAll() in onDestroy.
             // Logcat evidence (tombstone_18 + AR_LIFECYCLE timeline) showed that by
             // the time onDestroy's body runs, SceneView's lifecycle observer has
             // already deleted the ArSession ("Deleting ArSession..." at native level)
@@ -479,7 +467,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 android.util.Log.e("AR_LIFECYCLE", "CoordinateAligner reset failed", e)
             }
 
-            // 5. Cancel pending notification handlers (SCRUM-107)
+            // 5. Cancel pending notification handlers.
             try {
                 if (::notifications.isInitialized) notifications.destroy()
                 android.util.Log.d("AR_LIFECYCLE", "✅ NotificationManager destroyed")
@@ -487,7 +475,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 android.util.Log.e("AR_LIFECYCLE", "NotificationManager destroy failed", e)
             }
 
-            // 6. F2 countdown overlay cleanup (SCRUM-107 Step 2B)
+            // 6. F2 countdown overlay cleanup.
             try {
                 if (::f2Overlay.isInitialized) f2Overlay.destroy()
                 f2WalkPreFired = false  // Defensive: reset re-entry guard (Activity is dying anyway)
@@ -496,14 +484,14 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 android.util.Log.e("AR_LIFECYCLE", "F2 destroy failed", e)
             }
 
-            // 6b. Cancel compass polling Runnable (SCRUM-107 Step 2B Risk #1 fix)
+            // 6b. Cancel compass-polling Runnable.
             try {
                 cancelCompassPolling()
             } catch (e: Exception) {
                 android.util.Log.e("AR_LIFECYCLE", "cancelCompassPolling failed", e)
             }
 
-            // 7. F3 calibration overlay cleanup (SCRUM-107 Step 2C)
+            // 7. F3 calibration overlay cleanup.
             try {
                 if (::f3Overlay.isInitialized) f3Overlay.destroy()
                 android.util.Log.d("AR_LIFECYCLE", "✅ F3CalibrationOverlay destroyed")
@@ -519,14 +507,14 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 android.util.Log.e("AR_LIFECYCLE", "Failed to clear coordinateAligner.progressCallback", e)
             }
 
-            // 8. Stop heap sampler (Patch C / D5 deviation; renumbered from 7 in Step 2C)
+            // 8. Stop heap sampler.
             try {
                 stopHeapSampler()
             } catch (e: Exception) {
                 android.util.Log.e("AR_LIFECYCLE", "stopHeapSampler failed", e)
             }
 
-            // 9. Shutdown FileLogger LAST (no FileLogger calls after this; renumbered from 8 in Step 2C)
+            // 9. Shutdown FileLogger LAST — no FileLogger calls after this.
             try {
                 FileLogger.d("AR_LIFECYCLE", "All resources cleaned up — shutting down logger")
                 FileLogger.shutdown()
@@ -690,8 +678,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         //     lastFpsLogTime = fpsNow
         // }
 
-        // FPS instrumentation (Patch C / D5 deviation; resurrects the disabled block above with 1s window and new format)
-        // Gated by sphereRefresher != null so it only fires during active navigation, not during calibration/buffer/heading-init.
+        // FPS instrumentation — resurrects the disabled block above with a 1s window and
+        // new format. Gated by sphereRefresher != null so it only fires during active
+        // navigation, not during calibration/buffer/heading-init.
         if (sphereRefresher != null) {
             frameCount++
             val fpsNow = System.currentTimeMillis()
@@ -722,14 +711,8 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         }
     }
     /**
-     * Toggle Phase 3 rendering on/off.
-     * Useful for testing and comparison.
-     */
-    /**
-     * Handles plane detection and anchor creation during navigation.
+     * Handle plane detection and anchor creation during navigation.
      * SphereRefresher manages its own identity-rotation anchors.
-     *
-     * @param frame The current AR frame from ARCore
      */
     private fun handlePlaneDetectionAndAnchor(session: Session, frame: Frame) {
         // ====================================================================
@@ -765,7 +748,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     if (compassDiff < 15.0) {
                         FileLogger.d("HEADING_INIT", "Compass shortcut: compass=${currentTrueBearing.toInt()}° " +
                             "agrees with route=${routeBearing.toInt()}° (diff=${compassDiff.toInt()}°) — using compass immediately")
-                        // SCRUM-107 Step 2C — diagnostic + fire ShortcutSuccess (F3 cancels pending show)
+                        // Diagnostic + fire ShortcutSuccess so F3 cancels any pending show.
                         FileLogger.d("WALK_CAL", "shortcut, compass agrees with route diff=${compassDiff.toInt()}deg")
                         walkCalibrationListener?.invoke(WalkCalState.ShortcutSuccess)
                         coordinateAligner.initialize(currentTrueBearing.toDouble(), arYaw)
@@ -774,12 +757,12 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                         isRecalibrating = false
                         if (sphereRefresher == null) initializeSphereRefresher()
                         runOnUiThread {
-                            // SCRUM-107 polish (Site 1): mirror the Sites 2/3 guard pattern. Site 1 is reached
-                            // by both the fast-shortcut (F3 never showed) and slow-shortcut (F3 visible in
-                            // ONSET/WAITING_FOR_WALK) paths. The audit assumed only the fast subcase, but the
-                            // slow subcase produces the same redundant double-feedback that Sites 2/3 had.
-                            // Defensive: if F3 isn't initialized or somehow isn't visible, still post so the
-                            // user gets at least one feedback channel.
+                            // Mirror the other notification guards. This site is reached by both the
+                            // fast-shortcut (F3 never showed) and slow-shortcut (F3 visible in
+                            // ONSET/WAITING_FOR_WALK) paths; the slow subcase produces the same
+                            // redundant double-feedback the other sites had. Defensive: if F3 isn't
+                            // initialized or somehow isn't visible, still post so the user gets at
+                            // least one feedback channel.
                             if (::f3Overlay.isInitialized && f3Overlay.isVisible()) {
                                 FileLogger.d("NOTIFICATION", "skipped: F3 visible (initial shortcut — slow path)")
                             } else {
@@ -793,9 +776,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                             lastHeadingInitLogTime = now
                             FileLogger.d("HEADING_INIT", "Compass disagrees with route: compass=${currentTrueBearing.toInt()}° " +
                                 "vs route=${routeBearing.toInt()}° (diff=${compassDiff.toInt()}°) — waiting for walk calibration")
-                            // SCRUM-107 Stage 4: notify F3 that walk path is needed (compass persistently disagrees).
-                            // Fires inside the existing 1Hz throttle so we don't flood at AR-frame rate (30-60Hz).
-                            // F3's onWaitingForWalk handler is idempotent; safe to invoke every ~1s.
+                            // Notify F3 that the walk path is needed (compass persistently disagrees).
+                            // Fires inside the existing 1Hz throttle so we don't flood at AR-frame
+                            // rate (30-60Hz). F3's onWaitingForWalk handler is idempotent; safe to
+                            // invoke every ~1s.
                             walkCalibrationListener?.invoke(WalkCalState.WaitingForWalk)
                         }
                     }
@@ -806,7 +790,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 if (waitingForDualDelta && elapsed > DUAL_DELTA_TIMEOUT_SECONDS * 1000L) {
                     val wasRecalibrating = isRecalibrating
                     FileLogger.w("HEADING_INIT", "Dual-delta timeout (${elapsed / 1000}s) — falling back to compass init")
-                    // SCRUM-107 Step 2C — diagnostic + fire TimeoutFallback + gated failure notification
+                    // Diagnostic + fire TimeoutFallback + gated failure notification.
                     FileLogger.d("WALK_CAL", "timeout, elapsed=${elapsed / 1000}s, last_walk=${String.format("%.1f", lastKnownWalkDistanceM)}m")
                     waitingForDualDelta = false
                     walkCalibrationListener?.invoke(WalkCalState.TimeoutFallback)
@@ -928,8 +912,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         // ============================================================================
     }
 
-    private var lastTrackingLogTime = 0L
-
     private fun handleTrackingFailure(reason: TrackingFailureReason?) {
         // AR_TRACKING log — DISABLED (confirmed all NONE in log30)
         // val now = System.currentTimeMillis()
@@ -948,8 +930,8 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             else -> "⚠️ AR tracking lost"
         }
 
-        // SCRUM-107 F10: tvInfo write replaced with FileLogger so tracking-failure diagnostics
-        // still persist (the prior view sink was a permanently-hidden legacy ScrollView).
+        // tvInfo write replaced with FileLogger so tracking-failure diagnostics still persist
+        // (the prior view sink was a permanently-hidden legacy ScrollView).
         FileLogger.d("AR_TRACKING", "Tracking failure: $message")
     }
 
@@ -960,15 +942,15 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     // ========================================================================================
     private fun initializeUI() {
         arView = findViewById(R.id.arView)
-        // SCRUM-107 F10: tvInfo findViewById removed — view no longer exists in the layout.
-        // (Old gesture comment about tvRecalculating dropped too — recalibrate sits on the HUD bottom card.)
+        // tvInfo findViewById removed — view no longer exists in the layout. (Old gesture
+        // comment about tvRecalculating dropped too — recalibrate sits on the HUD bottom card.)
         layoutRouteSelection = findViewById(R.id.layoutRouteSelection)
         spinnerStartNode = findViewById(R.id.spinnerStartNode)
         spinnerEndNode = findViewById(R.id.spinnerEndNode)
         btnConfirmRoute = findViewById(R.id.btnConfirmRoute)
         layoutCalibration = findViewById(R.id.layoutCalibration)
 
-        // SCRUM-107 Step 2B — F4 calibration step strip
+        // F4 calibration step strip.
         viewCalStepDot1 = findViewById(R.id.viewCalStepDot1)
         viewCalStepDot2 = findViewById(R.id.viewCalStepDot2)
         viewCalStepDot3 = findViewById(R.id.viewCalStepDot3)
@@ -977,14 +959,14 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         tvCalStepLabel1 = findViewById(R.id.tvCalStepLabel1)
         tvCalStepLabel2 = findViewById(R.id.tvCalStepLabel2)
         tvCalStepLabel3 = findViewById(R.id.tvCalStepLabel3)
-        // SCRUM-107 Step 2B — F4 ring + content
+        // F4 ring + content.
         calProgressRing = findViewById(R.id.calProgressRing)
         ivCalRingIcon = findViewById(R.id.ivCalRingIcon)
         tvCalRingLabel = findViewById(R.id.tvCalRingLabel)
         tvCalRingValue = findViewById(R.id.tvCalRingValue)
         tvCalTitle = findViewById(R.id.tvCalTitle)
         tvCalDesc = findViewById(R.id.tvCalDesc)
-        // SCRUM-107 Step 2B — F4 "Start anyway" pill
+        // F4 "Start anyway" pill.
         layoutCalStartAnyway = findViewById(R.id.layoutCalStartAnyway)
         btnCalStartAnyway = findViewById(R.id.btnCalStartAnyway)
         btnCalStartAnyway.setOnClickListener { handleForceStart() }
@@ -1001,9 +983,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         // Navigation UI
         layoutTopBar = findViewById(R.id.layoutTopBar)
         layoutBottomCard = findViewById(R.id.layoutBottomCard)
-        // SCRUM-107 F10: layoutDebugPanel / btnDebugRecalibrate / btnShareLogs /
-        // btnCloseDebugPanel / tvDebugInfo findViewIds removed — those views no longer
-        // exist in the layout (debug panel deleted, replaced by the help sheet).
+        // layoutDebugPanel / btnDebugRecalibrate / btnShareLogs / btnCloseDebugPanel /
+        // tvDebugInfo findViewIds removed — those views no longer exist in the layout
+        // (debug panel deleted, replaced by the help sheet).
         layoutDebugButtons = findViewById(R.id.layoutDebugButtons)
         btnDebugToggle = findViewById(R.id.btnDebugToggle)
         btnRecalibrate = findViewById(R.id.btnRecalibrate)
@@ -1029,19 +1011,19 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
         btnConfirmRoute.setOnClickListener { confirmRouteAndStart() }
 
-        // SCRUM-107 — Unified notification system
+        // Unified in-app notification system.
         notifications = NotificationManager(this, findViewById(android.R.id.content))
 
-        // SCRUM-107 Step 2B — F2 countdown overlay (pre-compass + pre-walk)
+        // F2 countdown overlay (pre-compass + pre-walk).
         f2Overlay = F2CountdownOverlay(this, findViewById(android.R.id.content))
 
-        // SCRUM-107 Step 2C Plan B — F3 walk calibration overlay (static include)
-        // Resolves the container declared in activity_ar_navigation.xml (@id/layoutF3Overlay).
-        // F3CalibrationOverlay no longer inflates — it toggles visibility + alpha on the static view.
+        // F3 walk-calibration overlay — static-include pattern. Resolves the container declared
+        // in activity_ar_navigation.xml (@id/layoutF3Overlay); F3CalibrationOverlay toggles
+        // visibility + alpha on the static view rather than inflating its own.
         //
-        // SCRUM-107 Step 2C Hot Fix #7 — pass nav UI overlays so F3 can hide them
-        // while visible. Premature nav UI (Recalibrate, ETA, route header) hides during
-        // walk calibration and restores after F3's terminal state fade-out completes.
+        // Pass the nav UI overlays so F3 can hide them while visible — Recalibrate, ETA, and
+        // route header hide during walk calibration and restore after F3's terminal-state
+        // fade-out completes.
         val navUIViews = listOf<View>(
             findViewById(R.id.layoutTopBar),
             findViewById(R.id.layoutBottomCard),
@@ -1061,18 +1043,18 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             f3Overlay.handleState(state)
         }
         f3Overlay.bindListener(walkCalibrationListener)
-        // SCRUM-107 Step 2C Hot Fix #2: coordinateAligner.progressCallback assignment
-        // moved to initializeSystems() because coordinateAligner is `lateinit` and not
-        // yet instantiated at the time initializeUI() runs (instantiated at L1266).
+        // coordinateAligner.progressCallback assignment moved to initializeSystems()
+        // because coordinateAligner is `lateinit` and not yet instantiated when
+        // initializeUI() runs.
     }
 
-    /** SCRUM-107 Step 2B — dp → px helper used by F4 programmatic drawables. */
+    /** dp → px helper used by the F4 programmatic drawables. */
     private fun dpToPx(dp: Int): Int =
         (dp * resources.displayMetrics.density).toInt()
 
     /**
-     * SCRUM-107 Step 2C — compute absolute compass-vs-route bearing difference for WALK_CAL logs.
-     * Mirrors the logic at handlePlaneDetectionAndAnchor L713-727. Returns 0 if no route or no GPS.
+     * Absolute compass-vs-route bearing difference, for WALK_CAL diagnostics. Mirrors
+     * the compute in handlePlaneDetectionAndAnchor. Returns 0 if no route or no GPS.
      */
     private fun currentRouteDiffDeg(): Int {
         val userLoc = currentUserLocation ?: return 0
@@ -1092,10 +1074,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         return Math.abs(ArUtils.normalizeAngleDeg(currentTrueBearing.toDouble() - routeBearing)).toInt()
     }
     private fun setupNavigationUI() {
-        // SCRUM-107 F10: the circular "i" button now opens the AR help sheet.
-        // Previous behavior (toggle debug panel + isDebugMode flag + close button + quick
-        // recalibrate + share logs) is gone — the debug panel was removed and Export logs
-        // moved into the help sheet (Recalibrate stays on the HUD bottom card).
+        // The circular "i" button now opens the AR help sheet. Previous behavior (toggle
+        // debug panel + isDebugMode flag + close button + quick recalibrate + share logs)
+        // is gone — the debug panel was removed and Export logs moved into the help sheet.
+        // Recalibrate stays on the HUD bottom card.
         btnDebugToggle.setOnClickListener {
             performHapticFeedback(it)
             showHelpSheet()
@@ -1113,9 +1095,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             showExitConfirmation()
         }
 
-        // SCRUM-107 F7: back button / gesture now routes through the SAME exit confirmation
-        // (symmetry — previously back silently finished the activity). Gated out of the
-        // arrival-celebration state, where back should close directly without confirming.
+        // Back button / gesture now routes through the SAME exit confirmation for symmetry
+        // (previously back silently finished the activity). Gated out of the arrival-celebration
+        // state, where back should close directly without confirming.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (layoutArrivalCelebration.visibility == View.VISIBLE) {
@@ -1138,10 +1120,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     }
 
     /**
-     * SCRUM-107 F7: glass-aesthetic exit confirmation. Shared by the End Navigation button
-     * and the OnBackPressedCallback (Part 2 symmetry). Mirrors CampusTour's setView + transparent
-     * window pattern so bg_glass_card's rounded corners show without platform dialog chrome.
-     * finish() is sufficient for teardown — onPause/onDestroy handle sensor + GPS + overlay cleanup.
+     * Glass-aesthetic exit confirmation, shared by the End Navigation button and the back-press
+     * callback. Mirrors CampusTour's setView + transparent-window pattern so bg_glass_card's
+     * rounded corners render without platform dialog chrome. finish() is sufficient for teardown
+     * — onPause/onDestroy handle sensor + GPS + overlay cleanup.
      */
     private fun showExitConfirmation() {
         val view = layoutInflater.inflate(R.layout.dialog_exit_confirmation, null)
@@ -1162,12 +1144,12 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     }
 
     /**
-     * SCRUM-107 F10: glass-aesthetic AR help sheet, bottom-anchored.
-     * Triggered by the circular "i" button (btnDebugToggle) in layoutDebugButtons.
-     * Mirrors F7's showExitConfirmation pattern (setView + transparent window background),
-     * adds Gravity.BOTTOM + MATCH_PARENT width so the glass sheet docks to the bottom edge.
-     * Replaces the removed debug panel: Export logs migrated here; Recalibrate intentionally
-     * stays on the HUD bottom card (btnRecalibrate) since the drift tip references it.
+     * Glass-aesthetic AR help sheet, bottom-anchored. Triggered by the circular "i" button
+     * (btnDebugToggle) in layoutDebugButtons. Mirrors [showExitConfirmation]'s setView +
+     * transparent-window pattern, plus Gravity.BOTTOM + MATCH_PARENT width so the glass
+     * sheet docks to the bottom edge. Replaces the removed debug panel: Export logs migrated
+     * here; Recalibrate intentionally stays on the HUD bottom card (btnRecalibrate) since
+     * the drift tip references it.
      */
     private fun showHelpSheet() {
         val view = layoutInflater.inflate(R.layout.dialog_help_sheet, null)
@@ -1274,7 +1256,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             layoutBottomCard.visibility = View.GONE
             layoutCompassHud.visibility = View.GONE
             layoutDebugButtons.visibility = View.GONE
-            // SCRUM-107 F10: layoutDebugPanel visibility line removed (panel deleted).
+            // layoutDebugPanel visibility line removed — panel deleted.
 
             // Show celebration with animation
             layoutArrivalCelebration.alpha = 0f
@@ -1284,14 +1266,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 .setDuration(500)
                 .start()
 
-            // ============================================================================
-            // BUG-009 FIX: Safe child view access for emoji animation
-            // ============================================================================
-            // PROBLEM: getChildAt(0) can throw IndexOutOfBoundsException if layout is empty.
-            //          While ?.let handles null, it doesn't protect against index errors.
-            //
-            // SOLUTION: Check childCount before accessing child by index.
-            // ============================================================================
+            // Safe child-view access — getChildAt(0) can throw IndexOutOfBoundsException
+            // if the layout is empty. ?.let handles null but not the index error, so we
+            // check childCount first.
             if (layoutArrivalCelebration.childCount > 0) {
                 val emojiView = layoutArrivalCelebration.getChildAt(0)
                 emojiView?.let {
@@ -1342,11 +1319,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private fun initializeSystems() {
         coordinateAligner = CoordinateAligner()
 
-        // SCRUM-107 Step 2C Hot Fix #2: wire CoordinateAligner progress callback here
-        // (immediately after instantiation) instead of in initializeUI(), which runs
-        // before initializeSystems() and would crash on the lateinit access. Lambda
-        // forwards to walkCalibrationListener which is set up in initializeUI() and
-        // is null-safe via `?.invoke()`.
+        // Wire CoordinateAligner.progressCallback here (immediately after instantiation)
+        // rather than in initializeUI(); the UI init runs before this method and would
+        // crash on the lateinit access. The lambda forwards to walkCalibrationListener,
+        // which initializeUI() sets up and is null-safe via `?.invoke()`.
         coordinateAligner.progressCallback = { gpsDist, arDist, gpsAcc, weight ->
             walkCalibrationListener?.invoke(
                 WalkCalState.Progress(gpsDist, arDist, gpsAcc, weight)
@@ -1425,7 +1401,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         calculateRouteOnce()
         Toast.makeText(this, "Route: ${startNode.name} → ${endNode.name}", Toast.LENGTH_LONG).show()
 
-        // SCRUM-107 Step 2B — pre-compass F2 countdown
+        // Pre-compass F2 countdown.
         f2Overlay.show(F2CountdownOverlay.Mode.COMPASS_PRE) {
             startCompassCalibrationStep()
         }
@@ -1433,7 +1409,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
     /**
      * Handles navigation launched with `START_MODE=VIRTUAL`. The user's GPS is projected onto the
-     * campus path network via phantom-node routing (see SCRUM-56 Phase 2 / [CampusGraph.findPathFromPoint]).
+     * campus path network via phantom-node routing (see [CampusGraph.findPathFromPoint]).
      *
      * Parallel to [handleIntentNavigation] for the named-destination flow. Mirrors the same
      * permission gate + sensor init + UI transition + compass-calibration handoff, but substitutes
@@ -1494,17 +1470,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 // selectedStartNode stays null — verified safe (null-safe elvis fallbacks only).
                 selectedEndNode = endNode
 
-                // SCRUM-120: (re)build the progress tracker for the new route
+                // (re)build the progress tracker for the new route.
                 initRouteProgressTracker()
 
-                val startName = "Your Location"  // D19
                 val endName = endNode.name ?: "Destination"
-                val offNetSuffix = if (result.isOffNetwork) " ⚠ Off-network" else ""
-                staticRouteReport =
-                    "✅ Route: $startName → $endName\n" +
-                    "${routeCoords.size} points, ${routeNodePath.size} nodes\n" +
-                    "Mode: ${result.startMode}, Snap: ${"%.1f".format(result.snapDistance)}m$offNetSuffix\n\n"
-
                 val routeLength = calculateRouteLength()
                 FileLogger.d("AR_ROUTE", "Route length: ${"%.1f".format(routeLength)}m")
                 FileLogger.nav("Route: ${routeNodePath.size} nodes, ${routeCoords.size} coords, ${"%.0f".format(routeLength)}m (phantom, ${result.startMode})")
@@ -1541,15 +1510,15 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     Toast.LENGTH_SHORT
                 ).show()
 
-                // SCRUM-107 Step 2B — pre-compass F2 countdown
+                // Pre-compass F2 countdown.
                 f2Overlay.show(F2CountdownOverlay.Mode.COMPASS_PRE) {
                     startCompassCalibrationStep()
                 }
             }
 
             is PhantomRouteResult.TooFar -> {
-                // SCRUM-107 F7: blocking error → persistent red card. finish() deferred to the
-                // OK button so the user actually reads the reason before the screen tears down.
+                // Blocking error — persistent red card. finish() deferred to the OK button
+                // so the user reads the reason before the screen tears down.
                 notifications.showError(
                     title = getString(R.string.notif_too_far_title),
                     description = getString(R.string.notif_too_far_desc),
@@ -1558,7 +1527,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             }
 
             is PhantomRouteResult.AccuracyTooLow -> {
-                // SCRUM-107 F7: fixable warning → persistent amber card. The × dismiss fires finish().
+                // Fixable warning — persistent amber card. The × dismiss fires finish().
                 notifications.showWarning(
                     title = getString(R.string.notif_gps_weak_title),
                     description = getString(R.string.notif_gps_weak_desc, result.accuracy.toInt()),
@@ -1568,7 +1537,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             }
 
             is PhantomRouteResult.NoPath -> {
-                // SCRUM-107 F7: blocking error → persistent red card; finish() deferred to OK.
+                // Blocking error — persistent red card; finish() deferred to OK.
                 notifications.showError(
                     title = getString(R.string.notif_no_route_title),
                     description = getString(R.string.notif_no_route_desc),
@@ -1628,7 +1597,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         Toast.makeText(this, "Route: ${selectedStartNode?.name} → ${selectedEndNode?.name}", Toast.LENGTH_SHORT).show()
 
         calculateRouteOnce()
-        // SCRUM-107 Step 2B — pre-compass F2 countdown
+        // Pre-compass F2 countdown.
         f2Overlay.show(F2CountdownOverlay.Mode.COMPASS_PRE) {
             startCompassCalibrationStep()
         }
@@ -1637,16 +1606,15 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private fun startCompassCalibrationStep() {
         updateStateUI(AppState.STEP_1_COMPASS_CALIBRATION)
 
-        // SCRUM-107 Step 2B (Risk #1 fix): track the Runnable + Handler so that
-        // skipping the compass step or transitioning to STEP_2 cancels the poll.
-        // Previously, the Runnable continued firing every 4s for up to 40s even
-        // after skip — could trigger a stale "Compass ready" success notification
-        // while the user was already in STEP_2.
+        // Track the Runnable + Handler so that skipping the compass step or transitioning
+        // to STEP_2 cancels the poll. Previously the Runnable kept firing every 4s for up
+        // to 40s after skip — that could trigger a stale "Compass ready" notification while
+        // the user was already in STEP_2.
         cancelCompassPolling()  // Defensive: clear any previous Runnable
 
-        // SCRUM-107 Step 2B follow-up (IMPORTANT 10 fix): reset WALK_PRE re-entry
-        // guard for this fresh calibration flow. All 3 route-entry sites
-        // (named/phantom/manual) converge here, so this is the single reset point.
+        // Reset the WALK_PRE re-entry guard for this fresh calibration flow. All three
+        // route-entry sites (named/phantom/manual) converge here, so this is the single
+        // reset point.
         f2WalkPreFired = false
 
         val handler = Handler(Looper.getMainLooper())
@@ -1683,9 +1651,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     }
 
     /**
-     * SCRUM-107 Step 2B (Risk #1 fix): cancel any in-flight compass-polling
-     * Runnable. Called from [handleForceStart] (skip path) and on STEP_2 entry
-     * in [updateStateUI]. Idempotent — no-op if already cleared.
+     * Cancel any in-flight compass-polling Runnable. Called from [handleForceStart]
+     * (skip path) and on STEP_2 entry in [updateStateUI]. Idempotent — no-op if
+     * already cleared.
      */
     private fun cancelCompassPolling() {
         compassPollingRunnable?.let { compassPollingHandler?.removeCallbacks(it) }
@@ -1773,24 +1741,24 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     private fun processGPSSample(location: Location) {
         val state = gpsBufferManager.addSample(location)
 
-        // SCRUM-107 F10: tvInfo GPS-debug write removed (view sink was permanently hidden).
+        // tvInfo GPS-debug write removed — the view sink was permanently hidden.
 
-        // SCRUM-107 Step 2B — push GPS accuracy to F4 ring UI (if active)
+        // Push GPS accuracy to the F4 ring UI (if active).
         gpsAccuracyListener?.invoke(location.accuracy)
 
-        // SCRUM-107 Stage 4 — push GPS accuracy to F3 calibration overlay.
-        // Bypasses gpsAccuracyListener because that listener is null'd at STEP_3_NAVIGATION
-        // (see updateStateUI), but F3 shows DURING STEP_3_NAVIGATION and needs continuous
-        // GPS quality updates. updateGpsQuality is idempotent + safe-when-hidden; calls
-        // before F3 is visible cache the classification for the next ONSET to consume.
+        // Push GPS accuracy to the F3 calibration overlay. Bypasses gpsAccuracyListener
+        // because that listener is null'd at STEP_3_NAVIGATION (see updateStateUI), but F3
+        // shows DURING STEP_3_NAVIGATION and needs continuous GPS-quality updates.
+        // updateGpsQuality is idempotent + safe-when-hidden; calls before F3 is visible
+        // cache the classification for the next ONSET to consume.
         if (::f3Overlay.isInitialized) {
             runOnUiThread { f3Overlay.updateGpsQuality(location.accuracy) }
         }
 
-        // SCRUM-107 F6: dispatch GPS quality to the main HUD compass ring color
-        // (mirrors the Stage 4 f3Overlay dispatch above — same GpsQualityClassifier,
-        // same processGPSSample channel). Always-on, AppState-agnostic; lateinit guard
-        // protects the early-startup window before findViewById runs.
+        // Dispatch GPS quality to the main HUD compass-ring color — mirrors the F3 overlay
+        // dispatch above (same GpsQualityClassifier, same processGPSSample channel).
+        // Always-on, AppState-agnostic; the lateinit guard protects the early-startup
+        // window before findViewById runs.
         if (::layoutCompassHud.isInitialized) {
             runOnUiThread {
                 updateCompassRingColor(GpsQualityClassifier.classify(location.accuracy))
@@ -1800,8 +1768,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         if (state == GPSBufferManager.State.READY) {
             val finalLocation = gpsBufferManager.calculateWeightedAverage()
             if (finalLocation != null) {
-                // SCRUM-107 Step 2B follow-up (IMPORTANT 10 fix): guard against
-                // GPS-READY oscillation re-firing the WALK_PRE countdown mid-flow.
+                // Guard against GPS-READY oscillation re-firing the WALK_PRE countdown mid-flow.
                 if (!f2WalkPreFired) {
                     f2WalkPreFired = true
                     layoutCalibration.visibility = View.GONE  // hide F4 under F2 backdrop
@@ -1837,16 +1804,15 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     val elapsedS = (System.currentTimeMillis() - dualDeltaStartTime) / 1000f
                     FileLogger.d("HEADING_INIT", "Dual-delta alignment succeeded: " +
                         "yawOffset=${coordinateAligner.getYawOffset().toInt()}°")
-                    // SCRUM-107 Step 2C — diagnostic + fire Completed + gated success notification
+                    // Diagnostic + fire Completed + gated success notification.
                     FileLogger.d("WALK_CAL", "completed, walk=${String.format("%.1f", lastKnownWalkDistanceM)}m, " +
                         "time=${String.format("%.1f", elapsedS)}s, offset=${coordinateAligner.getYawOffset().toInt()}deg")
                     walkCalibrationListener?.invoke(WalkCalState.Completed)
                     if (sphereRefresher == null) initializeSphereRefresher()
                     runOnUiThread {
-                        // SCRUM-107 polish: skip redundant in-app notification when F3 TERMINAL
-                        // is already on screen (audit found Sites 2/3 are the only redundant
-                        // ones — F3 visible + bottom banner shown = double-feedback that
-                        // outlives F3 by ~1.3s and creates the "notification after F3" perception).
+                        // Skip the redundant in-app notification when F3 TERMINAL is already on
+                        // screen — F3 visible + bottom banner shown was double-feedback that
+                        // outlived F3 by ~1.3s and produced the "notification after F3" feel.
                         // Defensive: if F3 isn't initialized or somehow isn't visible, still post
                         // so the user gets at least one feedback channel.
                         if (::f3Overlay.isInitialized && f3Overlay.isVisible()) {
@@ -1991,36 +1957,34 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             // which checks pose xzMagnitude > 0.7 before initializing.
             // ====================================================================
             pendingCompassInit = true  // Fallback: compass init if dual-delta times out
-            pendingCompassInitLocation = location
             waitingForDualDelta = true
             dualDeltaStartTime = System.currentTimeMillis()
             lastHeadingInitLogTime = 0L
             coordinateAligner.resetDualDelta()
 
             FileLogger.d("HEADING_INIT", "Dual-delta wait started — walk to calibrate, compass fallback in ${DUAL_DELTA_TIMEOUT_SECONDS}s")
-            // SCRUM-107 Step 2B (Risk #5 fix): showInstruction("Hold phone upright...")
-            // dropped — F2 pre-walk countdown already covered the same hint visually.
+            // showInstruction("Hold phone upright...") dropped — the F2 pre-walk countdown
+            // already covers the same hint visually.
         }
 
         smoothedCameraY = Float.NaN
         previousGpsForBearing = null
         lastGoodArYaw = 0.0
-        // SCRUM-107 Step 2C Hot Fix #10: updateStateUI MUST run BEFORE the listener invoke
-        // below. STEP_3_NAVIGATION branch sets nav UI VISIBLE (default for the navigation
-        // state); if we invoke Waiting first, onWaiting's GONE is overridden ~1ms later,
-        // causing a 250ms flash before showNow re-hides. Running updateStateUI first
-        // means nav UI flips VISIBLE → GONE in 1ms (imperceptible, ~1 frame at 60fps)
-        // instead of GONE → VISIBLE → GONE over 250ms (visible flash). Pre-Hot-Fix-#10
-        // audit verified single call site for updateStateUI(STEP_3_NAVIGATION); no other
-        // path re-asserts nav UI VISIBLE, so this single swap is sufficient.
+        // updateStateUI MUST run BEFORE the listener invoke below. STEP_3_NAVIGATION sets
+        // nav UI VISIBLE (default for that state); if we invoke Waiting first, onWaiting's
+        // GONE is overridden ~1ms later, causing a 250ms flash before showNow re-hides.
+        // Running updateStateUI first means nav UI flips VISIBLE → GONE in 1ms
+        // (imperceptible, ~1 frame at 60fps) instead of GONE → VISIBLE → GONE over 250ms.
+        // Single call site for updateStateUI(STEP_3_NAVIGATION); no other path re-asserts
+        // nav UI VISIBLE, so this one swap is sufficient.
         updateStateUI(AppState.STEP_3_NAVIGATION)
-        // SCRUM-107 Step 2C — fire Waiting → F3 shows after 250ms delay
+        // Fire Waiting → F3 shows after the 250ms delay.
         FileLogger.d("WALK_CAL", "started, mode=initial, route_diff=${currentRouteDiffDeg()}deg")
         lastKnownWalkDistanceM = 0f  // reset for this calibration session
         walkCalibrationListener?.invoke(WalkCalState.Waiting)
 
         FileLogger.d("INIT", "Navigation started: SphereRefresher ONLY. Old renderer disabled.")
-        // SCRUM-107: "Looking for floor..." Toast dropped — walk-calibration Instruction (above) covers the same intent
+        // "Looking for floor..." Toast dropped — the walk-calibration instruction above covers the same intent.
     }
 
     private fun calculateRouteOnce() {
@@ -2031,17 +1995,15 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         routeNodePath = campusGraph.findNodePath(startNode.id, endNode.id)
 
         if (routeCoords.isEmpty()) {
-            // SCRUM-107 F10: tvInfo write removed; log the failure for diagnostics.
+            // tvInfo write removed; log the failure for diagnostics.
             FileLogger.d("ROUTE", "No route found from ${startNode.id} to ${endNode.id}")
             return
         }
 
-        // SCRUM-120: (re)build the progress tracker for the new route
+        // (re)build the progress tracker for the new route.
         initRouteProgressTracker()
 
-        staticRouteReport = "✅ Route: ${startNode.name} → ${endNode.name}\n${routeCoords.size} points, ${routeNodePath.size} nodes\n\n"
-
-        // Calculate total route length to decide on segmentation
+        // Calculate total route length to decide on segmentation.
         val routeLength = calculateRouteLength()
         FileLogger.d("AR_ROUTE", "Route length: ${"%.1f".format(routeLength)}m")
         FileLogger.nav("Route: ${routeNodePath.size} nodes, ${routeCoords.size} coords, ${"%.0f".format(routeLength)}m")
@@ -2090,145 +2052,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     }
 
     // (checkDriftAndReAnchor removed — SphereRefresher recreates anchors every 8m)
-    // Dead code block follows — will be removed in future cleanup
-    /**
-     * REMOVED: Checks for GPS drift and triggers re-anchoring if necessary.
-     *
-     * DRIFT DETECTION:
-     * As the user walks, the AR anchor stays in place while the GPS position moves.
-     * If the distance between the anchor's GPS position and the current GPS position
-     * exceeds REANCHOR_THRESHOLD_METERS, we need to create a new anchor closer to
-     * the user's current position.
-     *
-     * RE-ANCHORING PROCESS:
-     * 1. Clear the old anchor and route
-     * 2. Reset the CoordinateAligner (CRITICAL - the old yaw offset is invalid)
-     * 3. Update the anchor location to current GPS
-     * 4. Wait for plane detection to create a new anchor
-     * 5. Re-render the route from the new anchor
-     *
-     * RATE LIMITING:
-     * Re-anchoring is expensive (clears and re-renders everything), so we enforce
-     * a cooldown period between re-anchors.
-     *
-     * @param currentLocation The user's current GPS location
-     */
-    // TODO(SCRUM-56 Phase 2): If re-enabling this drift-detection path, phantom-flow
-    // routes (selectedStartNode == null) require rebuilding via campusGraph.findPathFromPoint
-    // followed by an explicit initializeSphereRefresher() call — see forceRecalibration() Fix 1+3
-    // for the reference pattern. Without that rebuild, spheres will disappear after re-anchor
-    // on phantom routes and never come back. Bug reproduced and fixed 2026-04-24 via three
-    // iterations; see fix_phantom_recalibration.md and fix_sphere_reinit_after_recalib.md.
-    private fun checkDriftAndReAnchor(currentLocation: Location) {
-        val now = System.currentTimeMillis()
-
-        // Enforce cooldown between re-anchors
-        if (now - lastReAnchorTime < REANCHOR_COOLDOWN_MS) return
-
-        val effectiveThreshold = REANCHOR_THRESHOLD_METERS
-
-        lastAnchorLocation?.let { anchor ->
-            // Calculate distance from anchor to current position
-            val distance = ArUtils.distanceMeters(
-                anchor.latitude, anchor.longitude,
-                currentLocation.latitude, currentLocation.longitude
-            )
-
-            // Only re-anchor if drift is significant AND GPS is reliable
-            if (distance > effectiveThreshold && currentLocation.accuracy < 15.0f) {
-                lastReAnchorTime = now
-
-                FileLogger.d("AR_REANCHOR", "╔════════════════════════════════════════════════════════════")
-                FileLogger.d("AR_REANCHOR", "║ DRIFT DETECTED - INITIATING RE-ANCHOR")
-                FileLogger.d("AR_REANCHOR", "╠════════════════════════════════════════════════════════════")
-                FileLogger.d("AR_REANCHOR", "║ Drift distance: ${"%.1f".format(distance)}m")
-                FileLogger.d("AR_REANCHOR", "║ GPS accuracy: ${"%.1f".format(currentLocation.accuracy)}m")
-                FileLogger.d("AR_REANCHOR", "║ Old anchor: (${anchor.latitude}, ${anchor.longitude})")
-                FileLogger.d("AR_REANCHOR", "║ New anchor: (${currentLocation.latitude}, ${currentLocation.longitude})")
-                FileLogger.d("AR_REANCHOR", "╚════════════════════════════════════════════════════════════")
-                FileLogger.nav("RE-ANCHOR: drift=${String.format("%.1f", distance)}m, acc=${String.format("%.1f", currentLocation.accuracy)}m")
-
-                // Show user feedback
-                runOnUiThread {
-                    notifications.showWarning(
-                        title = getString(R.string.notif_position_drift_title),
-                        description = getString(R.string.notif_position_drift_desc, distance.toInt()),
-                        dismissable = false
-                    )
-                }
-
-                // ====================================================================
-                // CRITICAL: Reset all coordinate-related state
-                // ====================================================================
-
-                // 1. SphereRefresher manages its own anchor — no legacy clearAnchor needed
-
-                // 2. DO NOT reset CoordinateAligner — the yaw offset is still valid
-                // within the same AR session. Resetting and re-initializing from
-                // compass would use potentially unreliable magnetometer data.
-
-                // 2b. DO NOT reset Kalman filter — it has converged and provides good smoothing.
-                // DO NOT reset heading fusion filter — it has accumulated useful gyro data.
-                // Only reset adaptive fusion flag (cheap to re-evaluate).
-                fusionDisabledByAdaptive = false
-                FileLogger.d("AR_REANCHOR", "Filters preserved (Kalman + HeadingFusion kept)")
-
-                // Reset dual-delta state and re-initialize from compass
-                coordinateAligner.resetDualDelta()
-                previousGpsForBearing = null
-                lastGoodArYaw = 0.0
-
-                val raPose = arView.frame?.camera?.displayOrientedPose
-                val raZAxis = raPose?.zAxis
-                val raXzMag = if (raZAxis != null) kotlin.math.sqrt(raZAxis[0] * raZAxis[0] + raZAxis[2] * raZAxis[2]) else 0f
-
-                if (raXzMag > 0.7) {
-                    val arYaw = getArYaw()
-                    // Re-anchor uses compass immediately (user is mid-walk, drift detected)
-                    // Dual-delta will refine heading if user keeps walking
-                    coordinateAligner.forceReinitialize(currentTrueBearing.toDouble(), arYaw)
-                    FileLogger.align("Re-anchor compass reinit: bearing=${currentTrueBearing.toInt()}°, offset=${coordinateAligner.getYawOffset().toInt()}°")
-                    waitingForDualDelta = true
-                    dualDeltaStartTime = System.currentTimeMillis()
-                    lastHeadingInitLogTime = 0L
-                    coordinateAligner.resetDualDelta()
-                    pendingCompassInit = true  // Fallback
-                    FileLogger.d("HEADING_INIT", "Re-anchor: compass used as initial, dual-delta wait for refinement")
-                } else {
-                    pendingCompassInit = true
-                    waitingForDualDelta = true
-                    dualDeltaStartTime = System.currentTimeMillis()
-                    lastHeadingInitLogTime = 0L
-                    coordinateAligner.resetDualDelta()
-                    FileLogger.d("HEADING_INIT", "Re-anchor deferred (phone flat): dual-delta wait started")
-                }
-
-                // 3. Reset anchor location (will be set when new anchor is created)
-                // Keep old location as fallback in case GPS fails during re-anchor
-                // Don't set to null - getBestAvailableGps() will use it as fallback
-                pendingGpsForAnchor = currentLocation  // Start with current GPS
-
-                // 4. Reset rendering state
-                anchorCreationAttempts = 0
-                isRouteRenderingPending = false
-
-                // 5. SphereRefresher handles anchor creation on next refresh
-                pendingAnchorCreation = false
-                sphereRefresher?.clearAll()  // Force fresh anchor + spheres on next GPS
-
-                // Aligner already reinitialized from compass above (step 2b)
-
-                // Hide the recalculating notification after a delay
-                Handler(Looper.getMainLooper()).postDelayed({
-                    notifications.hide()
-                }, 5000)
-            }
-        }
-    }
 
     private fun updateLiveUI(currentLocation: Location) {
-        // SCRUM-107 F10: arYaw / alignmentError / distanceToNext computations dropped —
-        // they were only ever consumed by the now-removed debug-panel buildString.
+        // arYaw / alignmentError / distanceToNext computations dropped — they were only
+        // ever consumed by the now-removed debug-panel buildString.
 
         // Calculate progress — use SphereRefresher's monotonic progress (furthestReachedIndex)
         val progress = sphereRefresher?.getProgressPercent() ?: 0
@@ -2246,12 +2073,12 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             // Update remaining distance
             tvRemainingDistance.text = formatDistance(remainingDistance)
 
-            // Update next checkpoint (SCRUM-107 F6: " · " delimiter replaces ": ")
+            // Update next checkpoint — " · " delimiter replaces ": " for whisper-style layout.
             tvNextCheckpoint.text = "Next · $nextCheckpoint"
 
-            // SCRUM-107 F6 (closes SCRUM-63): use Kalman-filtered velocity for ETA when initialized
-            // and above MIN_VELOCITY_FOR_ETA_MS (avoids divide-by-near-zero when stationary). Falls
-            // back to DEFAULT_WALKING_SPEED_MS otherwise. Pattern mirrors the existing
+            // Use the Kalman-filtered velocity for ETA when the filter is initialized and the
+            // speed is above MIN_VELOCITY_FOR_ETA_MS (avoids divide-by-near-zero when stationary).
+            // Falls back to DEFAULT_WALKING_SPEED_MS otherwise. Pattern mirrors the existing
             // `::kalmanFilter.isInitialized && kalmanFilter.isInitialized()` lateinit + state guard.
             val effectiveSpeedMs = if (::kalmanFilter.isInitialized && kalmanFilter.isInitialized()) {
                 val (vLat, vLng) = kalmanFilter.getVelocity()
@@ -2265,9 +2092,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 else -> "ETA · $etaMinutes min"
             }
 
-            // SCRUM-107 F10: debug-panel buildString + tvDebugInfo / tvInfo writes removed
-            // along with the debug panel. The metrics this surfaced (position, alignment error,
-            // GPS, fusion status) are already covered by FileLogger output through the regular
+            // debug-panel buildString + tvDebugInfo / tvInfo writes removed along with the
+            // debug panel. The metrics this surfaced (position, alignment error, GPS, fusion
+            // status) are already covered by FileLogger output through the regular
             // navigation pipeline.
         }
     }
@@ -2319,14 +2146,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     // ========================================================================================
 
     /**
-     * Forces a recalibration of the AR coordinate system.
-     * Call this when user reports spheres are in wrong direction.
-     *
-     * FIXED ISSUES:
-     * 1. Now creates new anchor at current GPS position
-     * 2. Handles null lastAnchorLocation
-     * 3. Properly clears old anchor before creating new one
-     * 4. Resets sensor fusion filters (Phase 2)
+     * Force a recalibration of the AR coordinate system. Creates a new anchor at the
+     * current GPS position, clears the old anchor cleanly, and resets the sensor-fusion
+     * filters. Call when the user reports spheres in the wrong direction.
      */
     private fun forceRecalibration() {
         isRecalibrating = true  // Guard: prevent SphereRefresher.refresh() during recalib
@@ -2336,31 +2158,22 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         FileLogger.d("AR_RECALIB", "║ MANUAL RECALIBRATION TRIGGERED")
         FileLogger.d("AR_RECALIB", "╚════════════════════════════════════════════════════════════")
 
-        // SCRUM-107 polish (Site 6): "Recalibrating — Hold phone steady" warning REMOVED
-        // rather than guarded. Three reasons (see Site 6 patch report for full analysis):
-        //
-        // 1. SPATIAL COLLISION: F3 conveys recalibration state at the same top-center
-        //    screen location ("Calibrating route" title + step strip + GPS pill). The
-        //    warning visually collided with F3 (confirmed by 2026-05-18 field-test screenshot).
-        //
-        // 2. TIMING: Site 6 fires synchronously at T+0 of forceRecalibration, BEFORE the
-        //    L2521 `Waiting` fire schedules F3's 250ms show delay. So Sites 1/2/3-style
-        //    `f3Overlay.isVisible()` guard cannot engage at the fire moment (F3 always
-        //    HIDDEN here). The collision arises at T+250ms when F3 shows up alongside
-        //    the persistent dismissable=false warning — a guard at the fire site is moot.
-        //
-        // 3. POLISH 2 REGRESSION: this warning's single-slot replacement used to be the
-        //    Site 3 success notification (notif_recalibrated). Polish 2's Sites 2/3 guard
-        //    now skips that success when F3 is visible — meaning the dismissable=false
-        //    warning would never be auto-replaced, persisting indefinitely on screen.
-        //
-        // Additionally, the warning's "Hold phone steady" copy contradicts F3's new
-        // "Walk forward to calibrate" subtitle (Polish 1's delayed WaitingForWalk fire).
-        // The new F3-driven flow supersedes the legacy pre-F3 "hold steady" UX.
-        //
-        // Orphan strings notif_recalibrating_title / notif_recalibrating_desc remain in
-        // strings.xml for now (Polish 1 discipline: don't touch existing strings unless
-        // necessary). Future cleanup pass can remove them.
+        // "Recalibrating — Hold phone steady" warning REMOVED rather than guarded:
+        //  - F3 conveys recalibration state at the same top-center screen location
+        //    ("Calibrating route" title + step strip + GPS pill), so the warning
+        //    visually collided with F3.
+        //  - The warning fires synchronously at T+0 of forceRecalibration, before the
+        //    Waiting fire schedules F3's 250ms show delay; an f3Overlay.isVisible()
+        //    guard would always see HIDDEN at the fire moment. The collision shows up
+        //    at T+250ms when F3 appears alongside the dismissable=false warning.
+        //  - The previously-paired success notification (notif_recalibrated) is now
+        //    skipped when F3 is visible, so the dismissable=false warning would never
+        //    get auto-replaced and would persist indefinitely.
+        // The warning's "Hold phone steady" copy also contradicts F3's new
+        // "Walk forward to calibrate" subtitle. The new F3-driven flow supersedes
+        // the legacy pre-F3 "hold steady" UX. Orphan strings
+        // notif_recalibrating_title / notif_recalibrating_desc remain in strings.xml
+        // for now; a future cleanup pass can remove them.
         FileLogger.d("NOTIFICATION", "removed: notif_recalibrating (recalibration entry — F3 conveys state)")
 
         // Get current GPS position for new anchor
@@ -2404,17 +2217,12 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         // Reset dual-delta state (clears old samples)
         coordinateAligner.resetDualDelta()
 
-        // ============================================================================
-        // SCRUM-56 Phase 2: phantom-flow recalibration
-        // ============================================================================
-        // If the original route was launched via virtual-start (chip), rebuild it from
-        // the user's CURRENT GPS. Otherwise the partial-edge slice in routeCoords[0..N]
-        // can leave routeCoords[1] pointing backward after the user has walked forward,
-        // which trips the compass-vs-route diff check at the bearing sanity pass below
-        // and locks us in dual-delta wait until the user walks ≥3m.
-        //
-        // Named flow leaves this block untouched (selectedStartNode non-null).
-        // ============================================================================
+        // Phantom-flow recalibration. If the original route was launched via virtual-start
+        // (chip), rebuild it from the user's CURRENT GPS — otherwise the partial-edge slice
+        // in routeCoords[0..N] can leave routeCoords[1] pointing backward after the user has
+        // walked forward, which trips the compass-vs-route diff check below and locks us in
+        // dual-delta wait until the user walks ≥3m. Named flow leaves this block untouched
+        // (selectedStartNode non-null).
         val isPhantomRoute = selectedStartNode == null
         if (isPhantomRoute) {
             val targetNode = selectedEndNode
@@ -2431,7 +2239,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     is PhantomRouteResult.Success -> {
                         routeCoords = result.polyline
                         routeNodePath = result.nodePath
-                        // SCRUM-120: (re)build the progress tracker for the rebuilt route
+                        // (re)build the progress tracker for the rebuilt route.
                         initRouteProgressTracker()
                         FileLogger.d("AR_RECALIB",
                             "Phantom route rebuilt: ${result.nodePath.size} nodes, " +
@@ -2508,7 +2316,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 pendingCompassInit = false
                 FileLogger.d("HEADING_INIT", "Recalib compass shortcut: compass=${currentTrueBearing.toInt()}° " +
                     "agrees with route=${routeBearing.toInt()}° (diff=${compassDiff.toInt()}°)")
-                // SCRUM-107 Step 2C — diagnostic + fire ShortcutSuccess + recalibrated notification
+                // Diagnostic + fire ShortcutSuccess + recalibrated notification.
                 FileLogger.d("WALK_CAL", "shortcut, recalib compass agrees with route diff=${compassDiff.toInt()}deg")
                 walkCalibrationListener?.invoke(WalkCalState.ShortcutSuccess)
                 if (wasRecalibrating) {
@@ -2526,10 +2334,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     recalibBearing = routeBearing
                 }
                 coordinateAligner.forceReinitialize(recalibBearing, arYaw)
-                // SCRUM-107 Step 2C Hot Fix: do NOT clear isRecalibrating here.
-                // Flag must persist through dual-delta wait so the terminal handlers
-                // (L1728 success, L788 timeout) can fire notif_recalibrated /
-                // notif_recalibrate_failed correctly via the wasRecalibrating gate.
+                // Do NOT clear isRecalibrating here — the flag must persist through the
+                // dual-delta wait so the terminal handlers (success + timeout) can fire
+                // notif_recalibrated / notif_recalibrate_failed correctly via the
+                // wasRecalibrating gate.
                 // Enter dual-delta for refinement — will override if user walks
                 waitingForDualDelta = true
                 dualDeltaStartTime = System.currentTimeMillis()
@@ -2541,14 +2349,13 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
             }
         } else {
             // Rare: phone is flat during recalib — defer via dual-delta
-            // SCRUM-107 Step 2C Hot Fix: do NOT clear isRecalibrating here (same reason as above).
-            // Terminal handlers (L1728 success, L788 timeout) own the clear.
+            // Do NOT clear isRecalibrating here (same reason as above) — terminal handlers
+            // (success + timeout) own the clear.
             waitingForDualDelta = true
             dualDeltaStartTime = System.currentTimeMillis()
             lastHeadingInitLogTime = 0L
             coordinateAligner.resetDualDelta()
             pendingCompassInit = true  // Fallback
-            pendingCompassInitLocation = currentUserLocation ?: currentGps
             FileLogger.d("HEADING_INIT", "Recalib deferred (phone flat, xzMag=${String.format("%.2f", xzMag)}) — dual-delta wait started")
         }
 
@@ -2574,31 +2381,32 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
 
         FileLogger.d("AR_RECALIB", "Compass reinit complete — SphereRefresher will recreate on next GPS at (${currentGps.latitude}, ${currentGps.longitude})")
 
-        // SCRUM-107 F10: tvInfo "Recalibrating…" prompt removed (view sink deleted).
-        // User-facing recalibration feedback is already provided by NotificationManager
-        // (start/success/failure notifications) — no UI write needed here.
+        // tvInfo "Recalibrating…" prompt removed — the view sink was deleted. User-facing
+        // recalibration feedback is already provided by NotificationManager (start /
+        // success / failure notifications), so no UI write is needed here.
 
         FileLogger.d("RECALIB", "State after recalib: alignerInit=${coordinateAligner.isInitialized()}, dualDeltaDone=${coordinateAligner.isDualDeltaCompleted()}, waitingDD=$waitingForDualDelta, pendingAnchor=$pendingAnchorCreation")
 
-        // SCRUM-107 Step 2C: 5-second postDelayed dropped. Success notification now fires
-        // event-driven from dual-delta success (handleNavigationUpdate L1646) or compass-shortcut
-        // path (forceRecalibration L2298). Failure notification fires from timeout path
-        // (handlePlaneDetectionAndAnchor L754). All gated on `isRecalibrating`.
+        // The legacy 5-second postDelayed is dropped. Success notification now fires
+        // event-driven from dual-delta success (handleNavigationUpdate) or the compass-shortcut
+        // path (this method). Failure notification fires from the timeout path
+        // (handlePlaneDetectionAndAnchor). All gated on `isRecalibrating`.
 
-        // SCRUM-107 Step 2C — if recalib path ended in dual-delta wait, fire Waiting to show F3.
-        // (Compass-shortcut branch already cleared waitingForDualDelta; the gate skips Waiting there.)
+        // If the recalib path ended in dual-delta wait, fire Waiting to show F3. The
+        // compass-shortcut branch already cleared waitingForDualDelta, so the gate skips
+        // Waiting there.
         if (waitingForDualDelta) {
             FileLogger.d("WALK_CAL", "recalibration triggered, resetting dual-delta (route_diff=${currentRouteDiffDeg()}deg)")
             lastKnownWalkDistanceM = 0f
             walkCalibrationListener?.invoke(WalkCalState.Waiting)
-            // SCRUM-107 polish: recalibration's compass-disagreement is detected one-shot in
-            // forceRecalibration's else-branch above; there is no periodic throttle because
-            // forceReinitialize sets coordinateAligner.isInitialized=true, which makes
-            // handlePlaneDetectionAndAnchor's L770 throttle bypass (its outer guard requires
-            // !isInitialized()). Schedule a single delayed WaitingForWalk so F3 transitions
-            // ONSET → WAITING_FOR_WALK with similar timing to initial calibration. F3's
-            // onWaitingForWalk is idempotent and early-returns on !isVisible / TERMINAL /
-            // WALK_ACTIVE, so worst case is a no-op if F3 has moved on by 350ms.
+            // Recalibration's compass-disagreement is detected one-shot in the else-branch
+            // above — there is no periodic throttle because forceReinitialize sets
+            // coordinateAligner.isInitialized=true, which makes handlePlaneDetectionAndAnchor's
+            // throttle bypass (its outer guard requires !isInitialized()). Schedule a single
+            // delayed WaitingForWalk so F3 transitions ONSET → WAITING_FOR_WALK with similar
+            // timing to initial calibration. F3's onWaitingForWalk is idempotent and
+            // early-returns on !isVisible / TERMINAL / WALK_ACTIVE, so the worst case is a
+            // no-op if F3 has moved on by 350ms.
             Handler(Looper.getMainLooper()).postDelayed({
                 walkCalibrationListener?.invoke(WalkCalState.WaitingForWalk)
             }, 350L)
@@ -2614,11 +2422,10 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
      * NOTE: This keeps the same anchor - only rotates sphere positions.
      * Use forceRecalibration() if you need a completely new anchor.
      */
-    // SCRUM-107 F6: flip180Degrees() method removed alongside btnDebugFlip.
-    // SCRUM-107 F10: the entire debug panel (including btnDebugRecalibrate) is now removed too —
-    // recalibration is reached via the HUD bottom card's btnRecalibrate.
-    // Orphan strings notif_flipping_title / notif_flipping_desc / notif_flipped stay in
-    // strings.xml per the Polish-1 discipline (future cleanup pass can remove them).
+    // flip180Degrees() removed alongside btnDebugFlip. The entire debug panel (including
+    // btnDebugRecalibrate) is gone too — recalibration is reached via the HUD bottom
+    // card's btnRecalibrate. Orphan strings notif_flipping_title / notif_flipping_desc /
+    // notif_flipped stay in strings.xml; a future cleanup pass can remove them.
 
     // ========================================================================================
     // GPS FALLBACK HELPER
@@ -2669,13 +2476,6 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         return null
     }
 
-    private fun calculateDistanceToNext(location: Location): Double {
-        val nextIdx = (currentRouteIndex() + 1).coerceAtMost(routeCoords.lastIndex)
-        val target = routeCoords.getOrNull(nextIdx) ?: return 0.0
-
-        return ArUtils.distanceMeters(location.latitude, location.longitude, target.lat, target.lng)
-    }
-
     private fun updateStateUI(newState: AppState) {
         currentState = newState
         FileLogger.i("STATE", ">> $newState")
@@ -2688,14 +2488,14 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     // Unregister F4 listeners — no calibration UI active
                     compassAccuracyListener = null
                     gpsAccuracyListener = null
-                    // SCRUM-107 Step 2C: defensive — hide F3 if leaving STEP_3
+                    // Defensive — hide F3 if leaving STEP_3.
                     if (::f3Overlay.isInitialized) f3Overlay.handleState(WalkCalState.Completed)
                 }
 
                 AppState.STEP_1_COMPASS_CALIBRATION -> {
                     layoutRouteSelection.visibility = View.GONE
                     layoutCalibration.visibility = View.VISIBLE
-                    // SCRUM-107 Step 2C: defensive — hide F3 if leaving STEP_3
+                    // Defensive — hide F3 if leaving STEP_3.
                     if (::f3Overlay.isInitialized) f3Overlay.handleState(WalkCalState.Completed)
                     // F4 step strip: Compass active, GPS pending, Walk pending
                     applyStepStripState(activeIndex = 0)
@@ -2717,12 +2517,12 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 }
 
                 AppState.STEP_2_GPS_COLLECTION -> {
-                    // SCRUM-107 Step 2B (Risk #1 fix): ensure compass polling can't
-                    // fire spurious notifications now that we've left STEP_1.
+                    // Ensure compass polling can't fire spurious notifications now that
+                    // we've left STEP_1.
                     cancelCompassPolling()
                     layoutRouteSelection.visibility = View.GONE
                     layoutCalibration.visibility = View.VISIBLE
-                    // SCRUM-107 Step 2C: defensive — hide F3 if leaving STEP_3
+                    // Defensive — hide F3 if leaving STEP_3.
                     if (::f3Overlay.isInitialized) f3Overlay.handleState(WalkCalState.Completed)
                     // F4 step strip: Compass done, GPS active, Walk pending
                     applyStepStripState(activeIndex = 1)
@@ -2757,8 +2557,8 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                     layoutCompassHud.visibility = View.VISIBLE
                     layoutDebugButtons.visibility = View.VISIBLE  // contains the help-sheet button (btnDebugToggle)
 
-                    // SCRUM-107 F10: legacy debug panels (layoutDebugPanel + R.id.debugPanel) +
-                    // isDebugMode flag all removed; nothing to reset here.
+                    // Legacy debug panels (layoutDebugPanel + R.id.debugPanel) + the
+                    // isDebugMode flag are all removed; nothing to reset here.
 
                     // Update destination info
                     updateNavigationUI()
@@ -2768,9 +2568,9 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     }
 
     /**
-     * SCRUM-107 Step 2B — F4 step strip state machine.
-     * @param activeIndex 0=Compass, 1=GPS, 2=Walk. Steps before it = done (green),
-     * step at it = active (amber), steps after = pending (white-22%).
+     * F4 step-strip state machine. activeIndex: 0=Compass, 1=GPS, 2=Walk.
+     * Steps before it render done (green), the step at it active (amber),
+     * steps after pending (white-22%).
      */
     private fun applyStepStripState(activeIndex: Int) {
         val dots = arrayOf(viewCalStepDot1, viewCalStepDot2, viewCalStepDot3)
@@ -2812,8 +2612,7 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     }
 
     /**
-     * SCRUM-107 Step 2B — F4 compass ring updater.
-     * Accuracy values from Android sensor framework:
+     * F4 compass-ring updater. Accuracy values from the Android sensor framework:
      *  0 = UNRELIABLE → red, "Keep moving",    progress 10
      *  1 = LOW        → red, "Keep moving",    progress 33
      *  2 = MEDIUM     → amber, "Almost there", progress 67
@@ -2838,12 +2637,11 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
     }
 
     /**
-     * SCRUM-107 Step 2B — F4 GPS ring updater.
-     * AR-readiness tiers (3, strict):
+     * F4 GPS-ring updater. Three strict AR-readiness tiers:
      *  >10m → red,   "Searching"
      *  5-10m → amber, "{n}m"
      *  <5m  → green, "{n}m"
-     * Progress scaled: lower meters → higher fill (100 - acc*5, clamped).
+     * Progress scales lower-meters → higher-fill (100 − acc*5, clamped).
      */
     private fun updateGpsRing(accuracyM: Float) {
         val (colorRes, valueText, progress) = when {
@@ -2864,14 +2662,12 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         tvCalRingValue.text = valueText
     }
     /**
-     * SCRUM-107 F6: binds main HUD compass ring stroke color to live GPS quality.
-     * Reuses the F3 redesign's [GpsQualityClassifier] (5m / 10m thresholds) so HUD compass +
-     * F3 pill + F4 ring all classify GPS consistently. Dispatched from [processGPSSample]
-     * (mirrors Stage 4's f3Overlay channel).
-     *
-     * The compass ring background is a `<shape>` drawable (bg_compass.xml) which inflates to a
-     * [GradientDrawable]; we mutate its stroke via [GradientDrawable.setStroke]. If the cast
-     * fails (theme override, future refactor), the call no-ops harmlessly.
+     * Bind the main HUD compass-ring stroke color to live GPS quality. Reuses
+     * [GpsQualityClassifier] (5m / 10m thresholds) so HUD compass + F3 pill + F4 ring all
+     * classify GPS consistently. Dispatched from [processGPSSample] (mirrors the f3Overlay
+     * channel). The compass-ring background is a `<shape>` drawable (bg_compass.xml) which
+     * inflates to a [GradientDrawable]; we mutate its stroke via [GradientDrawable.setStroke].
+     * If the cast fails (theme override, future refactor), the call no-ops harmlessly.
      */
     private fun updateCompassRingColor(quality: GpsQuality) {
         val colorRes = when (quality) {
@@ -2894,16 +2690,15 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
                 tvDestinationName.text = endNode.name
             }
 
-            // SCRUM-107 F6 (6g): whisper-style breadcrumb shows origin only — destination
-            // lives in tvDestinationName hero, so the prior "$startName → $endName$emoji"
-            // pattern duplicated the destination. New format: "from $origin{ emoji}".
+            // Whisper-style breadcrumb shows origin only — destination lives in the
+            // tvDestinationName hero, so the prior "$startName → $endName$emoji" pattern
+            // duplicated the destination. Format: "from $origin{ emoji}".
             //
-            // SCRUM-107 F8 (D6, 2026-05-19): supersedes the F6 polish string-match sentinel
-            // ("Start" → "Your Location") with an explicit intent-extra check. The virtual-start
-            // flow (chip → FAB → startArActivityFromVirtual) puts START_MODE=VIRTUAL in the
-            // launch intent, and handleVirtualStartNavigation's documented invariant
-            // (ArNavigationActivity.kt L1391 KDoc) confirms selectedStartNode stays null on
-            // that path — so the intent extra is the authoritative source.
+            // Use an explicit intent-extra check instead of a string-match sentinel
+            // ("Start" → "Your Location"): the virtual-start flow puts START_MODE=VIRTUAL
+            // in the launch intent and [handleVirtualStartNavigation]'s invariant
+            // guarantees selectedStartNode stays null on that path — the intent extra is
+            // the authoritative source.
             val isVirtualStart = intent.getStringExtra("START_MODE") == "VIRTUAL"
             val rawStartName = selectedStartNode?.name
             val displayStartName = when {
@@ -2924,16 +2719,15 @@ class ArNavigationActivity : AppCompatActivity(), SensorEventListener {
         when (currentState) {
             AppState.STEP_1_COMPASS_CALIBRATION -> {
                 minCalibrationTimePassed = true
-                // SCRUM-107 Step 2B (Risk #1 fix): cancel the polling Runnable on skip
+                // Cancel the polling Runnable on skip.
                 cancelCompassPolling()
                 updateStateUI(AppState.STEP_2_GPS_COLLECTION)
             }
             AppState.STEP_2_GPS_COLLECTION -> {
                 val location = gpsBufferManager.forceGetBestLocation()
                 if (location != null) {
-                    // SCRUM-107 Step 2B follow-up (IMPORTANT 10 fix): same re-entry
-                    // guard for the force-start path — also protects against rapid
-                    // double-taps on "Start anyway".
+                    // Same re-entry guard for the force-start path — also protects against
+                    // rapid double-taps on "Start anyway".
                     if (!f2WalkPreFired) {
                         f2WalkPreFired = true
                         layoutCalibration.visibility = View.GONE  // hide F4 under F2 backdrop

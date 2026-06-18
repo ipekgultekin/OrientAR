@@ -18,36 +18,28 @@ import androidx.core.view.WindowInsetsCompat
 import com.example.orientar.R
 
 /**
- * NotificationManager — single-slot, in-app notification system for AR Navigation.
- *
- * Designed for SCRUM-107 F4+F3+F2 + Debug Panel notification unification. Replaces
- * scattered Toast / tvRecalculating banner usage with a consistent visual system
- * built around the existing glass-card pattern and SCRUM-107 visual tokens
- * (orientar_primary, status_warning, status_success, calibration_idle).
+ * Single-slot, in-app notification system for AR navigation. Replaces scattered
+ * Toast / tvRecalculating banner usage with a consistent glass-card visual built
+ * on the standard status tokens (orientar_primary, status_warning, status_success,
+ * calibration_idle).
  *
  * # Single-slot semantics
  * One notification is visible at any time. Any new `show*()` call replaces the
- * current notification: the previous view fades out (200 ms), the new view
- * fades in (300 ms). No queue, no overlap. Callers that need sequenced
- * announcements should orchestrate them themselves (e.g., chain via the
- * Success auto-dismiss callback or just call `show*()` again at the right
- * moment).
+ * current notification — previous view fades out (200 ms), new view fades in
+ * (300 ms). No queue. Callers that need sequencing must orchestrate themselves
+ * (e.g., chain via the Success auto-dismiss callback or call `show*()` again).
  *
- * # Lifecycle hygiene (SCRUM-121 lessons)
- * Auto-dismiss timing uses `Handler(Looper.getMainLooper())`. This class
- * stores ALL pending Handler callbacks and CANCELS them in `destroy()`. The
- * caller MUST invoke `destroy()` from `Activity.onDestroy()` to avoid
- * leaked callbacks firing on a torn-down view hierarchy. This pattern is
- * borrowed from the SCRUM-121 anchor-cleanup hygiene work — historically
- * the codebase has no handler-cancellation on lifecycle; this class
- * introduces it for the notification subsystem.
+ * # Lifecycle hygiene
+ * Auto-dismiss timing uses `Handler(Looper.getMainLooper())`. All pending Handler
+ * callbacks are tracked and CANCELLED in `destroy()`. The caller MUST invoke
+ * `destroy()` from `Activity.onDestroy()` to avoid leaked callbacks firing on a
+ * torn-down view hierarchy.
  *
  * # rootView requirements
- * `rootView` SHOULD be a [FrameLayout] (or a ViewGroup whose LayoutParams
- * honor gravity from `FrameLayout.LayoutParams`). The activity's root
- * `android.R.id.content` is always a FrameLayout and is the recommended
- * value to pass. Other ViewGroup subclasses will display the notification
- * but may ignore the gravity-based positioning.
+ * `rootView` SHOULD be a [FrameLayout] (or a ViewGroup whose LayoutParams honor
+ * gravity from `FrameLayout.LayoutParams`). The activity's root `android.R.id.content`
+ * is always a FrameLayout — pass that. Other ViewGroup subclasses will display the
+ * notification but may ignore gravity-based positioning.
  *
  * # Variants
  * | API | Position | Auto-dismiss | Actions |
@@ -57,7 +49,7 @@ import com.example.orientar.R
  * | [showWarning]     | top | no | optional dismiss × |
  * | [showError]       | center | no | optional 1 or 2 buttons |
  *
- * # Example (Step 2 will use this pattern)
+ * # Example
  * ```
  * notifications = NotificationManager(this, findViewById(android.R.id.content))
  * // ...
@@ -88,17 +80,6 @@ class NotificationManager(
     sealed class ErrorAction {
         /** Single action button. Renders as a filled red primary button. */
         data class Single(val label: String, val onClick: () -> Unit) : ErrorAction()
-
-        /**
-         * Two action buttons side-by-side. Secondary renders on the left
-         * (outlined), primary on the right (filled red). Convention: primary
-         * is the destructive / forward action (e.g., "Exit"), secondary is
-         * the recovery action (e.g., "Retry").
-         */
-        data class Two(
-            val primary: Single,
-            val secondary: Single
-        ) : ErrorAction()
     }
 
     private val inflater = LayoutInflater.from(activity)
@@ -181,12 +162,6 @@ class NotificationManager(
                 addActionButton(actionContainer, action.label, primary = true, onClick = action.onClick)
                 actionContainer.visibility = View.VISIBLE
             }
-            is ErrorAction.Two -> {
-                // Secondary on the LEFT, primary on the RIGHT — matches Android dialog convention.
-                addActionButton(actionContainer, action.secondary.label, primary = false, onClick = action.secondary.onClick)
-                addActionButton(actionContainer, action.primary.label, primary = true, onClick = action.primary.onClick)
-                actionContainer.visibility = View.VISIBLE
-            }
             null -> actionContainer.visibility = View.GONE
         }
         showView(view, gravity = Gravity.CENTER, marginPxTop = 0)
@@ -250,8 +225,8 @@ class NotificationManager(
                 .withEndAction { safeRemove(previous) }
                 .start()
         }
-        // SCRUM-107 hotfix: width = MATCH_PARENT (+16dp side margins) so notifications
-        // fill the screen width instead of hugging their wrap_content children.
+        // width = MATCH_PARENT (+16dp side margins) so notifications fill the screen
+        // width instead of hugging their wrap_content children.
         val params = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
@@ -266,10 +241,10 @@ class NotificationManager(
         view.elevation = dp(4).toFloat()
         rootView.addView(view)
 
-        // SCRUM-107 hotfix: WindowInsets-aware positioning. Without this, TOP
-        // notifications collide with the status bar and BOTTOM ones collide with
-        // the navigation bar — `android.R.id.content` extends behind both system
-        // bars on edge-to-edge layouts. CENTER slot needs no adjustment.
+        // WindowInsets-aware positioning. Without this, TOP notifications collide
+        // with the status bar and BOTTOM ones collide with the navigation bar —
+        // `android.R.id.content` extends behind both system bars on edge-to-edge
+        // layouts. CENTER slot needs no adjustment.
         ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val lp = v.layoutParams as FrameLayout.LayoutParams
