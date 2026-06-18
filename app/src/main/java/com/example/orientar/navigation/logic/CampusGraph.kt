@@ -447,7 +447,7 @@ class CampusGraph private constructor() {
         // Target must exist.
         nodes[targetNodeId] ?: return PhantomRouteResult.NoPath
 
-        // 2. AT-node detection (D5): O(N) scan over ALL nodes (not just destinations).
+        // 2. AT-node detection: O(N) scan over ALL nodes (not just destinations).
         var nearestNode: Node? = null
         var nearestNodeDist = Double.POSITIVE_INFINITY
         for (n in nodes.values) {
@@ -520,7 +520,7 @@ class CampusGraph private constructor() {
 
         for (currentNode in nodes.values) {
             for (edge in currentNode.neighbors) {
-                // D6: bidirectional dedup.
+                // Bidirectional dedup.
                 if (currentNode.id >= edge.targetNodeId) continue
 
                 val projection = GeoProjection.projectPointOnPolyline(
@@ -556,7 +556,7 @@ class CampusGraph private constructor() {
      * - `gScore[B] = (1 - tOnPolyline) * edgeLength`   (metres from projection to B)
      * - both endpoints are pushed onto the open set with their respective `f = g + h`.
      *
-     * The split edge A↔B is skipped during neighbor expansion (D12): its traversal cost is
+     * The split edge A↔B is skipped during neighbor expansion: its traversal cost is
      * already encoded in the initial seeds, so traversing it again would double-count. Neither
      * root has a `cameFromNode` / `cameFromEdge` entry — they are the reconstruction roots.
      *
@@ -607,7 +607,7 @@ class CampusGraph private constructor() {
             for (edge in currentNode.neighbors) {
                 val neighborId = edge.targetNodeId
 
-                // D12: skip the split edge — its cost is encoded in the phantom seeds.
+                // Skip the split edge — its cost is encoded in the phantom seeds.
                 if ((currentId == phantom.edgeNodeAId && neighborId == phantom.edgeNodeBId) ||
                     (currentId == phantom.edgeNodeBId && neighborId == phantom.edgeNodeAId)
                 ) continue
@@ -638,12 +638,12 @@ class CampusGraph private constructor() {
      *    terminates at
      * 3. the full geometry of each edge A* traversed from the winning root to the target
      *
-     * Boundary de-duplication (D17) is applied at every append via [appendWithDedup] so that a
-     * projection landing on a polyline vertex (`tOnSegment` ≈ 0 or ≈ 1) does not introduce a
-     * duplicate coordinate.
+     * Boundary de-duplication is applied at every append via [appendWithDedup] so that a
+     * projection landing on a polyline vertex (`tOnSegment` ≈ 0 or ≈ 1) does not introduce
+     * a duplicate coordinate.
      *
-     * The returned `nodePath` starts at the winning root (a real node), not at the phantom —
-     * satisfying D7 so SphereRefresher does not render a milestone at the phantom position.
+     * The returned `nodePath` starts at the winning root (a real node), not at the phantom,
+     * so SphereRefresher does not render a milestone at the phantom position.
      */
     private fun reconstructPathFromProjection(
         phantom: PhantomStart,

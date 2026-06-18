@@ -17,71 +17,54 @@ class CoordinateAligner {
     companion object {
         private const val TAG = "CoordinateAligner"
 
-        // Minimum speed required for motion-based alignment updates
-        // Too low: GPS bearing is unreliable when moving slowly (noise dominates)
-        // Too high: Updates rarely happen
-        // 1.0 m/s = 3.6 km/h = slow walking pace
+        // Below this speed, GPS bearing is dominated by noise.
         private const val MIN_SPEED_FOR_ALIGNMENT = 0.2f
 
-        // How much to adjust offset per update (0.0 = no change, 1.0 = full change)
-        // Lower values = more stable but slower to correct drift
-        // Higher values = faster correction but more jittery
+        // Per-update correction factor. Lower = more stable, slower drift correction.
         private const val ALIGNMENT_SMOOTHING_FACTOR = 0.10
 
-        // Minimum time between alignment updates (prevents oscillation)
-        private const val ALIGNMENT_UPDATE_COOLDOWN_MS = 1000L  // was 2000; at 1Hz GPS, 2000ms rejected every other update
+        // 1000ms tuned for 1Hz GPS; 2000ms rejected every other update.
+        private const val ALIGNMENT_UPDATE_COOLDOWN_MS = 1000L
 
-        // Maximum allowed alignment error before logging warning
         private const val ALIGNMENT_WARNING_THRESHOLD_DEG = 30.0
 
-        // Maximum allowed initial offset difference for sanity check
         private const val MAX_REASONABLE_OFFSET_CHANGE = 45.0
 
         // ========================================================================================
         // DUAL-DELTA ALIGNMENT CONSTANTS
         // ========================================================================================
 
-        // Minimum GPS displacement before computing alignment (meters)
-        // Too low: GPS jitter produces wrong bearing
-        // Too high: User must walk too far before spheres appear
+        // Minimum GPS displacement (m). Below this, GPS jitter dominates the bearing.
         private const val MIN_GPS_DISPLACEMENT_FOR_ALIGNMENT = 3.0
 
-        // Minimum AR displacement before computing alignment (meters)
-        // Filters out cases where GPS jumped but user didn't actually move
+        // Filters out GPS jumps where the user didn't actually move in AR space.
         private const val MIN_AR_DISPLACEMENT_FOR_ALIGNMENT = 3.0
 
-        // Maximum GPS accuracy allowed for alignment samples (meters)
-        // Poor accuracy = noisy bearing = bad alignment
+        // Poor GPS accuracy produces noisy bearings — reject above this.
         private const val MAX_GPS_ACCURACY_FOR_ALIGNMENT = 10.0f
 
-        // Maximum number of alignment samples to keep
         private const val MAX_ALIGNMENT_SAMPLES = 10
 
-        // Minimum weight sum before accepting alignment (quality threshold)
-        // weight = gpsDistance / gpsAccuracy; 0.5 = 5m walk with 10m accuracy passes
-        private const val MIN_ALIGNMENT_WEIGHT = 0.5  // was 1.0; too strict for campus GPS (6-9m accuracy)
+        // weight = gpsDistance / gpsAccuracy; 0.5 ≈ 5m walk at 10m accuracy. 1.0 was too
+        // strict for typical campus GPS (6–9m accuracy).
+        private const val MIN_ALIGNMENT_WEIGHT = 0.5
     }
 
     // ============================================================================================
     // STATE VARIABLES
     // ============================================================================================
 
-    // The offset angle between Real North and AR World forward direction
-    // Formula: yawOffset = compassBearing - arCameraYaw
-    // Usage: arAngle = gpsBearing - yawOffset
+    // yawOffset = compassBearing - arCameraYaw; arAngle = gpsBearing - yawOffset.
     private var yawOffsetDeg: Double = 0.0
 
-    // Whether the coordinate system has been initialized
     private var isInitialized = false
 
-    // Timestamp of last motion-based alignment update
     private var lastAlignmentUpdate: Long = 0
 
-    // Offset history for stability analysis (capped at MAX_HISTORY_SIZE)
     private val MAX_HISTORY_SIZE = 5
     private val offsetHistory = ArrayDeque<Double>(MAX_HISTORY_SIZE)
 
-    // Initial values for diagnostics
+    // Initial values retained for diagnostics.
     private var initialCompassBearing: Double = 0.0
     private var initialArYaw: Double = 0.0
 
@@ -115,11 +98,9 @@ class CoordinateAligner {
     private var lastDualDeltaProgressLog = 0L
 
     /**
-     * SCRUM-107 Step 2C — fired during dual-delta wait to report progress to F3.
-     * Args: (gpsDistanceM, arDistanceM, gpsAccuracyM, weight).
-     * Called from the throttled-progress block AND from the weight-below-threshold block.
-     * NOT called after `dualDeltaCompleted = true` (early-returns at L203).
-     * Cleared in ArNavigationActivity.onDestroy phase 7b for safety.
+     * Fired during dual-delta wait to report progress.
+     * Args: (gpsDistanceM, arDistanceM, gpsAccuracyM, weight). Not called once
+     * dualDeltaCompleted = true. The activity clears this on destroy to avoid leaks.
      */
     var progressCallback: ((Float, Float, Float, Float) -> Unit)? = null
 
@@ -186,19 +167,11 @@ class CoordinateAligner {
     // ============================================================================================
 
     /**
-     * Records a GPS + AR position snapshot for dual-delta alignment.
-     * Call this on every GPS update during the "waiting for alignment" phase.
+     * Record a GPS + AR snapshot for dual-delta alignment. Once enough displacement
+     * accrues, the yaw offset is computed from the angle between the GPS vector and
+     * the AR vector — no compass or speed gate required.
      *
-     * When enough displacement is detected (>5m GPS AND >3m AR), the yaw offset
-     * is automatically computed from the angle difference between the GPS vector
-     * and the AR vector. No compass or speed threshold needed.
-     *
-     * @param gpsLat Current GPS latitude
-     * @param gpsLng Current GPS longitude
-     * @param gpsAccuracy Current GPS accuracy in meters
-     * @param arX ARCore camera world position X
-     * @param arZ ARCore camera world position Z (note: Y is up in ARCore)
-     * @return true if alignment was computed and aligner is now initialized
+     * @return true if alignment was computed and the aligner is now initialized.
      */
     fun addAlignmentSample(
         gpsLat: Double,
@@ -207,11 +180,9 @@ class CoordinateAligner {
         arX: Float,
         arZ: Float
     ): Boolean {
-        // If already initialized AND dual-delta wasn't reset, skip
-        // (allows fresh recalibration after re-anchor resets dual-delta state)
+        // Skip once initialized; recalibration must explicitly reset dual-delta state.
         if (isInitialized && dualDeltaCompleted) return true
 
-        // Reject poor GPS readings
         if (gpsAccuracy > MAX_GPS_ACCURACY_FOR_ALIGNMENT) {
             FileLogger.d(TAG, "Dual-delta: skipping sample, GPS accuracy ${gpsAccuracy}m too poor")
             return false
@@ -220,7 +191,6 @@ class CoordinateAligner {
         val now = System.currentTimeMillis()
         val snapshot = AlignmentSnapshot(gpsLat, gpsLng, gpsAccuracy, arX, arZ, now)
 
-        // Set baseline on first good sample
         if (baselineSnapshot == null) {
             baselineSnapshot = snapshot
             FileLogger.align("Dual-delta: baseline set at GPS=(${String.format("%.6f", gpsLat)}, ${String.format("%.6f", gpsLng)}), AR=(${String.format("%.1f", arX)}, ${String.format("%.1f", arZ)})")
@@ -229,18 +199,16 @@ class CoordinateAligner {
 
         val baseline = baselineSnapshot!!
 
-        // Calculate GPS displacement from baseline
         val gpsDistance = ArUtils.distanceMeters(
             baseline.gpsLat, baseline.gpsLng,
             gpsLat, gpsLng
         )
 
-        // Calculate AR displacement from baseline
         val arDx = arX - baseline.arX
         val arDz = arZ - baseline.arZ
         val arDistance = Math.sqrt((arDx * arDx + arDz * arDz).toDouble())
 
-        // Not enough movement yet
+        // Insufficient movement — wait.
         if (gpsDistance < MIN_GPS_DISPLACEMENT_FOR_ALIGNMENT || arDistance < MIN_AR_DISPLACEMENT_FOR_ALIGNMENT) {
             if (now - lastDualDeltaProgressLog > 3000L) {
                 lastDualDeltaProgressLog = now
@@ -248,7 +216,7 @@ class CoordinateAligner {
                     "arDisp=${String.format("%.1f", arDistance)}m/${MIN_AR_DISPLACEMENT_FOR_ALIGNMENT}m, " +
                     "accuracy=${String.format("%.1f", gpsAccuracy)}m, weight=${String.format("%.2f", gpsDistance / gpsAccuracy)}")
             }
-            // SCRUM-107 Step 2C — push live progress to F3 (no throttle: F3 updates every sample)
+            // Push live progress to the listener (no throttle — caller updates per sample).
             progressCallback?.invoke(
                 gpsDistance.toFloat(),
                 arDistance.toFloat(),
@@ -258,26 +226,20 @@ class CoordinateAligner {
             return false
         }
 
-        // ====================================================================
-        // ENOUGH DISPLACEMENT — COMPUTE ALIGNMENT
-        // ====================================================================
-
-        // GPS bearing: geographic direction from baseline to current position
+        // Enough displacement — compute alignment.
         val gpsBearing = ArUtils.bearingDeg(
             baseline.gpsLat, baseline.gpsLng,
             gpsLat, gpsLng
         )
 
-        // AR bearing: direction in AR space from baseline to current position
-        // atan2(dx, -dz) because ARCore: +X=right, -Z=forward
+        // ARCore convention: +X=right, -Z=forward, so atan2(dx, -dz).
         val arBearing = (Math.toDegrees(
             Math.atan2(arDx.toDouble(), -arDz.toDouble())
         ) + 360.0) % 360.0
 
-        // Yaw offset = geographic bearing - AR bearing
         val computedOffset = ArUtils.normalizeAngleDeg(gpsBearing - arBearing)
 
-        // Weight by (distance / accuracy) — more distance + better accuracy = more reliable
+        // Larger displacement + lower accuracy uncertainty = more reliable sample.
         val weight = gpsDistance / gpsAccuracy
 
         FileLogger.align("Dual-delta SAMPLE: gpsBearing=${String.format("%.1f", gpsBearing)}°, arBearing=${String.format("%.1f", arBearing)}°, offset=${String.format("%.1f", computedOffset)}°, weight=${String.format("%.2f", weight)}")
@@ -285,15 +247,15 @@ class CoordinateAligner {
         // Store for potential multi-sample averaging
         alignmentSnapshots.add(snapshot)
 
-        // Accept first sample that passes weight threshold.
-        // Safety nets: ±5° clamp on motion updates + disabled strong first correction
-        // protect against a bad initial sample.
+        // Accept first sample over the weight threshold. Downstream safety nets — the
+        // ±5° clamp on motion updates and the suppressed strong first correction —
+        // limit damage from a bad initial sample.
         if (weight >= MIN_ALIGNMENT_WEIGHT) {
             yawOffsetDeg = computedOffset
             isInitialized = true
             dualDeltaCompleted = true
 
-            initialCompassBearing = gpsBearing  // Store for diagnostics (not actually compass)
+            initialCompassBearing = gpsBearing  // Diagnostics only — not actually compass.
             initialArYaw = arBearing
 
             offsetHistory.clear()
@@ -304,7 +266,7 @@ class CoordinateAligner {
         }
 
         FileLogger.d(TAG, "Dual-delta: weight ${String.format("%.2f", weight)} below threshold $MIN_ALIGNMENT_WEIGHT, waiting for more displacement")
-        // SCRUM-107 Step 2C — push live progress to F3 (weight-below-threshold path)
+        // Push live progress (weight-below-threshold path).
         progressCallback?.invoke(
             gpsDistance.toFloat(),
             arDistance.toFloat(),
@@ -345,11 +307,7 @@ class CoordinateAligner {
             return false
         }
 
-        // ========================================================================
-        // VALIDATION: Get a reliable GPS bearing
-        // ========================================================================
-
-        // Use computed bearing from Kalman positions, fall back to location.bearing
+        // Prefer the caller-supplied bearing from Kalman positions; fall back to location.bearing.
         val gpsBearing = when {
             computedBearing != null -> computedBearing
             location.hasBearing() && location.speed >= MIN_SPEED_FOR_ALIGNMENT -> location.bearing.toDouble()
@@ -359,38 +317,31 @@ class CoordinateAligner {
             }
         }
 
-        // GPS bearing is less reliable with poor accuracy
-        if (location.accuracy > 10.0f) {  // was 5.0; quality-weight system already down-weights poor accuracy
+        // 10.0 (was 5.0) — the quality-weight pass already down-weights poor accuracy.
+        if (location.accuracy > 10.0f) {
             FileLogger.d("MOTION_SKIP", "Accuracy too poor: ${String.format("%.1f", location.accuracy)}m > 10.0m")
             return false
         }
 
-        // ========================================================================
-        // RATE LIMITING: Don't update too frequently
-        // ========================================================================
         val now = System.currentTimeMillis()
         if (now - lastAlignmentUpdate < ALIGNMENT_UPDATE_COOLDOWN_MS) {
             FileLogger.d("MOTION_SKIP", "Cooldown: ${now - lastAlignmentUpdate}ms < ${ALIGNMENT_UPDATE_COOLDOWN_MS}ms")
             return false
         }
 
-        // What the offset SHOULD be based on current motion:
-        // If user is walking forward and looking ahead:
-        //   gpsBearing = real world direction
-        //   arCameraYaw = AR world direction the camera faces
-        //   targetOffset = gpsBearing - arCameraYaw
+        // If user is walking forward and looking ahead, gpsBearing − arCameraYaw is
+        // the offset the system should converge to.
         val targetOffset = ArUtils.normalizeAngleDeg(gpsBearing - arCameraYaw)
 
-        // How far off is our current offset from the target?
         val diff = ArUtils.normalizeAngleDeg(targetOffset - yawOffsetDeg)
 
-        // Skip tiny corrections (reduces jitter)
+        // Skip sub-2° corrections to reduce jitter.
         if (abs(diff) < 2.0) {
             FileLogger.d("MOTION_SKIP", "Diff too small: ${String.format("%.1f", diff)}° < 2.0°")
             return false
         }
 
-        // Outlier rejection: if correction > 45°, the GPS bearing is likely noise
+        // > 45° correction is almost certainly GPS-bearing noise.
         if (abs(diff) > 45.0) {
             FileLogger.w("MOTION_OUTLIER", "Rejected ${String.format("%.1f", diff)}° correction — " +
                 "gpsBearing=${String.format("%.0f", gpsBearing)}°, likely noise")
@@ -399,16 +350,13 @@ class CoordinateAligner {
 
         FileLogger.d("MOTION_EVAL", "PASSED all gates: gpsBearing=${String.format("%.0f", gpsBearing)}°, arYaw=${String.format("%.0f", arCameraYaw)}°, targetOffset=${String.format("%.0f", targetOffset)}°, diff=${String.format("%.1f", diff)}°, motionCount=${motionUpdateCount + 1}")
 
-        // ========================================================================
-        // APPLY SMOOTHED CORRECTION
-        // ========================================================================
         val oldOffset = yawOffsetDeg
 
-        // Apply smoothed correction (gradual adjustment to prevent sudden jumps)
+        // Gradual correction — sudden jumps would whip spheres around the user.
         val isFirstCorrection = !hasReceivedFirstGPSCorrection
         val effectiveFactor = if (!hasReceivedFirstGPSCorrection && abs(diff) > 15.0 && !dualDeltaCompleted) {
-            // Strong correction only needed for compass initialization.
-            // Dual-delta gives a good initial heading — no strong correction needed.
+            // Strong first correction is only needed when the initial heading came from
+            // the compass; dual-delta already produces a good initial heading.
             hasReceivedFirstGPSCorrection = true
             FileLogger.align("FIRST GPS correction: strong factor (0.8) for ${diff.toInt()}° error")
             0.8
@@ -420,8 +368,8 @@ class CoordinateAligner {
             ALIGNMENT_SMOOTHING_FACTOR
         }
 
-        // Quality weight based on displacement/accuracy ratio
-        // If displacement unavailable, preserve original unweighted behavior.
+        // Quality weight by displacement/accuracy ratio; absent displacement falls back
+        // to the unweighted behavior.
         val qualityWeight = if (computedDisplacement != null && location.accuracy > 0) {
             val ratio = computedDisplacement / location.accuracy.toDouble()
             (ratio / 2.0).coerceIn(0.2, 1.0)
@@ -439,14 +387,13 @@ class CoordinateAligner {
             "correction=${String.format("%.1f", diff)}°")
 
         val rawCorrection = diff * weightedFactor
-        val maxCorrection = if (isFirstCorrection) 15.0 else 5.0  // ±15° for first correction (compass error), ±5° for subsequent
+        val maxCorrection = if (isFirstCorrection) 15.0 else 5.0  // ±15° on first (compass error), ±5° after.
         val correction = rawCorrection.coerceIn(-maxCorrection, maxCorrection)
         yawOffsetDeg += correction
         yawOffsetDeg = ArUtils.normalizeAngleDeg(yawOffsetDeg)
         motionUpdateCount++
 
-        // Track in history for stability analysis
-        // BUG-007 FIX: Use constant for size limit
+        // Track in history for stability analysis; cap to MAX_HISTORY_SIZE.
         offsetHistory.add(yawOffsetDeg)
         while (offsetHistory.size > MAX_HISTORY_SIZE) {
             offsetHistory.removeFirst()
@@ -475,10 +422,7 @@ class CoordinateAligner {
     fun getMotionUpdateCount(): Int = motionUpdateCount
 
     /**
-     * Sets the yaw offset directly.
-     * Use this for 180° flip corrections when behind-camera is detected.
-     *
-     * @param offset New yaw offset in degrees (0-360)
+     * Set the yaw offset directly — intended for 180° flip corrections.
      */
     fun setYawOffset(offset: Double) {
         val normalizedOffset = ((offset % 360.0) + 360.0) % 360.0
@@ -486,14 +430,10 @@ class CoordinateAligner {
         yawOffsetDeg = normalizedOffset
     }
 
-    /**
-     * Returns whether the aligner has been initialized.
-     */
     fun isInitialized(): Boolean = isInitialized
 
     /**
-     * Calculates AR yaw from forward direction vector.
-     * yaw = atan2(forwardX, -forwardZ), normalized to [0, 360).
+     * AR yaw from a forward vector: atan2(forwardX, -forwardZ), normalized to [0, 360).
      */
     fun calculateYawFromForward(forwardX: Float, forwardZ: Float): Double {
         if (forwardX == 0f && forwardZ == 0f) {
@@ -518,19 +458,11 @@ class CoordinateAligner {
     }
 
     /**
-     * Extract horizontal yaw from ARCore camera pose quaternion.
-     * Uses the pose rotation matrix zAxis which gives the camera's forward
-     * direction independent of phone tilt. This is stable whether the phone
-     * is at 30°, 60°, or 90° tilt.
-     *
-     * ARCore pose convention:
-     * - Identity pose: camera looks along -Z, so zAxis = (0, 0, 1)
-     * - pose.zAxis points OPPOSITE the camera viewing direction (forward = -zAxis horizontally)
-     * - Formula: atan2(-zAxis[0], zAxis[2]) produces compass-positive yaw
-     *   (0° = AR's -Z direction, 90° = AR's +X direction, clockwise-positive)
-     * - The X component must be negated to match calculateYawFromForward's
-     *   atan2(forwardX, -forwardZ) convention. Both functions produce the same
-     *   yaw for the same physical direction.
+     * Horizontal yaw from an ARCore pose's zAxis — tilt-independent so it stays
+     * stable across 30°/60°/90° phone postures. pose.zAxis points opposite the
+     * camera direction, hence atan2(-zAxis[0], zAxis[2]); the negation on X
+     * aligns the result with [calculateYawFromForward]'s convention so both
+     * helpers return the same yaw for the same physical direction.
      */
     fun calculateYawFromPose(pose: com.google.ar.core.Pose): Double {
         val zAxis = pose.zAxis
@@ -546,16 +478,9 @@ class CoordinateAligner {
     }
 
     /**
-     * Validates the current alignment by comparing compass bearing with AR yaw.
-     *
-     * THEORY:
-     * If alignment is perfect:
-     *   compassBearing - arCameraYaw = yawOffset
-     * Any deviation from this indicates drift or error.
-     *
-     * @param compassBearing Current compass bearing (True North, degrees)
-     * @param arCameraYaw Current AR camera yaw (degrees)
-     * @return Absolute alignment error in degrees (0 = perfect, 180 = opposite)
+     * Alignment error in degrees. Perfect alignment means
+     * compassBearing − arCameraYaw == yawOffset; anything else is drift.
+     * Returns 0 (perfect) up to 180 (opposite).
      */
     fun getAlignmentError(compassBearing: Double, arCameraYaw: Double): Double {
         if (!isInitialized) return Double.NaN
@@ -570,11 +495,7 @@ class CoordinateAligner {
     }
 
     /**
-     * Checks if the alignment has significant drift that needs correction.
-     *
-     * @param compassBearing Current compass bearing
-     * @param arCameraYaw Current AR camera yaw
-     * @return true if alignment error exceeds warning threshold
+     * True when alignment error exceeds the warning threshold.
      */
     fun hasSignificantDrift(compassBearing: Double, arCameraYaw: Double): Boolean {
         val error = getAlignmentError(compassBearing, arCameraYaw)
@@ -586,8 +507,7 @@ class CoordinateAligner {
     // ============================================================================================
 
     /**
-     * Resets the aligner to uninitialized state.
-     * Call this before starting a new navigation session.
+     * Reset to uninitialized state — call before starting a new navigation session.
      */
     fun reset() {
         yawOffsetDeg = 0.0
@@ -609,7 +529,7 @@ class CoordinateAligner {
     // ============================================================================================
 
     /**
-     * Returns detailed diagnostic information for debugging.
+     * Detailed diagnostic snapshot for debug logs.
      */
     fun getDiagnostics(): String {
         val stabilityInfo = if (offsetHistory.size >= 2) {

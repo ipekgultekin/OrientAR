@@ -19,30 +19,27 @@ import androidx.core.view.WindowInsetsCompat
 import com.example.orientar.R
 
 /**
- * F2CountdownOverlay — full-screen 3 → 2 → 1 countdown shown before compass
- * calibration starts and again before AR walk guidance begins.
+ * Full-screen 3 → 2 → 1 countdown shown before compass calibration starts and
+ * again before AR walk guidance begins.
  *
- * Mirrors [NotificationManager] in shape and lifecycle hygiene:
- * - Same `(Activity, rootView)` constructor pattern
- * - Same WindowInsets-aware positioning (full-screen MATCH_PARENT, so insets
- *   are applied to inner padding rather than outer margins)
- * - Same `dp()` helper, same try/catch destroy
- * - Same Handler-on-main-looper Runnable cancellation in [destroy]
+ * Mirrors [NotificationManager] in shape and lifecycle hygiene: same
+ * `(Activity, rootView)` constructor pattern, WindowInsets-aware positioning
+ * (full-screen MATCH_PARENT with insets applied as inner padding), and the same
+ * Handler-on-main-looper Runnable cancellation in [destroy].
  *
  * # Single-slot semantics
  * Only one overlay is visible at any time. Calling [show] while a countdown is
- * already in flight cancels the pending Handler ticks, removes the previous
- * view synchronously, and starts fresh — matches NotificationManager's
- * "newest wins" behavior.
+ * already in flight cancels the pending Handler ticks, removes the previous view
+ * synchronously, and starts fresh — newest wins.
  *
  * # Elevation
- * Set to `dp(5)` so the countdown floats above NotificationManager overlays
- * (which sit at `dp(4)`). During the brief 3-second countdown window, the
- * overlay should fully dominate the screen — notifications stay hidden behind.
+ * `dp(5)` so the countdown floats above NotificationManager overlays (`dp(4)`).
+ * During the 3-second countdown window, the overlay should fully dominate the
+ * screen.
  *
  * # Lifecycle
- * Caller MUST invoke [destroy] from `Activity.onDestroy()` to cancel any
- * pending Handler callbacks. SCRUM-121 hygiene pattern.
+ * Caller MUST invoke [destroy] from `Activity.onDestroy()` to cancel any pending
+ * Handler callbacks.
  *
  * # Example
  * ```
@@ -115,8 +112,7 @@ class F2CountdownOverlay(
                 hintTitle.text = activity.getString(R.string.cal_f2_compass_hint_title)
                 hintSub.text = activity.getString(R.string.cal_f2_compass_hint_sub)
                 readyPill.visibility = View.GONE
-                // Simple horizontal-tilt animation on phone icon (Option A v2 simplified)
-                // TODO(SCRUM-107 Step 2C polish): replace with full Option A v2 circular-path animation
+                // Simple horizontal-tilt animation on phone icon
                 currentIconAnimator = ObjectAnimator.ofFloat(iconView, "rotation", -8f, 8f).apply {
                     duration = 1400
                     repeatCount = ObjectAnimator.INFINITE
@@ -136,7 +132,6 @@ class F2CountdownOverlay(
                     setStroke(dp(1), Color.parseColor("#524CAF50"))
                 }
                 // Subtle Y-axis rotation on phone for "upright wobble" hint
-                // TODO(SCRUM-107 Step 2C polish): refine to ±12° with bounce + upward arrow indicator
                 currentIconAnimator = ObjectAnimator.ofFloat(iconView, "rotationY", -12f, 12f).apply {
                     duration = 2400
                     repeatCount = ObjectAnimator.INFINITE

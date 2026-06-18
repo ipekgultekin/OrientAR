@@ -74,15 +74,14 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     // State
     private var isARMode = false // default 2D (Map)
 
-    // SCRUM-107 F8: indicates that the user has chosen "current GPS location" as the start
-    // origin via the My Location chip. When true, selectedFromNode stays null and inputFrom
-    // displays "Current Location" placeholder. The actual GPS fetch is deferred until FAB
-    // press (lazy fetch per V6=Lazy decision). Cleared by: chip toggle-off (C4),
-    // search-dialog item-click on From (C1), and map-marker "Set as Start" (C2). The swap
-    // path (C3) cannot reach a flag-clear because swap is disabled while flag is true (D3).
+    // True when the user picked "current GPS location" as the start origin via the My
+    // Location chip. selectedFromNode stays null and inputFrom shows the "Current Location"
+    // placeholder. The actual GPS fetch is deferred until FAB press (lazy fetch). Cleared
+    // by chip toggle-off, search-dialog item-click on From, and map-marker "Set as Start";
+    // the swap path can't reach the clear because swap is disabled while the flag is true.
     private var useCurrentLocationAsStart: Boolean = false
 
-    // --- My Location chip state (SCRUM-56 Phase 2; refactored for SCRUM-107 F8 — lazy fetch) ---
+    // --- My Location chip state — lazy GPS fetch deferred until FAB press ---
     private val fusedLocationClient: FusedLocationProviderClient by lazy {
         LocationServices.getFusedLocationProviderClient(this)
     }
@@ -91,8 +90,8 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     private var locationCancellationSource: CancellationTokenSource? = null
 
     // Permission Launcher for Location Access. Serves two purposes:
-    //   1. Enable the map's "My Location" blue-dot layer (existing behaviour).
-    //   2. Resume a pending chip action after a permission prompt (SCRUM-56).
+    //   1. Enable the map's "My Location" blue-dot layer.
+    //   2. Resume a pending chip action after a permission prompt.
     private val locationPermissionRequest = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -339,17 +338,17 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     /**
-     * Validates selections and launches the appropriate navigation flow.
-     *
-     * SCRUM-107 F8: 4-branch matrix based on (isARMode × useCurrentLocationAsStart):
+     * Validate selections and dispatch the right navigation flow. 4-branch matrix on
+     * (isARMode × useCurrentLocationAsStart):
      *   - false × false: 2D + named   → launchExternalMap(named-origin lat/lng, dest)
      *   - true  × false: AR  + named  → startArActivity(startNode.id, targetNode.id)
      *   - false × true:  2D + current → fetch GPS → launchExternalMap(gps lat/lng, dest)
      *   - true  × true:  AR  + current → fetch GPS → startArActivityFromVirtual(...)
      *
-     * The current-location branches share startNavigationFromCurrentLocation() which owns the
-     * lazy GPS fetch (V6=Lazy) and the 4 existing guards (fetching flag, permission, services-on,
-     * accuracy gate). Per F8 D1 the destination precondition lives only here (not on chip tap).
+     * The current-location branches share [startNavigationFromCurrentLocation], which
+     * owns the lazy GPS fetch and the four guards (fetching flag, permission,
+     * services-on, accuracy gate). The destination precondition lives only here, not on
+     * chip tap.
      */
     private fun handleNavigationStart() {
         val toText = inputTo.text.toString().trim()
@@ -391,10 +390,10 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     /**
-     * SCRUM-107 F8: lazy GPS fetch for the current-location branches of the FAB matrix.
-     * Runs the 4 guards previously inside handleMyLocationTap (fetching flag, permission,
-     * services-on, accuracy gate), then dispatches to startArActivityFromVirtual (AR mode)
-     * or launchExternalMap with GPS-derived origin (2D mode).
+     * Lazy GPS fetch for the current-location branches of the FAB matrix.
+     * Runs the four guards (fetching flag, permission, services-on, accuracy gate),
+     * then dispatches to [startArActivityFromVirtual] (AR mode) or [launchExternalMap]
+     * with the GPS-derived origin (2D mode).
      */
     @SuppressLint("MissingPermission")
     private fun startNavigationFromCurrentLocation(targetNode: Node) {
@@ -440,7 +439,7 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
                     Toast.makeText(this, "Could not get your location, please try again", Toast.LENGTH_SHORT).show()
                     return@addOnSuccessListener
                 }
-                // Accuracy gate (D11) — refuse if GPS uncertainty exceeds snap-tolerance cap.
+                // Accuracy gate — refuse if GPS uncertainty exceeds the snap-tolerance cap.
                 if (location.accuracy > GeoProjection.MAX_ACCURACY_M) {
                     Toast.makeText(
                         this,
@@ -479,13 +478,9 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     /**
-     * Opens an external map application (Google Maps) to show walking directions.
-     * Uses a universal URL scheme.
-     *
-     * SCRUM-107 F8: signature refactored from (from: Node, to: Node) to
-     * (originLat, originLng, dest: Node). The named-origin call site extracts lat/lng from
-     * its Node; the new current-location call site passes raw GPS coordinates. Destination
-     * stays a Node because the route-selection screen always picks named destinations.
+     * Open Google Maps (or browser fallback) for walking directions via universal URL.
+     * Origin is raw lat/lng so both named (from a Node) and current-GPS callers can use it;
+     * destination stays a Node because route selection always picks a named destination.
      */
     private fun launchExternalMap(originLat: Double, originLng: Double, dest: Node) {
         val uriString = "https://www.google.com/maps/dir/?api=1&origin=$originLat,$originLng&destination=${dest.lat},${dest.lng}&travelmode=walking"
@@ -523,13 +518,13 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
             )
         }
 
-        // Step 1: Tap marker → just show info window
+        // 1. Tap marker → just show info window.
         mMap.setOnMarkerClickListener { marker ->
             marker.showInfoWindow()
             true
         }
 
-        // Step 2: Tap the info window → ask whether to set as start or destination
+        // 2. Tap the info window → ask whether to set as start or destination.
         mMap.setOnInfoWindowClickListener { marker ->
             val markerTitle = marker.title ?: return@setOnInfoWindowClickListener
             val selectedNode = destinationList.find { (it.name ?: "") == markerTitle }
@@ -545,8 +540,7 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
             dialog.window?.setBackgroundDrawableResource(R.drawable.bg_campus_dialog)
 
             dialogView.findViewById<LinearLayout>(R.id.btnSetStart).setOnClickListener {
-                // SCRUM-107 F8 (C2): user picked a real Node for From via map marker →
-                // exit current-location mode if active.
+                // User picked a real Node for From via map marker — exit current-location mode.
                 if (useCurrentLocationAsStart) clearCurrentLocationFlag()
                 inputFrom.setText(markerTitle, false)
                 selectedFromNode = selectedNode
@@ -646,8 +640,7 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
             val selectedNode = destinationList.find { (it.name ?: "") == selectedName }
 
             if (isFromField) {
-                // SCRUM-107 F8 (C1): user picked a real Node for From via search dialog →
-                // exit current-location mode if active.
+                // User picked a real Node for From via search dialog — exit current-location mode.
                 if (useCurrentLocationAsStart) clearCurrentLocationFlag()
                 inputFrom.setText(selectedName, false)
                 selectedFromNode = selectedNode
@@ -674,23 +667,17 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     // ============================================================================================
-    // MY LOCATION CHIP — phantom-node virtual start (SCRUM-56 Phase 2)
+    // MY LOCATION CHIP — phantom-node virtual start
     // ============================================================================================
 
     /**
-     * SCRUM-107 F8: chip tap is now a pure visual toggle. Pre-F8, this method launched AR
-     * directly via virtual-start intent (Phase 2 of SCRUM-56). F8 reverts to a Phase-1-style
-     * "fill From field" behavior, but with explicit "Current Location" sentinel rather than
-     * the prior "nearest named destination" approximation.
+     * Chip tap is a pure visual toggle:
+     * - Tap when flag=false → activate (set flag, fill From, update visuals, request permission).
+     * - Tap when flag=true  → deactivate (clear flag, empty From, restore visuals).
      *
-     * - Tap when flag=false → activate (set flag, fill From, update visuals, request permission)
-     * - Tap when flag=true  → deactivate (clear flag, empty From, restore visuals)
-     *
-     * GPS fetch is deferred until FAB press (lazy fetch per F8 V6 decision). The actual fetch
-     * lives in [startNavigationFromCurrentLocation] and runs only when the user commits via the
-     * GO button.
-     *
-     * Per F8 D1 the destination precondition is removed — chip can be tapped at any time.
+     * GPS fetch is deferred until FAB press; the actual fetch lives in
+     * [startNavigationFromCurrentLocation] and runs only when the user commits via GO.
+     * No destination precondition — the chip can be tapped at any time.
      */
     @SuppressLint("MissingPermission")
     private fun handleMyLocationTap() {
@@ -702,8 +689,9 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     /**
-     * SCRUM-107 F8: enters current-location mode. Visual state activates immediately. Permission
-     * is requested eagerly (UX: avoid surprise at FAB press) but no GPS fetch yet.
+     * Enter current-location mode. Visual state activates immediately. Permission is
+     * requested eagerly so the FAB press doesn't surprise the user with a dialog —
+     * but no GPS fetch yet.
      */
     private fun activateCurrentLocationFlag() {
         useCurrentLocationAsStart = true
@@ -731,8 +719,8 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     /**
-     * SCRUM-107 F8: exits current-location mode via explicit chip toggle-off (D5). Clears flag,
-     * empties From, force-clears selectedFromNode (per V9 decision), restores chip + swap visuals.
+     * Exit current-location mode via explicit chip toggle-off. Clears flag, empties From,
+     * force-clears selectedFromNode, restores chip + swap visuals.
      */
     private fun deactivateCurrentLocationFlag() {
         useCurrentLocationAsStart = false
@@ -744,10 +732,10 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     /**
-     * SCRUM-107 F8: shared helper invoked by C1 (search-dialog item-click on From) and C2
-     * (map-marker "Set as Start"). Both paths replace the current-location sentinel with a real
-     * Node, so the caller is responsible for setting inputFrom and selectedFromNode AFTER this.
-     * This helper only resets the flag + visuals.
+     * Shared helper for the two paths that replace the current-location sentinel with a
+     * real Node (search-dialog item-click on From and map-marker "Set as Start"). The
+     * caller is responsible for setting inputFrom and selectedFromNode AFTER this; this
+     * helper only resets the flag + visuals.
      */
     private fun clearCurrentLocationFlag() {
         useCurrentLocationAsStart = false
@@ -757,9 +745,10 @@ class CampusTourActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     /**
-     * Launches AR navigation with a virtual (GPS-projected) start. Parallel to [startArActivity]
-     * for the named-destination flow — kept as a separate helper (D15) so both handoff modes
-     * are discoverable in one place and the intent-extras knowledge stays localized.
+     * Launch AR navigation with a virtual (GPS-projected) start. Parallel to
+     * [startArActivity] for the named-destination flow — kept as a separate helper so
+     * both handoff modes are discoverable in one place and the intent-extras knowledge
+     * stays localized.
      */
     private fun startArActivityFromVirtual(
         lat: Double,

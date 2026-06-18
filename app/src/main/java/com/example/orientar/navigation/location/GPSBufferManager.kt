@@ -79,14 +79,9 @@ class GPSBufferManager(
     )
 
     private val buffer = ArrayList<Location>()
-    private val enhancedBuffer = ArrayList<EnhancedSample>()  // NEW: Enhanced samples
+    private val enhancedBuffer = ArrayList<EnhancedSample>()
 
-    // ============================================================================
-// BUG-003 FIX (Part 1): Use @Volatile for thread-safe state access
-// ============================================================================
-// @Volatile ensures that reads and writes to this field are visible to all
-// threads immediately. This prevents stale reads in multi-threaded scenarios.
-// ============================================================================
+    // @Volatile so multi-threaded readers (sensor callbacks, UI) never see stale state.
     @Volatile
     private var state = State.COLLECTING
 
@@ -103,19 +98,14 @@ class GPSBufferManager(
     }
 
     /**
-     * Adds a new GPS sample to the buffer with enhanced NMEA filtering.
-     * Returns the current state after processing.
-     *
-     * PHASE 1 ENHANCEMENT:
-     * Now extracts and uses HDOP, satellite count, and fix quality from Location extras.
-     * These are populated by Android's FusedLocationProvider from NMEA data.
+     * Add a sample to the buffer, applying NMEA-derived quality filters
+     * (HDOP, satellite count, fix quality from Location extras).
+     * Returns the buffer state after processing.
      */
     fun addSample(location: Location): State {
         totalSamplesReceived++
 
-        // ============================================================================
-        // STEP 1: Basic accuracy filter (original)
-        // ============================================================================
+        // STEP 1: Basic accuracy filter.
         if (location.accuracy > maxAccuracyThreshold) {
             samplesRejectedByAccuracy++
             FileLogger.d(TAG, "Sample rejected: accuracy ${location.accuracy}m exceeds threshold")
@@ -123,9 +113,7 @@ class GPSBufferManager(
             return state
         }
 
-        // ============================================================================
-        // STEP 2: Extract NMEA quality data from Location extras
-        // ============================================================================
+        // STEP 2: Extract NMEA quality data from Location extras.
         val extras = location.extras
 
         // HDOP (Horizontal Dilution of Precision)
@@ -145,9 +133,7 @@ class GPSBufferManager(
             ?: extras?.getInt("gpsFixQuality", FIX_GPS)
             ?: FIX_GPS  // Default to standard GPS if not available
 
-        // ============================================================================
-        // STEP 3: HDOP filtering (NEW - Phase 1)
-        // ============================================================================
+        // STEP 3: HDOP filter.
         if (hdop > 0 && hdop > HDOP_MAX) {
             samplesRejectedByHdop++
             FileLogger.d(TAG, "Sample rejected: HDOP ${hdop} exceeds max ($HDOP_MAX)")
@@ -155,9 +141,7 @@ class GPSBufferManager(
             return state
         }
 
-        // ============================================================================
-        // STEP 4: Satellite count filtering (NEW - Phase 1)
-        // ============================================================================
+        // STEP 4: Satellite count filter.
         if (satelliteCount > 0 && satelliteCount < SATELLITES_MIN) {
             samplesRejectedBySatellites++
             FileLogger.d(TAG, "Sample rejected: Only $satelliteCount satellites (min: $SATELLITES_MIN)")
@@ -165,14 +149,10 @@ class GPSBufferManager(
             return state
         }
 
-        // ============================================================================
-        // STEP 5: Calculate combined quality score (NEW - Phase 1)
-        // ============================================================================
+        // STEP 5: Combined quality score.
         val qualityScore = calculateQualityScore(location.accuracy, hdop, satelliteCount, fixQuality)
 
-        // ============================================================================
-        // STEP 6: Create enhanced sample and add to buffers
-        // ============================================================================
+        // STEP 6: Build the enhanced sample and add to both buffers.
         val enhancedSample = EnhancedSample(
             location = location,
             hdop = if (hdop > 0) hdop else 99f,  // Unknown HDOP stored as 99
@@ -325,11 +305,8 @@ class GPSBufferManager(
     }
 
     /**
-     * Calculates a weighted average of all samples in the buffer.
-     *
-     * PHASE 1 ENHANCEMENT:
-     * Now uses quality score for weighting instead of just accuracy.
-     * This incorporates HDOP, satellite count, and fix quality into the average.
+     * Weighted average of buffered samples. Weight folds in HDOP, satellite count
+     * and fix quality on top of accuracy.
      */
     fun calculateWeightedAverage(): Location? {
         if (buffer.isEmpty()) return null
@@ -394,11 +371,8 @@ class GPSBufferManager(
     }
 
     /**
-     * PHASE 1 ENHANCEMENT: Enhanced weighted average using quality scores.
-     *
-     * Weight formula: w = qualityScore² / accuracy²
-     * This combines the original accuracy weighting with the new quality score,
-     * giving much higher weight to samples with good HDOP, many satellites, and better fix types.
+     * Quality-weighted average: w = qualityScore² / accuracy². Squaring qualityScore
+     * sharply favors samples with good HDOP, many satellites, and better fix types.
      */
     private fun calculateWeightedAverageEnhanced(
         samples: List<Location>,
@@ -488,9 +462,7 @@ class GPSBufferManager(
         return enhancedBuffer.map { it.qualityScore }.average().toFloat()
     }
 
-    /**
-     * Clears all samples and resets state.
-     */
+    /** Clear samples and reset all counters. */
     fun reset() {
         buffer.clear()
         enhancedBuffer.clear()
@@ -503,8 +475,7 @@ class GPSBufferManager(
     }
 
     /**
-     * Gets diagnostic information about the buffer state.
-     * PHASE 1 ENHANCEMENT: Now includes NMEA quality statistics.
+     * Diagnostic snapshot for debug logs, including NMEA quality statistics.
      */
     fun getDiagnostics(): String {
         if (buffer.isEmpty()) {
@@ -555,8 +526,8 @@ class GPSBufferManager(
     }
 
     /**
-     * Forces the buffer to evaluate and return the best location even if not ideal.
-     * Use this only when user manually forces start.
+     * Return the best location available even if quality gates haven't all passed.
+     * Use only when the user explicitly forces a start.
      */
     fun forceGetBestLocation(): Location? {
         return if (buffer.isNotEmpty()) {

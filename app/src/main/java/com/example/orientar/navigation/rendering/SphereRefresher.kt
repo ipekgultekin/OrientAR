@@ -58,7 +58,7 @@ class SphereRefresher(
     private var renderDistanceFloor = INITIAL_RENDER_DISTANCE
     private var lastRefreshYaw = Double.NaN
 
-    // Re-entrancy guard (Fix 2)
+    // Re-entrancy guard — refresh() bails if another refresh is already running.
     @Volatile
     var isCurrentlyRefreshing = false
         private set
@@ -129,11 +129,11 @@ class SphereRefresher(
     }
 
     // ========================================================================================
-    // MAIN REFRESH — Create, Attach, Verify, THEN Destroy Old (Fix 1)
+    // MAIN REFRESH — create new spheres, attach, verify, then destroy old (sphere persistence
+    // on failure means we never blank the scene mid-walk).
     // ========================================================================================
 
     fun refresh(userGps: Location, frame: Frame, session: Session) {
-        // Re-entrancy guard (Fix 2)
         if (isCurrentlyRefreshing) {
             FileLogger.d("REFRESH_GUARD", "Skipped: another refresh in progress")
             return
@@ -156,7 +156,8 @@ class SphereRefresher(
         val now = System.currentTimeMillis()
         lastAttemptTime = now
 
-        // Fix 3: Rate limit from last SUCCESS, not last attempt
+        // Rate limit from last SUCCESS, not last attempt — failed attempts shouldn't
+        // delay the next try.
         if (now - lastSuccessfulRefreshTime < MIN_REFRESH_INTERVAL) return
 
         val userLat = userGps.latitude
@@ -218,7 +219,8 @@ class SphereRefresher(
         FileLogger.d("PROGRESS", "Index: raw=${findNearestIndex(userLat, userLng)}, clamped=$nearestRouteIndex, " +
             "min=$minimumAllowedIndex, furthest=$furthestReachedIndex, total=${interpolatedRoute.size}")
 
-        // --- 4. Create new spheres into temp list (Fix 1: create before destroy) ---
+        // --- 4. Build new spheres into a temp list (create-before-destroy keeps the
+        //        old set visible until the swap is validated). ---
         val currentAnchorNode = anchorNode ?: return
         val anchorGpsLocal = anchorGps ?: return
         val anchorWorldY = currentAnchorNode.worldPosition.y
@@ -258,7 +260,7 @@ class SphereRefresher(
             if (isMilestone) milestoneCount++
         }
 
-        // --- 5. Validate + Swap (Fix 1: verify before destroying old) ---
+        // --- 5. Validate + swap — only destroy the old set after the new set attaches cleanly. ---
         val swapIsValid = anchorNode != null && newSpheres.isNotEmpty() &&
             newSpheres.all { !it.position.x.isNaN() && !it.position.z.isNaN() }
 
@@ -359,7 +361,7 @@ class SphereRefresher(
     fun getNearestRouteIndex(): Int = nearestRouteIndex
     fun getTotalInterpolatedPoints(): Int = interpolatedRoute.size
 
-    // Fix 5: Smooth render distance ramp
+    // Smooth render-distance ramp as heading confidence grows.
     fun updateHeadingConfidence(motionUpdateCount: Int) {
         val oldDistance = currentRenderDistance
         val progress = minOf(motionUpdateCount.toDouble(), 5.0) / 5.0

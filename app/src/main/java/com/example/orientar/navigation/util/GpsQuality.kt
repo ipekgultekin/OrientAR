@@ -1,9 +1,9 @@
 package com.example.orientar.navigation.util
 
 /**
- * GPS accuracy quality classification for user-facing UI.
- * Thresholds match F4 GPS ring (5m / 10m) per audit Q5 — see
- * activity_ar_navigation.xml ringF4ArReadiness and ArNavigationActivity.updateGpsRing.
+ * GPS accuracy quality classification for user-facing UI. The 5m / 10m thresholds
+ * match the calibration GPS ring (see activity_ar_navigation.xml ringF4ArReadiness
+ * and ArNavigationActivity.updateGpsRing).
  */
 enum class GpsQuality { GOOD, FAIR, POOR }
 

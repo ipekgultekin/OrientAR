@@ -5,21 +5,14 @@ import kotlin.math.sqrt
 import com.example.orientar.navigation.util.FileLogger
 
 /**
- * GPS position smoothing using a Kalman filter.
+ * GPS position smoothing via a Kalman filter.
  *
- * State: [lat, lng, vel_lat, vel_lng]
- * Predict: x' = x + v*dt,  P' = P + Q
- * Update:  K = P'/(P'+R),   x = x' + K*(z-x'),  P = (1-K)*P'
+ * State: [lat, lng, vel_lat, vel_lng].
+ * Predict: x' = x + v·dt,  P' = P + Q.
+ * Update:  K = P' / (P' + R),  x = x' + K·(z − x'),  P = (1 − K)·P'.
  *
- * WHERE:
- *   P = Process covariance (our uncertainty about the state)
- *   Q = Process noise (how much the state changes unexpectedly)
- *   R = Measurement noise (GPS accuracy squared)
- *   K = Kalman gain (0-1, how much to trust measurement vs prediction)
- *
- * ================================================================================================
- * REFERENCE: IEEE "Multi-sensor fusion using Kalman filter" (2015)
- * ================================================================================================
+ * P = process covariance, Q = process noise, R = measurement noise
+ * (GPS accuracy²), K = Kalman gain in [0, 1].
  */
 class KalmanFilter {
     companion object {
@@ -83,15 +76,11 @@ class KalmanFilter {
     // ========================================================================================
 
     /**
-     * Process a new GPS location through the Kalman filter.
-     *
-     * @param location Raw GPS location from Android
-     * @return Filtered location with smoothed position
+     * Run a raw Android GPS location through the filter and return a smoothed copy.
      */
     fun filter(location: Location): Location {
         val currentTime = location.time
 
-        // First measurement - initialize filter
         if (!isInitialized) {
             initialize(location)
             return location.copy()
@@ -209,7 +198,7 @@ class KalmanFilter {
     }
 
     /**
-     * Initialize the filter with first measurement.
+     * Seed filter state from the first measurement.
      */
     private fun initialize(location: Location) {
         filteredLat = location.latitude
@@ -232,7 +221,7 @@ class KalmanFilter {
     }
 
     /**
-     * Create a new Location object with filtered position.
+     * Return a new Location carrying the filter's current position; other fields preserved.
      */
     private fun createFilteredLocation(originalLocation: Location): Location {
         return Location(originalLocation).apply {
@@ -243,7 +232,7 @@ class KalmanFilter {
     }
 
     /**
-     * Calculate distance between two points in meters (Haversine formula).
+     * Haversine distance between two GPS points, in meters.
      */
     private fun calculateDistance(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
         val R = 6371000.0 // Earth radius in meters

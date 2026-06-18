@@ -193,7 +193,7 @@ object FileLogger {
     }
 
     // ========================================================================================
-    // NEW: Additional domain-specific loggers for comprehensive coverage
+    // Domain-specific logger channels.
     // ========================================================================================
 
     /**
@@ -292,15 +292,8 @@ object FileLogger {
     }
 
     private fun writeLog(level: String, tag: String, message: String) {
-        // ========================================================================
-        // FIX 2.1: Improved logging reliability
-        // ========================================================================
-        // PROBLEM: Logs flushed every 10 entries - crash loses up to 9 logs
-        // SOLUTION:
-        //   - Errors/warnings flush immediately
-        //   - Other logs flush every 5 entries
-        //   - Add null checks to prevent silent failures
-        // ========================================================================
+        // Logging reliability: errors/warnings flush immediately so a crash never loses
+        // them; other logs flush every 5 entries. Null guards prevent silent failures.
 
         if (!isInitialized) {
             Log.w(TAG, "FileLogger not initialized, log lost: [$level/$tag] $message")
